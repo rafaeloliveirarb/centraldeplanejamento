@@ -203,6 +203,11 @@ select.cad{max-width:200px}
 .b-blue{background:#e8f1fd;color:var(--blue)}
 .b-green{background:#e6f6ee;color:var(--green)}
 .b-amber{background:#fdf4e0;color:#b47f08}
+.b-terc{background:#efecfa;color:#6b5bb5}
+.b-fim{background:#e6f6ee;color:#0f8a4d}
+.b-canc{background:#eef1f6;color:#8b95a7}
+.card.encerrado{opacity:.62}
+.card.encerrado:hover{opacity:1}
 .fase.op-m{background:#1c5fb8;color:#fff;border-color:#1c5fb8;animation:pulsa 2.2s infinite}
 .fase.op-d{background:#b0483c;color:#fff;border-color:#b0483c;animation:pulsa 2.2s infinite}
 .fase.op-e{background:#0f8a4d;color:#fff;border-color:#0f8a4d}
@@ -325,6 +330,13 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <h1>Central de Planejamento Logístico</h1>
       <div class="periods" id="periods"></div>
       <select class="pill" id="filtro-fase" style="padding:9px 14px" onchange="faseFiltro=this.value;renderQuadro()"></select>
+      <select class="pill" id="filtro-esp" style="padding:9px 14px" onchange="espFiltro=this.value;renderQuadro()">
+        <option value="ativos">Esconder encerrados</option>
+        <option value="todos">Mostrar tudo</option>
+        <option value="terceirizado">Só terceirizados</option>
+        <option value="finalizado">Só finalizados</option>
+        <option value="cancelado">Só cancelados</option>
+      </select>
       <div class="datefiltro" title="Filtrar por data">
         <input type="date" id="f-data-ini" onchange="dataIni=this.value;renderPeriodos();renderQuadro()">
         <span>até</span>
@@ -1177,6 +1189,11 @@ function montarEscala(frota, ag, ev, dEq){
 }
 
 function analisar(ev, ag){
+  if(evSemNossaEquipe(ev)){
+    /* sem equipe nossa: nada a sugerir e nada a conflitar */
+    return {equipe: ev.equipe || EQUIPE_TERC, produtor: ev.produtor || null, frota: [], escala: [],
+      carga: carga(ev), conflitos: [], just:{}};
+  }
   ag = ag || novaAgenda();
   const c = carga(ev);
   const dEq = diasEquipe(ev), dVe = diasVeiculo(ev);
@@ -1294,6 +1311,7 @@ function replanejar(){
   const ag = novaAgenda();
   const ordem = [...eventos].sort((a,b)=> a.mont.localeCompare(b.mont));
   ordem.forEach(e=>{
+    if(evSemNossaEquipe(e)) return; /* cancelado, finalizado ou tudo terceirizado: não prende ninguém */
     reservar(ag,'eq', e.equipe===EQUIPE_TERC ? null : e.equipe, diasEquipe(e), e.id);
     reservar(ag,'pr', (e.produtor && e.produtor!==SEM_PRODUTOR) ? e.produtor : null, diasEquipe(e), e.id);
     (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
@@ -1383,14 +1401,30 @@ function abrirHoje(){
 
 /* operação do dia, direto pelas datas: montagem > desmontagem > evento rolando */
 function operacaoHoje(ev, d){
+  if(evEncerrado(ev)) return null; /* cancelado ou finalizado não está na rua */
   d = d || HOJE;
   if(diasEntre(ev.mont, fimMont(ev)).includes(d)) return 'montagem';
   if(diasEntre(ev.desm, fimDesm(ev)).includes(d)) return 'desmontagem';
   if(ev.evt && dia(ev.evt) <= d && d <= dia(ev.evtFim || ev.evt)) return 'evento';
   return null;
 }
+const ESP = {
+  terceirizado: {texto:'🤝 Tudo terceirizado', classe:'b-terc', cor:'#6b5bb5'},
+  finalizado:   {texto:'✅ Finalizado',        classe:'b-fim',  cor:'#0f8a4d'},
+  cancelado:    {texto:'🚫 Cancelado',         classe:'b-canc', cor:'#8b95a7'}
+};
+const evEncerrado = ev => ev.esp==='cancelado' || ev.esp==='finalizado';
+const evSemNossaEquipe = ev => !!ev.esp; /* encerrado ou totalmente terceirizado */
+function definirEsp(id, valor){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.esp = (ev.esp === valor) ? null : valor; /* clicar de novo desfaz */
+  if(ev.esp==='terceirizado'){ ev.equipe = EQUIPE_TERC; ev.montOp = null; }
+  salvar(); renderQuadro(); verEvento(id);
+  toast(ev.esp ? 'Evento marcado como ' + ESP[ev.esp].texto.replace(/^\S+\s/,'').toLowerCase() + '.' : 'Evento voltou ao planejamento normal.');
+}
 function situacao(ev){
   const a = plano(ev);
+  if(ev.esp) return {cor:ESP[ev.esp].cor, classe:ESP[ev.esp].classe, texto:ESP[ev.esp].texto, tipo:'esp', a};
   if(a.conflitos.length) return {cor:'var(--red)', classe:'b-red', texto:'Conflito', tipo:'conflito', a};
   if(ev.estado==='confirmado') return {cor:'var(--green)', classe:'b-green', texto:'Planejado', tipo:'ok', a};
   if(ev.estado==='alinhamento') return {cor:'var(--blue)', classe:'b-blue', texto:'Em alinhamento', tipo:'alinhamento', a};
@@ -1422,7 +1456,7 @@ const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); retur
 /* =========================================================
    QUADRO
    ========================================================= */
-let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '';
+let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '', espFiltro = 'ativos';
 const PERIODOS = [['Hoje',0],['7 dias',7],['15 dias',15],['30 dias',30],['Todos',9999]];
 const HOJE = new Date().toISOString().slice(0,10);
 
@@ -1455,6 +1489,9 @@ function noPeriodo(ev){
 
 function filtrados(){
   return eventos.filter(noPeriodo)
+    .filter(e => espFiltro==='todos' ? true
+      : espFiltro==='ativos' ? !evEncerrado(e)   /* cancelado e finalizado saem da vista */
+      : e.esp === espFiltro)
     .filter(noIntervaloData)
     .filter(e => !faseFiltro || (e.fase||'sem fase') === faseFiltro)
     .filter(e => !busca || (e.nome+' '+e.os+' '+(produtorDo(e)||'')+' '+e.cidade+' '+(e.fase||'')+' '+(e.respNome||'')+' '+(e.respTel||'')).toLowerCase().includes(busca.toLowerCase()))
@@ -1511,8 +1548,10 @@ function cardEvento(ev, soSetorJC){
   const cor = corEquipe(eq);
   const prodSug = ev.produtor ? null : (a.produtor || null);
   let botoes;
+  const encerrado = evEncerrado(ev);
   if(s.tipo==='conflito') botoes = '<button onclick="verEvento(\''+ev.id+'\')">Resolver</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else if(s.tipo==='alinhamento') botoes = '<button class="primary" onclick="confirmar(\''+ev.id+'\')">Confirmar</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
+  else if(s.tipo==='esp') botoes = '<button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else if(s.tipo==='sugestao') botoes = '<button class="primary" onclick="aceitar(\''+ev.id+'\')">Aceitar sugestão</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else botoes = '<button onclick="reabrir(\''+ev.id+'\')">Reabrir</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   botoes += '<button title="Excluir evento" aria-label="Excluir evento" style="flex:0 0 44px;color:var(--red)" onclick="excluirEvento(\''+ev.id+'\')">✕</button>';
@@ -1591,7 +1630,11 @@ function verEvento(id){
 
   let acoes = '<button class="mini danger" style="margin-right:auto" onclick="excluirEvento(\''+ev.id+'\')">Excluir evento</button>'+
               '<button class="mini" onclick="fechar(\'ov-ev\')">Fechar</button>';
-  if(s.tipo==='sugestao' || s.tipo==='conflito') acoes += '<button class="mini" onclick="alinhar(\''+ev.id+'\')">Marcar em alinhamento</button><button class="btn-orange" onclick="aceitar(\''+ev.id+'\')">Aceitar sugestão</button>';
+  acoes += '<button class="mini" title="Montagem inteira por fornecedor: não usa equipe nem caminhão nosso" onclick="definirEsp(\''+ev.id+'\',\'terceirizado\')" style="'+(ev.esp==='terceirizado'?'border-color:#6b5bb5;color:#6b5bb5':'')+'">🤝 Terceirizado</button>'+
+    '<button class="mini" title="Evento concluído" onclick="definirEsp(\''+ev.id+'\',\'finalizado\')" style="'+(ev.esp==='finalizado'?'border-color:#0f8a4d;color:#0f8a4d':'')+'">✅ Finalizado</button>'+
+    '<button class="mini" title="Evento cancelado pelo cliente" onclick="definirEsp(\''+ev.id+'\',\'cancelado\')" style="'+(ev.esp==='cancelado'?'border-color:#b0483c;color:#b0483c':'')+'">🚫 Cancelado</button>';
+  if(ev.esp) acoes += '<button class="btn-orange" onclick="definirEsp(\''+ev.id+'\',\''+ev.esp+'\')">Voltar ao planejamento</button>';
+  else if(s.tipo==='sugestao' || s.tipo==='conflito') acoes += '<button class="mini" onclick="alinhar(\''+ev.id+'\')">Marcar em alinhamento</button><button class="btn-orange" onclick="aceitar(\''+ev.id+'\')">Aceitar sugestão</button>';
   else if(s.tipo==='alinhamento') acoes += '<button class="btn-orange" onclick="confirmar(\''+ev.id+'\')">Confirmar planejamento</button>';
   else acoes += '<button class="mini" onclick="reabrir(\''+ev.id+'\')">Reabrir planejamento</button>';
 
@@ -3128,16 +3171,25 @@ function escReq(caminho, metodo, corpo){
 function casaMontadorEscala(nomePlan, listaEscala){
   const n = semAcento(nomePlan);
   if(!n) return null;
-  let m = listaEscala.find(x => semAcento(x.nome) === n);
+  let m = listaEscala.find(x => semAcento(x.nome) === n);            /* igual */
   if(m) return m;
-  m = listaEscala.find(x => semAcento(x.nome).startsWith(n));
+  m = listaEscala.find(x => semAcento(x.nome).startsWith(n));        /* começa igual */
   if(m) return m;
+  /* todos os pedaços do nome aparecem lá (ordem diferente, nome do meio, etc.) */
+  const partes = semAcentoSimples(nomePlan).split(/\s+/).filter(p=>p.length>2);
+  if(partes.length){
+    m = listaEscala.find(x => { const alvo = semAcentoSimples(x.nome); return partes.every(p=>alvo.includes(p)); });
+    if(m) return m;
+  }
   return listaEscala.find(x => semAcento(x.nome).includes(n)) || null;
 }
 async function enviarParaEscala(id, silencioso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(evSemNossaEquipe(ev)){ if(!silencioso) toast('Evento cancelado, finalizado ou totalmente terceirizado — não vai para a escala.'); return; }
   const eq = ev.equipe || plano(ev).equipe;
-  const nomes = montadoresOp(ev, eq);
+  /* o líder da equipe trabalha junto: entra na escala com o time */
+  const time = montadoresOp(ev, eq);
+  const nomes = (eq && eq !== EQUIPE_TERC) ? [...new Set([eq, ...time])] : time;
   const dias = diasEquipe(ev);
   if(!nomes.length){ if(!silencioso) toast('Este evento não tem montadores da casa (equipe terceirizada?).'); return; }
   if(!dias.length){ if(!silencioso) toast('Defina as datas do evento antes de mandar para a escala.'); return; }
@@ -3167,10 +3219,10 @@ async function enviarParaEscala(id, silencioso){
     if(linhas.length) await escReq('escala_marcas?on_conflict=chave', 'POST', linhas);
     ev.escalaEnviada = HOJE;
     salvar(); if(!silencioso) verEvento(id);
-    const partes = [linhas.length + ' marcação(ões) de TRABALHOU enviadas para a Escala ('+casados.length+' montador(es) × '+dias.length+' dia(s))'];
+    const partes = ['📅 Escala preenchida: ' + casados.map(c=>c.plan).join(', ') + ' (' + dias.length + ' dia(s), ' + linhas.length + ' marcação(ões))'];
     if(pulados) partes.push(pulados + ' dia(s) preservados (férias/folga/atestado já marcados lá)');
-    if(semCadastro.length) partes.push('sem cadastro na Escala: ' + semCadastro.join(', '));
-    toast('📅 ' + partes.join(' · ') + '.');
+    if(semCadastro.length) partes.push('⚠ não encontrei na Escala: ' + semCadastro.join(', ') + ' — confira o nome no cadastro dela');
+    toast(partes.join(' · ') + '.');
   }catch(err){
     if(!silencioso) toast('Não consegui falar com a Escala de Montadores: ' + err.message + '. Confira a internet e tente de novo.');
   }
