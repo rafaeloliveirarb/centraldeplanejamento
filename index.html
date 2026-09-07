@@ -203,6 +203,12 @@ select.cad{max-width:200px}
 .b-blue{background:#e8f1fd;color:var(--blue)}
 .b-green{background:#e6f6ee;color:var(--green)}
 .b-amber{background:#fdf4e0;color:#b47f08}
+.fasefiltro{background:#f7f9fc;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}
+.ff-tit{font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:9px;display:flex;align-items:center;gap:8px}
+.ff-chips{display:flex;gap:7px;flex-wrap:wrap}
+.ff-chip{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:20px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.ff-chip b{opacity:.7;font-size:11px}
+.ff-chip.on{background:#e8f1fd;border-color:#9cc0f0;color:#1c5fb8}
 .b-terc{background:#efecfa;color:#6b5bb5}
 .b-fim{background:#e6f6ee;color:#0f8a4d}
 .b-canc{background:#eef1f6;color:#8b95a7}
@@ -2599,6 +2605,8 @@ async function lerLote(files){
     /* não replicar: quem já está no quadro (mesma OS ou mesmo nome) entra
        desmarcado; se o usuário marcar, a importação ATUALIZA o evento existente
        em vez de criar outro. Linha repetida dentro da própria planilha só vale uma vez. */
+    /* filtro de fases começa no funil: Backlog e Alinhamento dos Responsáveis */
+    fasesLote = new Set([...new Set(lote.map(e=>e.fase || 'Sem fase'))].filter(f => f==='Sem fase' || faseImportavel(f)));
     /* prioridade sempre para quem tem número: processa os numerados primeiro,
        e a versão repetida sem número (mesmo nome-base) entra desmarcada */
     const vistOs = new Set(), vistNome = new Set();
@@ -2609,7 +2617,7 @@ async function lerLote(files){
       e.cancelado = faseCancelada(e.fase);
       /* fora do funil só vale para evento NOVO; quem já está no quadro
          continua atualizando em qualquer fase (o status acompanha o pipe) */
-      e.foraFunil = !e.duplicado && !e.cancelado && !faseImportavel(e.fase);
+      e.foraFunil = !fasesLote.has(e.fase || 'Sem fase');
       if(od) vistOs.add(od);
       if(nb) vistNome.add(nb);
       if(e.repetido || e.cancelado || e.foraFunil) e.marcado = false;
@@ -2622,7 +2630,7 @@ async function lerLote(files){
       (jaNoQuadro ? '<div class="alert green">' + jaNoQuadro + ' evento(s) já estão no quadro: serão ATUALIZADOS com os dados da planilha, sem duplicar. Desmarque os que não quiser mexer.</div>' : '') +
       (repetidos ? '<div class="alert amber">' + repetidos + ' linha(s) repetida(s) na própria planilha foram desmarcadas.</div>' : '') +
       (cancelados ? '<div class="alert amber">' + cancelados + ' evento(s) com fase de cancelamento/perda entraram desmarcados. Marque só se quiser mesmo trazê-los para o quadro.</div>' : '') +
-      (foraFunil ? '<div class="alert amber">' + foraFunil + ' evento(s) novos estão fora do funil (só BACKLOG e ALINHAMENTO DOS RESPONSÁVEIS entram sozinhos) e ficaram desmarcados. Marque se quiser trazer mesmo assim.</div>' : '') +
+      (foraFunil ? '<div class="alert amber">' + foraFunil + ' evento(s) ficaram de fora pelo filtro de fases (começa em BACKLOG e ALINHAMENTO DOS RESPONSÁVEIS). Ligue a fase que quiser puxar nos botões abaixo.</div>' : '') +
       (lote.some(e=>e.marcado && (!e.mont || !e.desm)) ? '<div class="alert amber">Tem evento sem data de montagem ou desmontagem: ele será importado mesmo assim e vai para a coluna "📅 Sem data" do quadro, para você preencher depois.</div>' : '') +
       (pendentes.length ? '<div class="alert amber">Materiais que ainda não existem no catálogo: ' + pendentes.join(', ') + '. Eles entraram com peso e volume zerados, então cadastre os valores na aba Materiais antes de confiar na sugestão de caminhão.</div>' : '');
     renderLote();
@@ -2634,6 +2642,7 @@ async function lerLote(files){
 function renderLote(){
   const ok = i => !!lote[i].nome; /* sem data também importa — cai na coluna "Sem data" */
   document.getElementById('lote-lista').innerHTML =
+    (fasesLote ? renderFiltroFases() : '') +
     '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">EVENTOS ENCONTRADOS'+
       '<span style="flex:1"></span>'+
       '<button class="mini" onclick="marcarLote(true)">Marcar todos</button>'+
@@ -2662,7 +2671,7 @@ function renderLote(){
         '<div class="lmeta">OS '+e.os+' · '+e.cidade+' · '+e.km+' km · '+e.arquivo+
           (e.repetido ? ' · <span class="tag" style="color:#b0483c">linha repetida na planilha</span>'
            : e.cancelado ? ' · <span class="tag" style="color:#b0483c">fase de cancelamento na planilha</span>'
-           : e.foraFunil ? ' · <span class="tag" style="color:#b47f08">fora do funil — só Backlog e Alinhamento entram sozinhos</span>'
+           : e.foraFunil ? ' · <span class="tag" style="color:#b47f08">fase desligada no filtro</span>'
            : e.duplicado ? ' · <span class="tag" style="color:#0f8a4d">já está no quadro — vai atualizar o existente</span>' : '')+
           (function(){ const est = faseParaEstado(e.fase);
             const rot = est==='confirmado' ? ['Planejado','b-green'] : est==='alinhamento' ? ['Em alinhamento','b-blue'] : ['Sugestão da IA','b-amber'];
@@ -2747,6 +2756,44 @@ function aplicarNaoLido(i, j){
 }
 function dispensarNaoLido(i, j){ lote[i].naoLidos.splice(j,1); renderLote(); }
 
+/* fases que a importação deve puxar — começa no funil e o gestor ajusta */
+let fasesLote = null;
+function fasesDoArquivo(){
+  return [...new Set(lote.map(e=>e.fase || 'Sem fase'))].sort();
+}
+function toggleFaseLote(f){
+  if(fasesLote.has(f)) fasesLote.delete(f); else fasesLote.add(f);
+  reavaliarLote();
+}
+function todasFasesLote(v){
+  fasesLote = v ? new Set(fasesDoArquivo()) : new Set();
+  reavaliarLote();
+}
+/* remarca o lote conforme o filtro de fases, mantendo as travas de segurança */
+function reavaliarLote(){
+  const vistOs = new Set(), vistNome = new Set();
+  lote.map(e=>e).sort((a,b)=> (osDigitos(b)?1:0) - (osDigitos(a)?1:0)).forEach(e=>{
+    const od = osDigitos(e), nb = nomeBase(e.nome);
+    e.repetido = (od && vistOs.has(od)) || (!od && nb && vistNome.has(nb));
+    if(od) vistOs.add(od);
+    if(nb) vistNome.add(nb);
+    e.foraFunil = !fasesLote.has(e.fase || 'Sem fase');
+    e.marcado = !e.repetido && !e.foraFunil;
+  });
+  renderLote();
+}
+function renderFiltroFases(){
+  const fs = fasesDoArquivo();
+  return '<div class="fasefiltro"><div class="ff-tit">Puxar quais fases? '+
+      '<button class="mini" onclick="todasFasesLote(true)">Todas</button> '+
+      '<button class="mini" onclick="todasFasesLote(false)">Nenhuma</button></div>'+
+    '<div class="ff-chips">'+ fs.map(f=>{
+      const n = lote.filter(e=>(e.fase||'Sem fase')===f).length;
+      const on = fasesLote.has(f);
+      return '<button class="ff-chip'+(on?' on':'')+'" onclick="toggleFaseLote('+JSON.stringify(f).replace(/"/g,'&quot;')+')">'+
+        (on?'✓ ':'')+f+' <b>'+n+'</b></button>';
+    }).join('')+'</div></div>';
+}
 function marcarLote(v){
   /* linha repetida nunca entra; cancelado e fora do funil só marcando um a um */
   lote.forEach(e=>{ e.marcado = v && !e.repetido && !e.cancelado && !e.foraFunil; });
