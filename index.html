@@ -3357,9 +3357,10 @@ function pessoasDoPlanejamento(){
   return p;
 }
 /* monta o cadastro da Escala a partir do planejamento: equipes e pessoas */
-async function cadastrarNaEscala(){
+async function cadastrarNaEscala(silencioso){
   const el2 = document.getElementById('esc-teste');
-  el2.textContent = 'cadastrando...';
+  const diz = t => { if(el2 && !silencioso) el2.innerHTML = t; };
+  if(!silencioso && el2) el2.textContent = 'cadastrando...';
   try{
     const lista = await escReq('escala_montadores?select=id,nome') || [];
     let eqEscala = await escReq('escala_equipes?select=id,nome') || [];
@@ -3379,8 +3380,8 @@ async function cadastrarNaEscala(){
     /* 2) pessoas que faltam */
     const faltando = pessoasDoPlanejamento().filter(p=>!casaMontadorEscala(p.nome, lista));
     if(!faltando.length && !eqNovas.length){
-      el2.innerHTML = '<b style="color:#0f8a4d">Cadastro já está completo.</b>';
-      return;
+      diz('<b style="color:#0f8a4d">Cadastro já está completo.</b>');
+      return 0;
     }
     const usados = new Set(lista.map(x=>String(x.id)));
     let n = 0; const proximo = () => { do { n++; } while(usados.has('m'+n)); usados.add('m'+n); return 'm'+n; };
@@ -3389,11 +3390,14 @@ async function cadastrarNaEscala(){
       return {id:proximo(), nome:p.nome.toUpperCase(), equipe: eqe ? eqe.id : null, ordem: p.lider ? i : 100+i, ativo:true};
     });
     if(linhas.length) await escReq('escala_montadores?on_conflict=id', 'POST', linhas);
-    el2.innerHTML = '<b style="color:#0f8a4d">Cadastro atualizado.</b> ' +
-      (eqNovas.length ? eqNovas.length + ' equipe(s) e ' : '') + linhas.length + ' pessoa(s) criadas. ' +
-      'Agora clique em "Sincronizar agora".';
+    diz('<b style="color:#0f8a4d">Cadastro atualizado.</b> ' +
+      (eqNovas.length ? eqNovas.length + ' equipe(s) e ' : '') + linhas.length + ' pessoa(s) criadas.');
+    if(silencioso && linhas.length)
+      toast('📅 Cadastrei na Escala quem faltava: ' + linhas.map(l=>l.nome).join(', ') + '.');
+    return linhas.length;
   }catch(e){
-    el2.innerHTML = '<b style="color:#b0483c">Não consegui cadastrar:</b> ' + e.message;
+    diz('<b style="color:#b0483c">Não consegui cadastrar:</b> ' + e.message);
+    return 0;
   }
 }
 function escReq(caminho, metodo, corpo){
@@ -3443,6 +3447,7 @@ async function sincronizarEscala(silencioso){
       if(!silencioso) toast(motivo);
       return;
     }
+    await cadastrarNaEscala(true); /* garante que líderes e montadores existem lá */
     let enviados = 0;
     for(const e of alvo){ await enviarParaEscala(e.id, true); enviados++; }
     diz('<b style="color:#0f8a4d">Sincronizado.</b> ' + enviados + ' evento(s) enviados para a Escala. Recarregue a Escala de Montadores para ver a grade pintada.');
@@ -3820,7 +3825,7 @@ async function salvar(){
       nuvemEscutar();
       sincronizarAgenda(true);                          /* agenda em dia ao abrir */
       setInterval(()=>sincronizarAgenda(true), 300000); /* e de 5 em 5 minutos */
-      setTimeout(()=>sincronizarEscala(true), 4000);       /* escala em dia ao abrir */
+      setTimeout(async ()=>{ await cadastrarNaEscala(true); sincronizarEscala(true); }, 4000); /* cadastro e escala em dia ao abrir */
       setInterval(()=>sincronizarEscala(true), 600000);    /* e de 10 em 10 minutos */
       sincronizarAgenda();
       setInterval(sincronizarAgenda, 300000);
