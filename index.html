@@ -460,16 +460,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
   <section id="v-integracoes" class="hide">
     <div class="panel" style="margin-bottom:18px">
       <h2 style="margin:0">📅 Escala de Montadores</h2>
-      <p class="sub" style="margin:4px 0 12px">A Central marca TRABALHOU para a equipe (líder incluído) nos dias de montagem e desmontagem. Se a Escala estiver em outro projeto do Supabase, aponte aqui.</p>
-      <div class="fgrid" style="grid-template-columns:1fr 1fr">
-        <label class="f"><i>URL do Supabase da Escala</i><input id="esc-url" placeholder="deixe vazio para usar o mesmo do quadro" onchange="CONFIG.escalaUrl=this.value.trim();salvar()"></label>
-        <label class="f"><i>Chave anon</i><input id="esc-key" placeholder="deixe vazio para usar a mesma do quadro" onchange="CONFIG.escalaKey=this.value.trim();salvar()"></label>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+      <p class="sub" style="margin:4px 0 12px">A Central marca TRABALHOU para a equipe (líder incluído) nos dias de montagem e desmontagem, no mesmo projeto do quadro. Isso acontece sozinho — os botões abaixo são só para conferir ou forçar.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="pill" onclick="testarEscala()">🔌 Testar conexão</button>
-        <button class="mini" onclick="usarEscalaAntiga()">Usar projeto antigo (zsiosg…)</button>
-        <button class="mini" onclick="usarEscalaDoQuadro()">Usar o mesmo do quadro</button>
-        <button class="mini" onclick="sincronizarEscala().then(()=>toast('Escala sincronizada com os eventos dos próximos 30 dias.'))">Sincronizar agora</button>
+        <button class="pill" onclick="cadastrarNaEscala()">➕ Cadastrar equipes e montadores</button>
+        <button class="mini" onclick="sincronizarEscala(false)">Sincronizar agora</button>
       </div>
       <div id="esc-teste" style="margin-top:10px;font-size:13px;color:var(--muted)">Clique em "Testar conexão" para conferir.</div>
     </div>
@@ -2988,10 +2983,6 @@ function renderCadastros(){
 
   document.getElementById('tb-pipefy').innerHTML = mapaPipefy.map(m=>'<tr><td>'+m[0]+'</td><td><span class="tag">'+m[1]+'</span></td></tr>').join('');
 
-  const eu = document.getElementById('esc-url'), ek = document.getElementById('esc-key');
-  if(eu) eu.value = CONFIG.escalaUrl || '';
-  if(ek) ek.value = CONFIG.escalaKey || '';
-
   /* painel do aprendizado */
   const pa = document.getElementById('painel-aprendizado');
   if(pa){
@@ -3334,42 +3325,76 @@ async function enviarAgendaDaSemana(){
 /* Se a Escala de Montadores estiver no MESMO projeto novo, deixe como está.
    Se ela continuar no projeto antigo, troque as duas linhas abaixo pelos
    dados daquele projeto — é o único lugar que precisa mudar. */
-/* projeto onde vive a Escala de Montadores — configurável na aba Integrações,
-   porque ela pode estar num Supabase diferente do quadro */
-const ESCALA_ANTIGA = {
-  url: 'https://zsiosgfdvjunniqrtukb.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzaW9zZ2Zkdmp1bm5pcXJ0dWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NzQwMjksImV4cCI6MjEwNDM1MDAyOX0.0fgYNWgkFsmz9aWuzX2F7P66g2PBlnEVixa_qh724-g'
-};
-const ESCALA = {
-  get url(){ return (CONFIG && CONFIG.escalaUrl) || NUVEM.url; },
-  get key(){ return (CONFIG && CONFIG.escalaKey) || NUVEM.key; }
-};
+/* A Escala vive no mesmo projeto do quadro. Um lugar só, sem configuração. */
+const ESCALA = { url: NUVEM.url, key: NUVEM.key };
 async function testarEscala(){
   const el2 = document.getElementById('esc-teste');
   el2.textContent = 'testando...';
   try{
-    const lista = await escReq('escala_montadores?select=id,nome');
-    if(!lista || !lista.length){
-      el2.innerHTML = '<b style="color:#b47f08">Conectou, mas não há montadores cadastrados neste projeto.</b> Provavelmente a Escala está no outro Supabase — use o botão "Usar projeto antigo" abaixo.';
+    const lista = await escReq('escala_montadores?select=id,nome') || [];
+    const nomes = pessoasDoPlanejamento().map(p=>p.nome);
+    const faltando = nomes.filter(n=>!casaMontadorEscala(n, lista));
+    if(!lista.length){
+      el2.innerHTML = '<b style="color:#b47f08">Conectado, mas a Escala está vazia.</b> Clique em "Cadastrar equipes e montadores" para montar o cadastro a partir do planejamento.';
       return;
     }
-    const nomes = [...new Set([...equipes.map(e=>e.nome), ...equipes.flatMap(e=>e.membros||[]), CONFIG.piloto].filter(Boolean))];
-    const achados = nomes.filter(n=>casaMontadorEscala(n, lista));
-    const faltando = nomes.filter(n=>!casaMontadorEscala(n, lista));
-    el2.innerHTML = '<b style="color:#0f8a4d">Conectado.</b> '+lista.length+' pessoa(s) na Escala · '+
-      achados.length+' de '+nomes.length+' do planejamento reconhecidas.'+
-      (faltando.length ? '<br><span style="color:#b47f08">Sem correspondência: '+faltando.join(', ')+'</span>' : '');
+    el2.innerHTML = '<b style="color:#0f8a4d">Conectado.</b> ' + lista.length + ' pessoa(s) na Escala · ' +
+      (nomes.length - faltando.length) + ' de ' + nomes.length + ' do planejamento reconhecidas.' +
+      (faltando.length ? '<br><span style="color:#b47f08">Faltam cadastrar: ' + faltando.join(', ') + ' — use o botão ao lado.</span>' : '');
   }catch(e){
-    el2.innerHTML = '<b style="color:#b0483c">Não conectou:</b> '+e.message+'. Confira a URL e a chave, ou use o botão do projeto antigo.';
+    el2.innerHTML = '<b style="color:#b0483c">Não conectou:</b> ' + e.message + '. Rode o SQL no projeto novo.';
   }
 }
-function usarEscalaAntiga(){
-  CONFIG.escalaUrl = ESCALA_ANTIGA.url; CONFIG.escalaKey = ESCALA_ANTIGA.key;
-  salvar(); renderCadastros(); testarEscala();
+/* todo mundo que o planejamento conhece: líderes, montadores e o piloto */
+function pessoasDoPlanejamento(){
+  const p = [];
+  equipes.forEach(e=>{
+    if(e.nome === EQUIPE_TERC) return;
+    p.push({nome:e.nome, equipe:e.nome, lider:true});
+    (e.membros||[]).forEach(m=>p.push({nome:m, equipe:e.nome}));
+  });
+  if(CONFIG.piloto) p.push({nome:CONFIG.piloto, equipe:null});
+  return p;
 }
-function usarEscalaDoQuadro(){
-  CONFIG.escalaUrl = ''; CONFIG.escalaKey = '';
-  salvar(); renderCadastros(); testarEscala();
+/* monta o cadastro da Escala a partir do planejamento: equipes e pessoas */
+async function cadastrarNaEscala(){
+  const el2 = document.getElementById('esc-teste');
+  el2.textContent = 'cadastrando...';
+  try{
+    const lista = await escReq('escala_montadores?select=id,nome') || [];
+    let eqEscala = await escReq('escala_equipes?select=id,nome') || [];
+
+    /* 1) equipes que faltam */
+    const eqNovas = [];
+    equipes.forEach((e,i)=>{
+      if(e.nome === EQUIPE_TERC) return;
+      const achou = eqEscala.find(x=>semAcento(x.nome).includes(semAcento(e.nome)) || semAcento(e.nome).includes(semAcento(x.nome)));
+      if(!achou) eqNovas.push({id:'eq'+(i+1), nome:'EQUIPE ' + e.nome.toUpperCase(), ordem:i+1});
+    });
+    if(eqNovas.length){
+      await escReq('escala_equipes?on_conflict=id', 'POST', eqNovas);
+      eqEscala = eqEscala.concat(eqNovas);
+    }
+
+    /* 2) pessoas que faltam */
+    const faltando = pessoasDoPlanejamento().filter(p=>!casaMontadorEscala(p.nome, lista));
+    if(!faltando.length && !eqNovas.length){
+      el2.innerHTML = '<b style="color:#0f8a4d">Cadastro já está completo.</b>';
+      return;
+    }
+    const usados = new Set(lista.map(x=>String(x.id)));
+    let n = 0; const proximo = () => { do { n++; } while(usados.has('m'+n)); usados.add('m'+n); return 'm'+n; };
+    const linhas = faltando.map((p,i)=>{
+      const eqe = p.equipe ? eqEscala.find(x=>semAcento(x.nome).includes(semAcento(p.equipe)) || semAcento(p.equipe).includes(semAcento(x.nome))) : null;
+      return {id:proximo(), nome:p.nome.toUpperCase(), equipe: eqe ? eqe.id : null, ordem: p.lider ? i : 100+i, ativo:true};
+    });
+    if(linhas.length) await escReq('escala_montadores?on_conflict=id', 'POST', linhas);
+    el2.innerHTML = '<b style="color:#0f8a4d">Cadastro atualizado.</b> ' +
+      (eqNovas.length ? eqNovas.length + ' equipe(s) e ' : '') + linhas.length + ' pessoa(s) criadas. ' +
+      'Agora clique em "Sincronizar agora".';
+  }catch(e){
+    el2.innerHTML = '<b style="color:#b0483c">Não consegui cadastrar:</b> ' + e.message;
+  }
 }
 function escReq(caminho, metodo, corpo){
   return fetch(ESCALA.url + '/rest/v1/' + caminho, {
@@ -3401,16 +3426,31 @@ function casaMontadorEscala(nomePlan, listaEscala){
 /* escala automática: todo evento com equipe definida e datas na janela
    tem o time (líder incluído) marcado como TRABALHOU, sem clique. */
 let escalaRodando = false;
-async function sincronizarEscala(){
+async function sincronizarEscala(silencioso){
   if(escalaRodando) return;
   escalaRodando = true;
+  const diz = t => { const el2 = document.getElementById('esc-teste'); if(el2 && !silencioso) el2.innerHTML = t; };
   try{
     const ate = new Date(); ate.setDate(ate.getDate()+30);
     const limite = ate.toISOString().slice(0,10);
-    const alvo = eventos.filter(e => e.equipe && !evSemNossaEquipe(e) && e.mont &&
-      diasEquipe(e).some(d => d >= HOJE && d <= limite));
-    for(const e of alvo){ await enviarParaEscala(e.id, true); }
-  }catch(x){}
+    const naJanela = eventos.filter(e => e.mont && diasEquipe(e).some(d => d >= HOJE && d <= limite));
+    const alvo = naJanela.filter(e => e.equipe && !evSemNossaEquipe(e));
+    if(!alvo.length){
+      const motivo = !naJanela.length
+        ? 'Nenhum evento com montagem ou desmontagem nos próximos 30 dias.'
+        : 'Os ' + naJanela.length + ' evento(s) da janela estão sem equipe definida, ou são terceirizados/cancelados/finalizados. Aceite a sugestão da IA (ou escolha a equipe) para eles entrarem na Escala.';
+      diz('<b style="color:#b47f08">Nada a enviar.</b> ' + motivo);
+      if(!silencioso) toast(motivo);
+      return;
+    }
+    let enviados = 0;
+    for(const e of alvo){ await enviarParaEscala(e.id, true); enviados++; }
+    diz('<b style="color:#0f8a4d">Sincronizado.</b> ' + enviados + ' evento(s) enviados para a Escala. Recarregue a Escala de Montadores para ver a grade pintada.');
+    if(!silencioso) toast('📅 Escala sincronizada: ' + enviados + ' evento(s) dos próximos 30 dias.');
+  }catch(x){
+    diz('<b style="color:#b0483c">Falhou:</b> ' + x.message);
+    if(!silencioso) toast('Não consegui sincronizar a Escala: ' + x.message);
+  }
   finally{ escalaRodando = false; }
 }
 
@@ -3432,7 +3472,14 @@ async function enviarParaEscala(id, silencioso){
       if(m) casados.push({plan:nm, id:m.id});
       else semCadastro.push(nm);
     });
-    if(!casados.length){ if(!silencioso) toast('Nenhum montador do evento foi encontrado no cadastro da Escala.'); return; }
+    if(!casados.length){
+      if(!silencioso){
+        toast(!listaEscala || !listaEscala.length
+          ? 'A Escala está SEM montadores cadastrados neste Supabase — a migração dos 19 montadores não foi concluída. Rode o SQL novo e o migrador de novo.'
+          : 'Nenhum nome bateu com a Escala (' + listaEscala.length + ' cadastrados lá). Faltando: ' + nomes.join(', ') + '.');
+      }
+      return;
+    }
     /* não atropela férias, atestado, folga...: só preenche onde está vazio ou já é T */
     const chaves = [];
     casados.forEach(c => dias.forEach(d => chaves.push(d + '|' + c.id)));
@@ -3456,6 +3503,7 @@ async function enviarParaEscala(id, silencioso){
     toast(partes.join(' · ') + '.');
   }catch(err){
     if(!silencioso) toast('Não consegui falar com a Escala de Montadores: ' + err.message + '. Confira a internet e tente de novo.');
+    throw err; /* deixa a sincronização geral saber que falhou */
   }
 }
 
@@ -3772,8 +3820,8 @@ async function salvar(){
       nuvemEscutar();
       sincronizarAgenda(true);                          /* agenda em dia ao abrir */
       setInterval(()=>sincronizarAgenda(true), 300000); /* e de 5 em 5 minutos */
-      setTimeout(sincronizarEscala, 4000);              /* escala em dia ao abrir */
-      setInterval(sincronizarEscala, 600000);           /* e de 10 em 10 minutos */
+      setTimeout(()=>sincronizarEscala(true), 4000);       /* escala em dia ao abrir */
+      setInterval(()=>sincronizarEscala(true), 600000);    /* e de 10 em 10 minutos */
       sincronizarAgenda();
       setInterval(sincronizarAgenda, 300000);
       await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
@@ -3786,6 +3834,8 @@ async function salvar(){
   eventos.forEach(e=>{ if(e.contato && !e.respTel){ e.respTel = e.contato; } });
   /* fases gravadas antes da limpeza de emoji do Pipefy */
   eventos.forEach(e=>{ if(e.fase) e.fase = normalizaFase(e.fase); });
+  /* projeto único: nenhum apontamento externo fica guardado */
+  if(CONFIG.escalaUrl || CONFIG.escalaKey){ CONFIG.escalaUrl = ''; CONFIG.escalaKey = ''; }
   /* repetidos que já entraram (mesmo evento com e sem número): fica o que tem número */
   (function(){
     const porBase = {};
