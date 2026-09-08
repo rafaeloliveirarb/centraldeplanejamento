@@ -459,6 +459,21 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
   <!-- ============ INTEGRAÇÕES ============ -->
   <section id="v-integracoes" class="hide">
     <div class="panel" style="margin-bottom:18px">
+      <h2 style="margin:0">📅 Escala de Montadores</h2>
+      <p class="sub" style="margin:4px 0 12px">A Central marca TRABALHOU para a equipe (líder incluído) nos dias de montagem e desmontagem. Se a Escala estiver em outro projeto do Supabase, aponte aqui.</p>
+      <div class="fgrid" style="grid-template-columns:1fr 1fr">
+        <label class="f"><i>URL do Supabase da Escala</i><input id="esc-url" placeholder="deixe vazio para usar o mesmo do quadro" onchange="CONFIG.escalaUrl=this.value.trim();salvar()"></label>
+        <label class="f"><i>Chave anon</i><input id="esc-key" placeholder="deixe vazio para usar a mesma do quadro" onchange="CONFIG.escalaKey=this.value.trim();salvar()"></label>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+        <button class="pill" onclick="testarEscala()">🔌 Testar conexão</button>
+        <button class="mini" onclick="usarEscalaAntiga()">Usar projeto antigo (zsiosg…)</button>
+        <button class="mini" onclick="usarEscalaDoQuadro()">Usar o mesmo do quadro</button>
+        <button class="mini" onclick="sincronizarEscala().then(()=>toast('Escala sincronizada com os eventos dos próximos 30 dias.'))">Sincronizar agora</button>
+      </div>
+      <div id="esc-teste" style="margin-top:10px;font-size:13px;color:var(--muted)">Clique em "Testar conexão" para conferir.</div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:220px"><h2 style="margin:0">💾 Backup dos dados</h2>
           <p class="sub" style="margin:4px 0 0">Todo o quadro vive no navegador deste computador. Exporte um arquivo de tempos em tempos: ele guarda eventos, cadastros, frota, materiais e o aprendizado da IA. Restaurar substitui tudo pelo que está no arquivo.</p></div>
@@ -2973,6 +2988,10 @@ function renderCadastros(){
 
   document.getElementById('tb-pipefy').innerHTML = mapaPipefy.map(m=>'<tr><td>'+m[0]+'</td><td><span class="tag">'+m[1]+'</span></td></tr>').join('');
 
+  const eu = document.getElementById('esc-url'), ek = document.getElementById('esc-key');
+  if(eu) eu.value = CONFIG.escalaUrl || '';
+  if(ek) ek.value = CONFIG.escalaKey || '';
+
   /* painel do aprendizado */
   const pa = document.getElementById('painel-aprendizado');
   if(pa){
@@ -3315,10 +3334,43 @@ async function enviarAgendaDaSemana(){
 /* Se a Escala de Montadores estiver no MESMO projeto novo, deixe como está.
    Se ela continuar no projeto antigo, troque as duas linhas abaixo pelos
    dados daquele projeto — é o único lugar que precisa mudar. */
-const ESCALA = {
-  url: NUVEM.url,
-  key: NUVEM.key
+/* projeto onde vive a Escala de Montadores — configurável na aba Integrações,
+   porque ela pode estar num Supabase diferente do quadro */
+const ESCALA_ANTIGA = {
+  url: 'https://zsiosgfdvjunniqrtukb.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzaW9zZ2Zkdmp1bm5pcXJ0dWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NzQwMjksImV4cCI6MjEwNDM1MDAyOX0.0fgYNWgkFsmz9aWuzX2F7P66g2PBlnEVixa_qh724-g'
 };
+const ESCALA = {
+  get url(){ return (CONFIG && CONFIG.escalaUrl) || NUVEM.url; },
+  get key(){ return (CONFIG && CONFIG.escalaKey) || NUVEM.key; }
+};
+async function testarEscala(){
+  const el2 = document.getElementById('esc-teste');
+  el2.textContent = 'testando...';
+  try{
+    const lista = await escReq('escala_montadores?select=id,nome');
+    if(!lista || !lista.length){
+      el2.innerHTML = '<b style="color:#b47f08">Conectou, mas não há montadores cadastrados neste projeto.</b> Provavelmente a Escala está no outro Supabase — use o botão "Usar projeto antigo" abaixo.';
+      return;
+    }
+    const nomes = [...new Set([...equipes.map(e=>e.nome), ...equipes.flatMap(e=>e.membros||[]), CONFIG.piloto].filter(Boolean))];
+    const achados = nomes.filter(n=>casaMontadorEscala(n, lista));
+    const faltando = nomes.filter(n=>!casaMontadorEscala(n, lista));
+    el2.innerHTML = '<b style="color:#0f8a4d">Conectado.</b> '+lista.length+' pessoa(s) na Escala · '+
+      achados.length+' de '+nomes.length+' do planejamento reconhecidas.'+
+      (faltando.length ? '<br><span style="color:#b47f08">Sem correspondência: '+faltando.join(', ')+'</span>' : '');
+  }catch(e){
+    el2.innerHTML = '<b style="color:#b0483c">Não conectou:</b> '+e.message+'. Confira a URL e a chave, ou use o botão do projeto antigo.';
+  }
+}
+function usarEscalaAntiga(){
+  CONFIG.escalaUrl = ESCALA_ANTIGA.url; CONFIG.escalaKey = ESCALA_ANTIGA.key;
+  salvar(); renderCadastros(); testarEscala();
+}
+function usarEscalaDoQuadro(){
+  CONFIG.escalaUrl = ''; CONFIG.escalaKey = '';
+  salvar(); renderCadastros(); testarEscala();
+}
 function escReq(caminho, metodo, corpo){
   return fetch(ESCALA.url + '/rest/v1/' + caminho, {
     method: metodo || 'GET',
