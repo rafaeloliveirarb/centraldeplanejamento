@@ -350,6 +350,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button id="f-data-limpar" onclick="limparDatas()" title="Limpar filtro de data">✕</button>
       </div>
       <input class="search" id="busca" placeholder="Pesquisar evento...">
+      <button class="pill" onclick="sincronizarAgenda()" title="A agenda já se atualiza sozinha; use só se quiser forçar agora">📋 Sincronizar agenda</button>
       <button class="pill" onclick="exportarBackup()" title="Baixa um arquivo com todo o quadro, cadastros e o aprendizado da IA">💾 Backup</button>
       <button class="pill" onclick="redistribuirProdutores()" title="Solta os produtores fixados e deixa a IA sugerir de novo">⚖ Redistribuir produtores</button>
       <button class="pill" onclick="abrirLote()">Importar XML</button>
@@ -672,8 +673,8 @@ const Store = (() => {
    plan_config : cadastros, frota, materiais e aprendizado da IA
    ========================================================= */
 const NUVEM = {
-  url: 'https://zsiosgfdvjunniqrtukb.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzaW9zZ2Zkdmp1bm5pcXJ0dWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NzQwMjksImV4cCI6MjEwNDM1MDAyOX0.0fgYNWgkFsmz9aWuzX2F7P66g2PBlnEVixa_qh724-g'
+  url: 'https://vybxkraqydsjrdvyxknp.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5YnhrcmFxeWRzanJkdnl4a25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjM0MzgsImV4cCI6MjEwNDQzOTQzOH0.QszdsS6tiYcqssMxKwQjfzlIDhqc5emzXKmw8vyZCxw'
 };
 let sb = null, nuvemOk = false, sincronizando = false;
 let idsConhecidos = new Set();   /* eventos que já existem na nuvem */
@@ -1727,6 +1728,8 @@ function verEvento(id){
           '</select>'+
           (ev.montOp ? ' <button class="mini" onclick="trocaMontador(\''+ev.id+'\',-2,null)">Voltar ao time padrão</button>' : '')+
           ' <button class="mini" onclick="enviarParaEscala(\''+ev.id+'\')" title="Marca TRABALHOU para estes montadores nos dias de montagem e desmontagem, lá na Escala de Montadores">📅 Preencher na Escala</button>'+
+          ' <button class="mini" onclick="enviarParaAgenda(\''+ev.id+'\')" title="Cria as tarefas deste evento na sua Gestão de Tempo">📋 Mandar para minha agenda</button>'+
+          (ev.agendaEnviada ? ' <span class="tag" style="color:#1c5fb8">na agenda desde '+fmtD(ev.agendaEnviada)+'</span>' : '')+
           (ev.escalaEnviada ? ' <span class="tag" style="color:#0f8a4d">na escala desde '+fmtD(ev.escalaEnviada)+'</span>' : '')+
         '</div></div>'+
       '<label class="f"><i>Adicionar veículo à operação</i><select onchange="addVeiculo(\''+ev.id+'\',this.value)">'+
@@ -1859,7 +1862,7 @@ function aceitar(id){
   /* confirmação do gestor: a IA aprende com o que foi aceito */
   aprender('equipe', ev, ev.equipe, 1);
   aprender('produtor', ev, ev.produtor, 1);
-  /* equipe confirmada: já preenche a Escala de Montadores (em segundo plano) */
+  /* equipe confirmada: preenche a Escala de Montadores (a agenda se atualiza sozinha) */
   enviarParaEscala(id, true);
   if(!(ev.veiculos||[]).length) ev.veiculos = [...a.frota];
   if(!(ev.escala||[]).length) ev.escala = a.escala.map(x=>({v:x.v, motorista:x.motorista}));
@@ -3196,12 +3199,125 @@ function verPayload(){
 /* =========================================================
    NAVEGAÇÃO E BOOT
    ========================================================= */
+/* ---------- ponte com a Gestão de Tempo ----------
+   Cada operação vira tarefa no dia certo da agenda:
+   montagem e desmontagem no bloco "Operação viva", e o
+   fechamento D-1 na véspera da montagem. ---- */
+function tarefasDoEvento(ev){
+  const eq = ev.equipe || plano(ev).equipe;
+  const hora = s => String(s||'').slice(11,16);
+  const t = [];
+  const marca = (dia2, bloco, texto) => t.push({
+    chave: 'plan:' + ev.id + ':' + bloco + ':' + dia2,
+    dia: dia2, bloco, texto, evento_id: ev.id
+  });
+  diasEntre(ev.mont, fimMont(ev)).forEach((d,i)=>
+    marca(d, 'op', '🔨 Montagem ' + ev.nome + ' — ' + eq + (i===0 && hora(ev.mont) ? ' às ' + hora(ev.mont) : '') +
+      (ev.cidade && ev.cidade!=='—' ? ' · ' + ev.cidade : '')));
+  diasEntre(ev.desm, fimDesm(ev)).forEach((d,i)=>
+    marca(d, 'op', '📤 Desmontagem ' + ev.nome + ' — ' + eq + (i===0 && hora(ev.desm) ? ' às ' + hora(ev.desm) : '')));
+  /* véspera da montagem: conferir carregamento no bloco de fechamento */
+  if(ev.mont){
+    const v = new Date(dia(ev.mont) + 'T12:00'); v.setDate(v.getDate()-1);
+    marca(v.toISOString().slice(0,10), 'fec', '📦 Conferir carregamento de ' + ev.nome + ' (monta amanhã)');
+  }
+  return t;
+}
+async function enviarParaAgenda(id, silencioso){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(!sb || !nuvemOk){ if(!silencioso) toast('Sem conexão com a nuvem — não consegui mandar para a agenda.'); return; }
+  if(evEncerrado(ev)){ if(!silencioso) toast('Evento cancelado ou finalizado não vai para a agenda.'); return; }
+  const linhas = tarefasDoEvento(ev);
+  if(!linhas.length){ if(!silencioso) toast('Defina as datas do evento antes de mandar para a agenda.'); return; }
+  try{
+    const agora = new Date().toISOString();
+    /* refaz as tarefas deste evento: datas mudaram, texto mudou */
+    await sb.from('plan_tarefas').delete().eq('evento_id', ev.id);
+    const r = await sb.from('plan_tarefas').upsert(linhas.map(l=>Object.assign({}, l, {atualizado_em: agora})));
+    if(r.error) throw r.error;
+    ev.agendaEnviada = HOJE;
+    salvar(); if(!silencioso) verEvento(id);
+    toast('📋 ' + linhas.length + ' tarefa(s) enviadas para a Gestão de Tempo (montagem, desmontagem e conferência da véspera).');
+  }catch(e){
+    if(!silencioso) toast('Não consegui gravar na agenda: ' + e.message + '.');
+  }
+}
+/* mantém a agenda em dia sozinha: manda o que falta, corrige o que mudou
+   e apaga o que não existe mais — sem precisar clicar em nada */
+let agendaOcupada = false, agendaFila = null;
+async function sincronizarAgenda(silencioso){
+  if(!sb || !nuvemOk || agendaOcupada) return;
+  agendaOcupada = true;
+  try{
+    const limite = new Date(); limite.setDate(limite.getDate()+30);
+    const ate = limite.toISOString().slice(0,10);
+
+    /* rede de segurança: evento cancelado, finalizado ou sem data tem as
+       tarefas apagadas pelo id do evento, sem depender da leitura abaixo */
+    for(const ev of eventos){
+      if((evEncerrado(ev) || !ev.mont) && ev.agendaEnviada){
+        const dm = await sb.from('plan_tarefas').delete().eq('evento_id', ev.id);
+        if(!dm.error) ev.agendaEnviada = null;
+      }
+    }
+
+    /* o que o quadro diz que deve existir nos próximos 30 dias */
+    const desejado = {};
+    eventos.forEach(ev=>{
+      if(evEncerrado(ev) || !ev.mont) return;
+      tarefasDoEvento(ev).forEach(t=>{ if(t.dia >= HOJE && t.dia <= ate) desejado[t.chave] = t; });
+    });
+
+    /* o que já está lá */
+    const r = await sb.from('plan_tarefas').select('chave,dia,bloco,texto').gte('dia', HOJE).lte('dia', ate);
+    if(r.error) throw r.error;
+    const atual = {}; (r.data||[]).forEach(l=>atual[l.chave] = l);
+
+    const novas = [], sobrando = [];
+    Object.values(desejado).forEach(t=>{
+      const a = atual[t.chave];
+      if(!a || a.texto !== t.texto || a.bloco !== t.bloco) novas.push(t);
+    });
+    Object.keys(atual).forEach(k=>{ if(!desejado[k]) sobrando.push(k); });
+    if(!novas.length && !sobrando.length){
+      if(!silencioso) toast('📋 Agenda já está em dia com o quadro.');
+      return;
+    }
+    const agora = new Date().toISOString();
+    if(sobrando.length){
+      const d = await sb.from('plan_tarefas').delete().in('chave', sobrando);
+      if(d.error) throw d.error;
+    }
+    if(novas.length){
+      const u = await sb.from('plan_tarefas').upsert(novas.map(t=>Object.assign({}, t, {atualizado_em: agora})));
+      if(u.error) throw u.error;
+      novas.forEach(t=>{ const e2 = eventos.find(x=>x.id===t.evento_id); if(e2) e2.agendaEnviada = HOJE; });
+    }
+    if(!silencioso) toast('📋 Agenda atualizada: ' + novas.length + ' tarefa(s) enviada(s), ' + sobrando.length + ' removida(s).');
+  }catch(e){ if(!silencioso) toast('Não consegui atualizar a agenda: ' + e.message); }
+  finally{ agendaOcupada = false; }
+}
+function agendarSync(){ clearTimeout(agendaFila); agendaFila = setTimeout(()=>sincronizarAgenda(true), 2500); }
+
+async function enviarAgendaDaSemana(){
+  if(!sb || !nuvemOk) return toast('Sem conexão com a nuvem.');
+  const fim = new Date(); fim.setDate(fim.getDate()+7);
+  const ate = fim.toISOString().slice(0,10);
+  const alvo = eventos.filter(e=>!evEncerrado(e) && e.mont && diasEquipe(e).some(d=>d>=HOJE && d<=ate));
+  if(!alvo.length) return toast('Nenhuma operação nos próximos 7 dias.');
+  for(const e of alvo){ await enviarParaAgenda(e.id, true); }
+  toast('📋 Agenda atualizada com ' + alvo.length + ' evento(s) dos próximos 7 dias.');
+}
+
 /* ---------- ponte com a Escala de Montadores (Supabase dela) ----------
    Equipe confirmada no evento -> montadores marcados TRABALHOU (T) nos dias
    de montagem e desmontagem, com o nome do evento na observação. ---- */
+/* Se a Escala de Montadores estiver no MESMO projeto novo, deixe como está.
+   Se ela continuar no projeto antigo, troque as duas linhas abaixo pelos
+   dados daquele projeto — é o único lugar que precisa mudar. */
 const ESCALA = {
-  url: 'https://zsiosgfdvjunniqrtukb.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzaW9zZ2Zkdmp1bm5pcXJ0dWtiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NzQwMjksImV4cCI6MjEwNDM1MDAyOX0.0fgYNWgkFsmz9aWuzX2F7P66g2PBlnEVixa_qh724-g'
+  url: NUVEM.url,
+  key: NUVEM.key
 };
 function escReq(caminho, metodo, corpo){
   return fetch(ESCALA.url + '/rest/v1/' + caminho, {
@@ -3230,6 +3346,22 @@ function casaMontadorEscala(nomePlan, listaEscala){
   }
   return listaEscala.find(x => semAcento(x.nome).includes(n)) || null;
 }
+/* escala automática: todo evento com equipe definida e datas na janela
+   tem o time (líder incluído) marcado como TRABALHOU, sem clique. */
+let escalaRodando = false;
+async function sincronizarEscala(){
+  if(escalaRodando) return;
+  escalaRodando = true;
+  try{
+    const ate = new Date(); ate.setDate(ate.getDate()+30);
+    const limite = ate.toISOString().slice(0,10);
+    const alvo = eventos.filter(e => e.equipe && !evSemNossaEquipe(e) && e.mont &&
+      diasEquipe(e).some(d => d >= HOJE && d <= limite));
+    for(const e of alvo){ await enviarParaEscala(e.id, true); }
+  }catch(x){}
+  finally{ escalaRodando = false; }
+}
+
 async function enviarParaEscala(id, silencioso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   if(evSemNossaEquipe(ev)){ if(!silencioso) toast('Evento cancelado, finalizado ou totalmente terceirizado — não vai para a escala.'); return; }
@@ -3562,6 +3694,8 @@ async function salvar(){
   if(sb && nuvemOk){
     clearTimeout(filaSync);
     filaSync = setTimeout(nuvemGravar, 600); /* agrupa edições seguidas numa gravação só */
+    agendarSync();                            /* e mantém a agenda em dia sozinha */
+    agendarSync();                           /* e mantém a agenda em dia sozinha */
   }
 }
 
@@ -3584,6 +3718,12 @@ async function salvar(){
       }
       marcarSync(true);
       nuvemEscutar();
+      sincronizarAgenda(true);                          /* agenda em dia ao abrir */
+      setInterval(()=>sincronizarAgenda(true), 300000); /* e de 5 em 5 minutos */
+      setTimeout(sincronizarEscala, 4000);              /* escala em dia ao abrir */
+      setInterval(sincronizarEscala, 600000);           /* e de 10 em 10 minutos */
+      sincronizarAgenda();
+      setInterval(sincronizarAgenda, 300000);
       await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
     } else { marcarSync(false, '⚠ só neste aparelho'); }
   }catch(e){
