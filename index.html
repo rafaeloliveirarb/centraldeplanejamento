@@ -75,7 +75,9 @@ input,select,textarea{font-family:inherit;font-size:14px}
 
 /* ---------- kpis ---------- */
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:18px}
-.kpi{background:var(--card);border-radius:12px;box-shadow:var(--shadow);padding:20px 22px}
+.kpi{background:var(--card);border-radius:12px;box-shadow:var(--shadow);padding:20px 22px;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(20,30,55,.14)}
+.kpi.ativo{outline:2px solid var(--blue);outline-offset:-2px}
 .kpi b{display:block;font-size:30px;font-weight:600;line-height:1.1;letter-spacing:-.5px}
 .kpi span{color:var(--muted);font-size:13px}
 .kpi.i2 b{color:var(--blue)} .kpi.i3 b{color:var(--red)} .kpi.i4 b{color:var(--amber)}
@@ -214,6 +216,7 @@ select.cad{max-width:200px}
 .b-canc{background:#eef1f6;color:#8b95a7}
 .card.encerrado{opacity:.62}
 .card.encerrado:hover{opacity:1}
+.selo-ia{display:inline-block;background:#f3f0fb;color:#6b5bb5;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .fase.op-m{background:#1c5fb8;color:#fff;border-color:#1c5fb8;animation:pulsa 2.2s infinite}
 .fase.op-d{background:#b0483c;color:#fff;border-color:#b0483c;animation:pulsa 2.2s infinite}
 .fase.op-e{background:#0f8a4d;color:#fff;border-color:#0f8a4d}
@@ -357,15 +360,27 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <button class="btn-orange" onclick="abrirNovo()">+ Novo evento</button>
     </div>
     <div class="kpis">
-      <div class="kpi"><b id="k1">0</b><span>Eventos no período</span></div>
-      <div class="kpi i2"><b id="k2">0</b><span>Em alinhamento</span></div>
-      <div class="kpi i3"><b id="k3">0</b><span>Pendências (conflito)</span></div>
-      <div class="kpi i4"><b id="k4">0</b><span>Sugestões da IA</span></div>
+      <div class="kpi" onclick="filtrarPorTipo('')" title="Mostrar todos"><b id="k1">0</b><span>Eventos no período</span></div>
+      <div class="kpi i2" onclick="filtrarPorTipo('alinhamento')" title="Ver só os que estão em alinhamento"><b id="k2">0</b><span>Em alinhamento</span></div>
+      <div class="kpi i3" onclick="filtrarPorTipo('conflito')" title="Ver só os eventos com conflito"><b id="k3">0</b><span>Pendências (conflito)</span></div>
+      <div class="kpi i4" onclick="filtrarPorTipo('sugestao')" title="Ver só os que esperam sua confirmação"><b id="k4">0</b><span>Sugestões da IA</span></div>
     </div>
     <div id="quadro"></div>
   </section>
 
   <!-- ============ EQUIPES ============ -->
+  <section id="v-carga" class="hide">
+    <div class="panel op-cab">
+      <h2>⚖ Carga das equipes</h2>
+      <p class="sub" id="carga-sub"></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="pill" onclick="cargaPeriodo=30;renderCarga()">30 dias</button>
+        <button class="pill" onclick="cargaPeriodo=60;renderCarga()">60 dias</button>
+        <button class="pill" onclick="cargaPeriodo=90;renderCarga()">90 dias</button>
+      </div>
+    </div>
+    <div id="carga-corpo"></div>
+  </section>
   <section id="v-opmont" class="hide">
     <div class="panel op-cab"><h2>🔨 Eventos em montagem</h2><p class="sub" id="opmont-sub"></p></div>
     <div class="opgrid" id="grid-opmont"></div>
@@ -845,7 +860,7 @@ let motoristas = [
 let CONFIG = {kmAgregado:70, piloto:'Pedro Henrique'};
 /* memória de aprendizado: cada confirmação do gestor reforça um padrão
    (cidade -> equipe, tipo de material -> equipe, cidade -> produtor, etc.) */
-let APRENDA = {equipe:{}, produtor:{}, confirmacoes:0};
+let APRENDA = {equipe:{}, produtor:{}, hora:{}, confirmacoes:0};
 
 let veiculos = [
   {id:'v1', tipo:'TOCO', modelo:'VW 15-180', placa:'LRD 3C61', c:6.70,l:2.50,a:2.55, vol:42.70, peso:9760, status:'Aferido'},
@@ -971,6 +986,34 @@ function sinaisDe(ev){
   return s;
 }
 /* registra uma confirmação; peso 1 = aceitou a sugestão, peso 2 = corrigiu à mão */
+/* horário de montagem que você costuma usar naquele lugar */
+function aprenderHora(ev){
+  if(!ev.mont) return;
+  const hh = String(ev.mont).slice(11,16);
+  if(!hh) return;
+  APRENDA.hora = APRENDA.hora || {};
+  const sigs = [];
+  if(ev.cidade && ev.cidade!=='—') sigs.push('cid:'+semAcentoSimples(ev.cidade));
+  if(ev.local && ev.local!=='—') sigs.push('loc:'+semAcentoSimples(ev.local));
+  sigs.forEach(sig=>{
+    const m = (APRENDA.hora[sig] = APRENDA.hora[sig] || {});
+    m[hh] = (m[hh]||0) + 1;
+  });
+}
+/* horário sugerido para um evento novo, se houver histórico do lugar */
+function horaSugerida(ev){
+  if(!APRENDA.hora) return null;
+  const sigs = [];
+  if(ev.local && ev.local!=='—') sigs.push('loc:'+semAcentoSimples(ev.local));
+  if(ev.cidade && ev.cidade!=='—') sigs.push('cid:'+semAcentoSimples(ev.cidade));
+  for(const sig of sigs){
+    const m = APRENDA.hora[sig];
+    if(!m) continue;
+    const melhor = Object.keys(m).sort((a,b)=>m[b]-m[a])[0];
+    if(melhor && m[melhor] >= 2) return {hora:melhor, vezes:m[melhor], onde: sig.startsWith('loc') ? 'neste local' : 'nesta cidade'};
+  }
+  return null;
+}
 function aprender(tipo, ev, escolha, peso){
   if(!escolha || escolha===EQUIPE_TERC || escolha===SEM_PRODUTOR) return;
   const sigs = sinaisDe(ev);
@@ -1133,12 +1176,17 @@ function normalizaFase(v){
 const semAcentoSimples = t => String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 
 /* ---- agenda compartilhada de equipes, veículos e motoristas ---- */
-const novaAgenda = () => ({eq:{}, ve:{}, mo:{}, pr:{}});
+const novaAgenda = () => ({eq:{}, ve:{}, mo:{}, pr:{}, mt:{}}); /* mt = montador, um a um */
 function ocupante(ag, tipo, chave, dias, evId){
   for(const d of dias){ const v = ag[tipo][chave+'|'+d]; if(v && v!==evId) return {id:v, dia:d}; }
   return null;
 }
-function reservar(ag, tipo, chave, dias, evId){ if(chave) dias.forEach(d => ag[tipo][chave+'|'+d] = evId); }
+function reservar(ag, tipo, chave, dias, evId){
+  if(!chave) return;
+  /* montador: o primeiro evento fica com ele; assim o segundo detecta o choque */
+  if(tipo==='mt') dias.forEach(d => { const k = chave+'|'+d; if(!ag.mt[k]) ag.mt[k] = evId; });
+  else dias.forEach(d => ag[tipo][chave+'|'+d] = evId);
+}
 const nomeDo = id => (eventos.find(e=>e.id===id)||{nome:'outro evento'}).nome;
 
 /* ---- escolha do veículo, com combinação quando não cabe em um só ----
@@ -1312,6 +1360,35 @@ function analisar(ev, ag){
   if(semMot.length - semCarreta) r.conflitos.push({msg:(semMot.length - semCarreta) + ' veículo(s) da operação estão sem motorista livre nas datas de viagem.', dica:'Escalone as saídas, use um agregado ou libere alguém da frota própria em outro evento.'});
 
   const semPeso = (ev.itens||[]).filter(i => { const m = catalogo.find(c=>c.nome===i.nome); return !m || m.pendente || (!m.peso && !m.vol); }).map(i=>i.nome);
+  /* montador escalado em dois lugares no mesmo dia */
+  if(ev.equipe && ev.equipe!==EQUIPE_TERC && !evSemNossaEquipe(ev)){
+    const dias = diasEquipe(ev);
+    const repetidos = [];
+    montadoresOp(ev, ev.equipe).forEach(m=>{
+      const oc = ocupante(ag,'mt', m, dias, ev.id);
+      if(oc) repetidos.push({nome:m, ev:oc.id, dia:oc.dia});
+    });
+    /* o outro lado do choque: eventos que usam o mesmo nome nos mesmos dias */
+    eventos.forEach(o=>{
+      if(o.id===ev.id || evSemNossaEquipe(o) || !o.equipe || o.equipe===EQUIPE_TERC) return;
+      const diasO = diasEquipe(o);
+      const comuns = dias.filter(d=>diasO.includes(d));
+      if(!comuns.length) return;
+      montadoresOp(o, o.equipe).forEach(m=>{
+        if(montadoresOp(ev, ev.equipe).includes(m) && !repetidos.some(x=>x.nome===m))
+          repetidos.push({nome:m, ev:o.id, dia:comuns[0]});
+      });
+    });
+    if(repetidos.length){
+      const lista = repetidos.map(x=>x.nome + ' (também em "' + nomeDo(x.ev) + '" em ' + fmtD(x.dia) + ')').join('; ');
+      r.conflitos.push({
+        msg: repetidos.length + ' montador(es) escalado(s) em dois lugares no mesmo dia: ' + lista + '.',
+        ev: repetidos[0].ev,
+        dica: 'Troque esse montador por outro no bloco da equipe, ou ajuste as datas de um dos eventos.'
+      });
+    }
+  }
+
   if(semPeso.length) r.conflitos.push({msg:'Sem peso e volume cadastrados para ' + semPeso.slice(0,3).join(', ') + '. A carga estimada está incompleta e o caminhão sugerido pode ficar pequeno.', dica:'Preencha os valores na aba Materiais.'});
 
   r.just.disp = r.conflitos.length
@@ -1333,6 +1410,9 @@ function replanejar(){
     reservar(ag,'pr', (e.produtor && e.produtor!==SEM_PRODUTOR) ? e.produtor : null, diasEquipe(e), e.id);
     (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
     (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e), e.id));
+    /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
+    if(e.equipe && e.equipe!==EQUIPE_TERC)
+      montadoresOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasEquipe(e), e.id));
   });
   ordem.forEach(e=>{
     const a = analisar(e, ag);
@@ -1346,6 +1426,59 @@ function replanejar(){
 const plano = ev => PLANO[ev.id] || analisar(ev, novaAgenda());
 
 /* telas por operação do dia: montagem, andamento e desmontagem */
+/* ---------- carga das equipes: quem está sobrecarregado no período ---------- */
+let cargaPeriodo = 30;
+function renderCarga(){
+  const box = document.getElementById('carga-corpo');
+  if(!box) return;
+  const fim = new Date(); fim.setDate(fim.getDate() + cargaPeriodo);
+  const ate = fim.toISOString().slice(0,10);
+  const dados = {};
+  equipes.forEach(e=>{ if(e.nome!==EQUIPE_TERC) dados[e.nome] = {eventos:0, dias:new Set(), km:0, prox:null}; });
+  let terceirizados = 0, semEquipe = 0;
+  eventos.forEach(ev=>{
+    if(evEncerrado(ev) || !ev.mont) return;
+    const dias = diasEquipe(ev).filter(d=>d>=HOJE && d<=ate);
+    if(!dias.length) return;
+    if(ev.esp==='terceirizado' || ev.equipe===EQUIPE_TERC){ terceirizados++; return; }
+    const eq = ev.equipe || plano(ev).equipe;
+    if(!eq || !dados[eq]){ semEquipe++; return; }
+    dados[eq].eventos++;
+    dias.forEach(d=>dados[eq].dias.add(d));
+    dados[eq].km += (+ev.km||0);
+    const ini = dias.sort()[0];
+    if(!dados[eq].prox || ini < dados[eq].prox.dia) dados[eq].prox = {dia:ini, nome:ev.nome};
+  });
+  const nomes = Object.keys(dados);
+  const maxDias = Math.max(1, ...nomes.map(n=>dados[n].dias.size));
+  const totalDias = nomes.reduce((s,n)=>s+dados[n].dias.size, 0);
+  const media = nomes.length ? totalDias/nomes.length : 0;
+
+  document.getElementById('carga-sub').textContent =
+    'Próximos ' + cargaPeriodo + ' dias · ' + totalDias + ' dia(s) de operação distribuídos · média de ' +
+    media.toFixed(1) + ' por equipe' + (terceirizados ? ' · ' + terceirizados + ' evento(s) terceirizados' : '') +
+    (semEquipe ? ' · ' + semEquipe + ' sem equipe definida' : '');
+
+  box.innerHTML = '<div class="panel">' + nomes.map(n=>{
+    const d = dados[n], pc = Math.round(d.dias.size / maxDias * 100);
+    const desvio = media ? (d.dias.size - media) / media : 0;
+    const cor = desvio > 0.35 ? 'var(--red)' : desvio < -0.35 ? 'var(--amber)' : 'var(--green)';
+    const marca = desvio > 0.35 ? 'acima da média' : desvio < -0.35 ? 'abaixo da média' : 'equilibrada';
+    return '<div style="margin-bottom:18px">'+
+      '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
+        '<b style="color:'+corEquipe(n)+';font-size:15px">'+n+'</b>'+
+        '<span style="color:var(--muted);font-size:12.5px">'+d.eventos+' evento(s) · '+d.dias.size+' dia(s) na rua'+
+        (d.km ? ' · '+num(d.km)+' km' : '')+'</span>'+
+        '<span style="margin-left:auto;font-size:12px;font-weight:700;color:'+cor+'">'+marca+'</span>'+
+      '</div>'+
+      '<div style="height:12px;background:#eef1f6;border-radius:8px;overflow:hidden">'+
+        '<div style="height:100%;width:'+pc+'%;background:'+corEquipe(n)+'"></div></div>'+
+      '<div style="color:var(--muted);font-size:12px;margin-top:5px">'+
+        (d.prox ? 'Próxima: '+fmtD(d.prox.dia)+' — '+d.prox.nome : 'Sem operação no período')+'</div>'+
+    '</div>';
+  }).join('') + (nomes.length ? '' : '<div style="color:var(--muted)">Nenhuma equipe cadastrada.</div>') + '</div>';
+}
+
 function renderOps(){
   const defs = [
     ['opmont','montagem','Nenhum evento em montagem neste momento.','montando hoje'],
@@ -1449,6 +1582,15 @@ function situacao(ev){
 }
 /* tarjeta da operação do dia: aparece SEMPRE que hoje é dia de operação,
    junto de qualquer status — inclusive Conflito */
+/* o quanto o histórico apoia a sugestão atual — para decidir sem abrir o evento */
+function seloConfianca(ev, a){
+  if(ev.equipe) return ''; /* já confirmado, não é mais sugestão */
+  const nota = notaAprendida('equipe', ev, a.equipe);
+  if(!nota) return '';
+  const vezes = Math.ceil(nota/2);
+  return '<span class="selo-ia" title="A IA aprendeu isso com as suas confirmações em eventos parecidos">'+
+    '🧠 confirmado ' + vezes + 'x em eventos assim</span>';
+}
 function opChip(ev){
   const op = operacaoHoje(ev);
   if(op==='montagem') return '<span class="fase op-m">🔨 EM MONTAGEM</span>';
@@ -1474,6 +1616,14 @@ const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); retur
    QUADRO
    ========================================================= */
 let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '', espFiltro = 'ativos';
+let tipoFiltro = ''; /* '', 'conflito', 'alinhamento', 'sugestao' — vem dos indicadores */
+function filtrarPorTipo(t){
+  tipoFiltro = (tipoFiltro === t) ? '' : t; /* clicar de novo desliga */
+  renderQuadro();
+  if(tipoFiltro) toast(tipoFiltro==='conflito' ? 'Mostrando só os eventos com pendência. Clique de novo para ver todos.'
+    : tipoFiltro==='sugestao' ? 'Mostrando só o que espera sua confirmação.'
+    : 'Mostrando só os eventos em alinhamento.');
+}
 const PERIODOS = [['Hoje',0],['7 dias',7],['15 dias',15],['30 dias',30],['Todos',9999]];
 const HOJE = new Date().toISOString().slice(0,10);
 
@@ -1506,6 +1656,7 @@ function noPeriodo(ev){
 
 function filtrados(){
   return eventos.filter(noPeriodo)
+    .filter(e => !tipoFiltro || situacao(e).tipo === tipoFiltro)
     .filter(e => espFiltro==='todos' ? true
       : espFiltro==='ativos' ? !evEncerrado(e)   /* cancelado e finalizado saem da vista */
       : e.esp === espFiltro)
@@ -1534,6 +1685,10 @@ function renderQuadro(){
   });
   const lista = filtrados();
   const sits = lista.map(situacao);
+  ['','alinhamento','conflito','sugestao'].forEach((t,i)=>{
+    const k = document.querySelectorAll('.kpi')[i];
+    if(k && k.classList) k.classList.toggle('ativo', !!t && tipoFiltro === t);
+  });
   document.getElementById('k1').textContent = lista.length;
   document.getElementById('k2').textContent = sits.filter(s=>s.tipo==='alinhamento').length;
   document.getElementById('k3').textContent = sits.filter(s=>s.tipo==='conflito').length;
@@ -1592,6 +1747,7 @@ function cardEvento(ev, soSetorJC){
         '<div class="row"><span>Equipe</span><b style="color:'+cor+'">'+eq+
           (eq===EQUIPE_TERC ? (montadoresOp(ev, eq).length ? ' + '+montadoresOp(ev, eq).length+' da casa' : '') : ' + '+montadoresOp(ev, eq).length)+
           (ev.montOp?' <span style="color:var(--blue);font-weight:500">com troca</span>':'')+'</b></div>'+
+        (seloConfianca(ev, s.a) ? '<div class="row" style="border:none;padding-top:0"><span></span><b style="font-weight:500">'+seloConfianca(ev, s.a)+'</b></div>' : '')+
         '<div class="row"><span>Produtor</span><b>'+(produtorDo(ev)||'A definir')+(ev.produtor?'':' <span style="color:var(--amber);font-weight:500">sugerido</span>')+'</b></div>'+
         '<div class="row"><span>Caminhão</span><b>'+(v ? v.tipo+' '+v.placa + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '') : 'A definir')+'</b></div>'+
         '<div class="row"><span>Motorista</span><b>'+(mot.length ? mot[0] + (mot.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(mot.length-1)+'</span>' : '') : 'A definir')+'</b></div>'+
@@ -1687,6 +1843,13 @@ function verEvento(id){
         '<div class="ate">a <input type="date" class="dtin" value="'+valD(ev.evtFim)+'" onchange="setData(\''+ev.id+'\',\'evtFim\',this.value)" title="Deixe vazio se o evento é de um dia só"></div></div>'+
       '<div><i>Desmontagem</i><input type="datetime-local" class="dtin" value="'+valDT(ev.desm)+'" onchange="setData(\''+ev.id+'\',\'desm\',this.value)">'+
         '<div class="ate">até <input type="date" class="dtin" value="'+valD(ev.desmFim)+'" onchange="setData(\''+ev.id+'\',\'desmFim\',this.value)" title="Deixe vazio se a desmontagem termina no mesmo dia"></div></div>'+
+      (function(){
+        const hs = horaSugerida(ev);
+        if(!hs || !ev.mont || String(ev.mont).slice(11,16) === hs.hora) return '';
+        return '<div style="grid-column:1/-1"><div class="alert amber" style="margin:0">'+
+          '🧠 Você costuma montar às <b>'+hs.hora+'</b> '+hs.onde+' ('+hs.vezes+'x). '+
+          '<button class="mini" onclick="aplicarHora(\''+ev.id+'\',\''+hs.hora+'\')">Usar '+hs.hora+'</button></div></div>';
+      })()+
       '<div><i>Distância até a montagem</i><div style="display:flex;align-items:center;gap:7px">'+
         '<input type="number" min="0" step="1" value="'+(+ev.km||0)+'" '+
         'style="width:90px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
@@ -1797,6 +1960,12 @@ function setData(id, campo, valor){
   salvar(); renderQuadro(); verEvento(id);
   if(!document.getElementById('v-calendario').classList.contains('hide')) renderCal();
 }
+function aplicarHora(id, hh){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !ev.mont) return;
+  ev.mont = dia(ev.mont) + 'T' + hh;
+  salvar(); renderQuadro(); verEvento(id);
+  toast('Montagem ajustada para ' + hh + '.');
+}
 function setKmEvento(id, valor){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
@@ -1872,6 +2041,7 @@ function aceitar(id){
   /* confirmação do gestor: a IA aprende com o que foi aceito */
   aprender('equipe', ev, ev.equipe, 1);
   aprender('produtor', ev, ev.produtor, 1);
+  aprenderHora(ev);
   /* equipe confirmada: preenche a Escala de Montadores (a agenda se atualiza sozinha) */
   enviarParaEscala(id, true);
   if(!(ev.veiculos||[]).length) ev.veiculos = [...a.frota];
@@ -2127,8 +2297,10 @@ const SINONIMOS = {
   evt:['dataevento','dataDoEvento','datarealizacao','realizacao','data','dia'],
   desm:['desmontagem','datadesmontagem','datadedesmontagem','fim','termino'],
   fase:['faseatual','fase','etapa','status','situacao','fasedopipe','fasepipefy','fasedopipefy','etapaatual','statusatual','fasedoevento','andamento','phase','stage'],
-  respnome:['nomedoresponsavel','nomeresponsavel','responsavelnolocal','responsavellocal','responsaveldolocal','nomedocontato','contatonome','responsavelpeloevento'],
-  resptel:['telefonedoresponsavel','telefoneresponsavel','telefonedoresponsavelnolocal','telefoneresponsavellocal','contato','contatocliente','contatodocliente','telefone','telefonecliente','telefonedocliente','celular','celularcliente','whatsapp','whats','fone','telcliente'],
+  respnome:['nomedoresponsavelnolocal','nomedoresponsavel','nomeresponsavel','responsavelnolocal','responsavellocal','responsaveldolocal','nomedocontato','contatonome','responsavelpeloevento'],
+  /* "Contato (cliente)" costuma trazer o NOME de quem acompanha, não o telefone */
+  contatocli:['contatocliente','contato','contatodocliente','clientecontato'],
+  resptel:['telefonedoresponsavelnolocal','telefonedoresponsavel','telefoneresponsavel','telefoneresponsavellocal','telefone','telefonecliente','telefonedocliente','celular','celularcliente','whatsapp','whats','fone','telcliente'],
   permanece:['permanece','veiculopermanece','ficanolocal','permanencia','permanecenolocal','veiculofica']
 };
 /* Fase merece um esforço a mais: se nenhum sinônimo casar de primeira,
@@ -2150,6 +2322,20 @@ function achaKm(o){
   if(v == null) return 0;
   const num2 = parseFloat(String(v).replace(/\./g, m=>m).replace(',', '.'));
   return isNaN(num2) ? 0 : Math.max(0, Math.round(num2 * 10) / 10);
+}
+/* telefone é só o que tem jeito de telefone (8+ dígitos) */
+const ehTelefone = v => (String(v||'').match(/\d/g)||[]).length >= 8;
+function achaRespTel(o){
+  const t = acha(o,'resptel');
+  if(ehTelefone(t)) return String(t).trim();
+  const c = acha(o,'contatocli');           /* planilha antiga: contato guardava o telefone */
+  return ehTelefone(c) ? String(c).trim() : null;
+}
+function achaRespNome(o){
+  const n = acha(o,'respnome');
+  if(n && String(n).trim() && !ehTelefone(n)) return String(n).trim();
+  const c = acha(o,'contatocli');           /* "Contato (cliente)": nome de quem acompanha */
+  return (c && String(c).trim() && !ehTelefone(c)) ? String(c).trim() : null;
 }
 function achaFase(o){
   const direto = acha(o,'fase');
@@ -2512,8 +2698,8 @@ async function processarPlanilha(file, pendentes){
       desm: comHora(desm,'08:00'), desmFim: (desmFim||'').slice(0,10) || null,
       permanece: /sim|true|1|x/i.test(String(acha(l,'permanece')||'')),
       fase: normalizaFase(achaFase(l)),
-      respNome: String(acha(l,'respnome') || '').trim() || null,
-      respTel: String(acha(l,'resptel') || '').trim() || null,
+      respNome: achaRespNome(l),
+      respTel: achaRespTel(l),
       itens, naoLidos
     });
   }));
@@ -2572,8 +2758,8 @@ async function processarXML(files){
         desm: comHora(desm,'08:00'), desmFim: (desmFim||'').slice(0,10) || null,
         permanece: /sim|true|1/i.test(String(acha(o,'permanece')||'')),
         fase: normalizaFase(achaFase(o)),
-        respNome: String(acha(o,'respnome') || '').trim() || null,
-        respTel: String(acha(o,'resptel') || '').trim() || null,
+        respNome: achaRespNome(o),
+        respTel: achaRespTel(o),
         itens
       });
     });
@@ -3750,7 +3936,7 @@ function relatorioCal(){
   w.document.close();
 }
 
-const VIEWS = [['quadro','Quadro'],['opmont','🔨 Em Montagem'],['opand','🎪 Em Andamento'],['opdesm','📤 Em Desmontagem'],['jcamilo','Setor João Camilo'],['calendario','Calendário'],['equipes','Equipes'],['produtores','Produtores'],['veiculos','Veículos'],['materiais','Materiais'],['integracoes','Integrações']];
+const VIEWS = [['quadro','Quadro'],['opmont','🔨 Em Montagem'],['opand','🎪 Em Andamento'],['opdesm','📤 Em Desmontagem'],['carga','⚖ Carga das Equipes'],['jcamilo','Setor João Camilo'],['calendario','Calendário'],['equipes','Equipes'],['produtores','Produtores'],['veiculos','Veículos'],['materiais','Materiais'],['integracoes','Integrações']];
 function renderTabs(ativa){
   document.getElementById('tabs').innerHTML = VIEWS.map(v=>
     '<button class="tab '+(v[0]===ativa?'on':'')+'" onclick="irPara(\''+v[0]+'\')">'+v[1]+'</button>').join('');
@@ -3761,6 +3947,7 @@ function irPara(v){
   if(v==='calendario') renderCal();
   if(v==='jcamilo') renderQuadroJC();
   if(v==='opmont' || v==='opand' || v==='opdesm') renderOps();
+  if(v==='carga') renderCarga();
 }
 function fechar(id){ document.getElementById(id).classList.remove('on'); }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ fechar('ov-ev'); fechar('ov-novo'); fechar('ov-lote'); fechar('ov-prodjc'); fechar('ov-hoje'); } });
