@@ -1831,7 +1831,7 @@ function verEvento(id){
         'onchange="setCampo(\''+ev.id+'\',\'respNome\',this.value.trim())"></div>'+
       '<div><i>Telefone do Responsável no local</i><input value="'+String(ev.respTel||'').replace(/"/g,'&quot;')+'" placeholder="(21) 99000-0000" '+
         'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
-        'onchange="setCampo(\''+ev.id+'\',\'respTel\',this.value.trim())"></div>'+
+        'onchange="setRespTel(\''+ev.id+'\',this.value.trim())"></div>'+
       '<div><i>Fase atual</i><select class="sel-fase" onchange="setFase(\''+ev.id+'\',this.value)">'+
         '<option value="">— sem fase —</option>'+
         [...new Set([...FASES_PADRAO, ...(ev.fase ? [ev.fase] : [])])]
@@ -1965,6 +1965,19 @@ function aplicarHora(id, hh){
   ev.mont = dia(ev.mont) + 'T' + hh;
   salvar(); renderQuadro(); verEvento(id);
   toast('Montagem ajustada para ' + hh + '.');
+}
+function setRespTel(id, valor){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(valor && !ehTelefone(valor)){
+    /* alguém colou um nome aqui: joga para o campo certo em vez de guardar errado */
+    if(!ev.respNome) ev.respNome = valor;
+    ev.respTel = null;
+    salvar(); renderQuadro(); verEvento(id);
+    toast('Isso não parece um telefone — guardei em "Nome do Responsável". Digite o número no campo de telefone.');
+    return;
+  }
+  ev.respTel = valor || null;
+  salvar(); renderQuadro();
 }
 function setKmEvento(id, valor){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
@@ -4022,8 +4035,21 @@ async function salvar(){
     marcarSync(false, '⚠ offline — usando cópia local');
   }
   equipes.forEach(e=>{ if(!e.membros) e.membros = MEMBROS_PADRAO[e.nome] ? [...MEMBROS_PADRAO[e.nome]] : []; if(e.membros.length) e.montadores = e.membros.length; if(e.carro===undefined) e.carro = CARROS_PADRAO[e.nome] || ''; });
-  /* dado antigo: o "contato do cliente" era o telefone de quem responde no local */
-  eventos.forEach(e=>{ if(e.contato && !e.respTel){ e.respTel = e.contato; } });
+  /* dado antigo: o "contato do cliente" podia ser o nome OU o telefone */
+  eventos.forEach(e=>{
+    if(e.contato && !e.respTel && !e.respNome){
+      if(ehTelefone(e.contato)) e.respTel = e.contato; else e.respNome = e.contato;
+    }
+    /* importação antiga pôs nome no campo de telefone: devolve para o lugar certo */
+    if(e.respTel && !ehTelefone(e.respTel)){
+      if(!e.respNome) e.respNome = e.respTel;
+      e.respTel = null;
+    }
+    /* e o contrário: telefone digitado no campo de nome */
+    if(e.respNome && ehTelefone(e.respNome) && !e.respTel){
+      e.respTel = e.respNome; e.respNome = null;
+    }
+  });
   /* fases gravadas antes da limpeza de emoji do Pipefy */
   eventos.forEach(e=>{ if(e.fase) e.fase = normalizaFase(e.fase); });
   /* projeto único: nenhum apontamento externo fica guardado */
