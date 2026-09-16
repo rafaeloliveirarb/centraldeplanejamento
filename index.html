@@ -216,6 +216,11 @@ select.cad{max-width:200px}
 .b-canc{background:#eef1f6;color:#8b95a7}
 .card.encerrado{opacity:.62}
 .card.encerrado:hover{opacity:1}
+.rel-dia{font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+.rel-dia:first-child{margin-top:0}
+.rel-linha{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;cursor:pointer;background:#fff}
+.rel-linha:hover{border-color:#9cc0f0;background:#f7faff}
+.rel-linha input{width:17px;height:17px;flex:none;cursor:pointer}
 .selo-ia{display:inline-block;background:#f3f0fb;color:#6b5bb5;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
 .fase.op-m{background:#1c5fb8;color:#fff;border-color:#1c5fb8;animation:pulsa 2.2s infinite}
 .fase.op-d{background:#b0483c;color:#fff;border-color:#b0483c;animation:pulsa 2.2s infinite}
@@ -354,6 +359,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <input class="search" id="busca" placeholder="Pesquisar evento...">
       <button class="pill" onclick="sincronizarAgenda()" title="A agenda já se atualiza sozinha; use só se quiser forçar agora">📋 Sincronizar agenda</button>
+      <button class="pill" onclick="relatorioOps()" title="Imprime as montagens e desmontagens do período, sem os terceirizados">🖨 Relatório de operações</button>
       <button class="pill" onclick="exportarBackup()" title="Baixa um arquivo com todo o quadro, cadastros e o aprendizado da IA">💾 Backup</button>
       <button class="pill" onclick="redistribuirProdutores()" title="Solta os produtores fixados e deixa a IA sugerir de novo">⚖ Redistribuir produtores</button>
       <button class="pill" onclick="abrirLote()">Importar XML</button>
@@ -531,6 +537,29 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 
 <!-- ============ MODAL NOVO EVENTO ============ -->
 <button id="sino-hoje" class="sino hide" title="Operações de hoje" onclick="abrirHoje()">🔔<span class="sino-n" id="sino-n"></span></button>
+
+<div class="overlay" id="ov-rel" onclick="if(event.target===this)fechar('ov-rel')">
+  <div class="modal" style="max-width:620px">
+    <header>
+      <div><h2>🖨 Relatório de operações</h2><div class="os" id="rel-total"></div></div>
+      <button class="x" onclick="fechar('ov-rel')">✕</button>
+    </header>
+    <div class="mbody">
+      <div class="alert" style="margin-top:0">Desmarque o que não quiser no relatório. Terceirizados, cancelados e finalizados já ficam de fora.</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin:12px 0">
+        <button class="mini" onclick="marcaRelTodos(true)">Marcar todas</button>
+        <button class="mini" onclick="marcaRelTodos(false)">Desmarcar todas</button>
+        <button class="mini" onclick="marcaRelTipo('Montagem')">Só montagens</button>
+        <button class="mini" onclick="marcaRelTipo('Desmontagem')">Só desmontagens</button>
+      </div>
+      <div class="rolar" id="rel-lista" style="max-height:360px"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="mini" onclick="fechar('ov-rel')">Cancelar</button>
+      <button class="btn-orange" id="rel-btn" onclick="imprimirRelatorio()">🖨 Imprimir</button>
+    </footer>
+  </div>
+</div>
 
 <div class="overlay" id="ov-hoje" onclick="if(event.target===this)fechar('ov-hoje')">
   <div class="modal" style="max-width:560px">
@@ -3964,6 +3993,127 @@ function renderCal(){
 }
 
 /* relatório mensal imprimível (o navegador salva direto em PDF) */
+/* relatório de operações: uma linha por montagem e por desmontagem,
+   fora os terceirizados, cancelados e finalizados */
+function relatorioOps(){
+  const ini = dataIni || HOJE;
+  const fim = dataFim || (function(){ const d=new Date(); d.setDate(d.getDate()+ (periodo===9999?365:periodo)); return d.toISOString().slice(0,10); })();
+  const linhas = [];
+  eventos.forEach(ev=>{
+    if(evEncerrado(ev)) return;
+    if(ev.esp==='terceirizado' || ev.equipe===EQUIPE_TERC) return;
+    if(!ev.mont) return;
+    const eq = ev.equipe || plano(ev).equipe;
+    const e2 = equipes.find(x=>x.nome===eq);
+    const p = produtorDo(ev);
+    const base = {
+      ev, eq,
+      time: montadoresOp(ev, eq),
+      carro: (e2 && e2.carro) ? e2.carro : '',
+      frota: frotaDo(ev).map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : null;}).filter(Boolean),
+      prod: (p && p!==SEM_PRODUTOR) ? p + (ev.produtor?'':' (sugestao)') : '-'
+    };
+    const dm = dia(ev.mont);
+    if(dm >= ini && dm <= fim) linhas.push(Object.assign({tipo:'Montagem', ini:ev.mont, fimD:fimMont(ev)}, base));
+    const dd = ev.desm ? dia(ev.desm) : null;
+    if(dd && dd >= ini && dd <= fim) linhas.push(Object.assign({tipo:'Desmontagem', ini:ev.desm, fimD:fimDesm(ev)}, base));
+  });
+  if(!linhas.length) return toast('Nenhuma operacao propria no periodo (terceirizados nao entram no relatorio).');
+  linhas.sort((a,b)=> String(a.ini).localeCompare(String(b.ini)) || a.tipo.localeCompare(b.tipo));
+  linhas.forEach((l,i)=>{ l.idx = i; l.marcado = true; });
+  REL = {linhas, ini, fim};
+  renderRelSelecao();
+  document.getElementById('ov-rel').classList.add('on');
+}
+
+/* ---- seleção do que entra no relatório ---- */
+let REL = {linhas:[], ini:'', fim:''};
+function marcaRel(i, v){ if(REL.linhas[i]) REL.linhas[i].marcado = v; atualizaRelTotais(); }
+function marcaRelTodos(v){ REL.linhas.forEach(l=>l.marcado = v); renderRelSelecao(); }
+function marcaRelTipo(tipo){ REL.linhas.forEach(l=>l.marcado = (l.tipo===tipo)); renderRelSelecao(); }
+function atualizaRelTotais(){
+  const m = REL.linhas.filter(l=>l.marcado && l.tipo==='Montagem').length;
+  const d = REL.linhas.filter(l=>l.marcado && l.tipo==='Desmontagem').length;
+  const el2 = document.getElementById('rel-total');
+  if(el2) el2.textContent = m + ' montagem(ns) e ' + d + ' desmontagem(ns) selecionada(s)';
+  const b = document.getElementById('rel-btn');
+  if(b){ b.disabled = !(m+d); b.style.opacity = (m+d) ? '1' : '.5'; b.textContent = '🖨 Imprimir ' + (m+d) + ' linha(s)'; }
+}
+function renderRelSelecao(){
+  const box = document.getElementById('rel-lista');
+  if(!box) return;
+  const hora = s => String(s||'').slice(11,16);
+  let diaAtual = '';
+  box.innerHTML = REL.linhas.map(l=>{
+    const d = dia(l.ini);
+    const cab = d !== diaAtual ? (diaAtual = d, '<div class="rel-dia">'+fmtD(d)+'</div>') : '';
+    return cab + '<label class="rel-linha">'+
+      '<input type="checkbox" '+(l.marcado?'checked':'')+' onchange="marcaRel('+l.idx+',this.checked)">'+
+      '<span class="badge '+(l.tipo==='Montagem'?'b-blue':'b-red')+'" style="min-width:104px;text-align:center">'+
+        (l.tipo==='Montagem'?'🔨 ':'📤 ')+l.tipo+'</span>'+
+      '<span style="flex:1;min-width:0"><b style="display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+l.ev.nome+'</b>'+
+        '<small style="color:var(--muted)">'+l.eq+(l.ev.cidade && l.ev.cidade!=='—' ? ' · '+l.ev.cidade : '')+'</small></span>'+
+      (hora(l.ini)?'<b style="font-size:12.5px">'+hora(l.ini)+'</b>':'')+
+    '</label>';
+  }).join('');
+  atualizaRelTotais();
+}
+
+/* ---- impressão do que foi marcado ---- */
+function imprimirRelatorio(){
+  const linhas = REL.linhas.filter(l=>l.marcado);
+  const ini = REL.ini, fim = REL.fim;
+  if(!linhas.length) return toast('Marque pelo menos uma operacao.');
+  fechar('ov-rel');
+
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const hora = s => String(s||'').slice(11,16);
+  const porDia = {};
+  linhas.forEach(l=>{ (porDia[dia(l.ini)] = porDia[dia(l.ini)] || []).push(l); });
+  const SEM = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
+
+  const corpo = Object.keys(porDia).sort().map(function(d){
+    const dt = new Date(d+'T12:00');
+    return '<h2>'+fmtD(d)+' - '+SEM[dt.getDay()]+'</h2>'+
+      '<table><thead><tr><th style="width:96px">Operacao</th><th>Evento</th><th>Equipe e montadores</th>'+
+      '<th>Veiculo</th><th>Produtor</th><th style="width:150px">Responsavel no local</th></tr></thead><tbody>'+
+      porDia[d].map(function(l){ return '<tr>'+
+        '<td><span class="'+(l.tipo==='Montagem'?'fm':'fd')+'">'+l.tipo+'</span>'+
+          (hora(l.ini) ? '<br><small>'+hora(l.ini)+'</small>' : '')+
+          (dia(l.ini)!==dia(l.fimD) ? '<br><small>ate '+fmtD(l.fimD)+'</small>' : '')+'</td>'+
+        '<td><b>'+esc(l.ev.nome)+'</b>'+(l.ev.os && l.ev.os!=='-' ? '<br><small>OS '+esc(l.ev.os)+'</small>' : '')+
+          (l.ev.local && l.ev.local!=='-' ? '<br><small>'+esc(l.ev.local)+'</small>' : '')+
+          (l.ev.cidade && l.ev.cidade!=='-' ? '<br><small>'+esc(l.ev.cidade)+(+l.ev.km?' - '+l.ev.km+' km':'')+'</small>' : '')+'</td>'+
+        '<td><b>'+esc(l.eq)+'</b>'+(l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'+
+        '<td>'+(l.frota.length?esc(l.frota.join(' / ')):(l.carro?esc(l.carro):'-'))+'</td>'+
+        '<td>'+esc(l.prod)+'</td>'+
+        '<td>'+(l.ev.respNome?esc(l.ev.respNome):'-')+(l.ev.respTel?'<br><small>'+esc(l.ev.respTel)+'</small>':'')+'</td>'+
+      '</tr>'; }).join('')+'</tbody></table>';
+  }).join('');
+
+  const totM = linhas.filter(function(l){return l.tipo==='Montagem';}).length;
+  const totD = linhas.filter(function(l){return l.tipo==='Desmontagem';}).length;
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Operacoes</title><style>'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#1c2740;margin:28px;font-size:12.5px}'+
+    'h1{font-size:20px;margin:0 0 2px} .sub{color:#777;margin:0 0 18px;font-size:12px}'+
+    'h2{font-size:14px;margin:20px 0 6px;padding-bottom:4px;border-bottom:2px solid #e3e8f0}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:4px}'+
+    'th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#8892a4;text-align:left;padding:5px 7px;border-bottom:1px solid #e3e8f0}'+
+    'td{padding:6px 7px;border-bottom:1px solid #eef1f6;vertical-align:top}'+
+    'small{color:#5a6478} .fm,.fd{font-weight:700;font-size:11px;border-radius:5px;padding:2px 7px;color:#fff;white-space:nowrap;display:inline-block}'+
+    '.fm{background:#2f7fe0} .fd{background:#e4483c}'+
+    'h2{page-break-after:avoid} tr{page-break-inside:avoid}'+
+    '@media print{body{margin:10mm}}'+
+  '</style></head><body>'+
+    '<h1>Operacoes - montagens e desmontagens</h1>'+
+    '<p class="sub">'+fmtD(ini)+' a '+fmtD(fim)+' - '+totM+' montagem(ns) e '+totD+' desmontagem(ns) - equipes proprias (terceirizados fora) - '+
+      'gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
+    corpo+
+  '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+
 function relatorioCal(){
   const ano = calRef.getFullYear(), mes = calRef.getMonth();
   const titulo = calRef.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
@@ -4042,7 +4192,7 @@ function irPara(v){
   if(v==='carga') renderCarga();
 }
 function fechar(id){ document.getElementById(id).classList.remove('on'); }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ fechar('ov-ev'); fechar('ov-novo'); fechar('ov-lote'); fechar('ov-prodjc'); fechar('ov-hoje'); } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ fechar('ov-ev'); fechar('ov-novo'); fechar('ov-lote'); fechar('ov-prodjc'); fechar('ov-hoje'); fechar('ov-rel'); } });
 
 function renderPeriodos(){
   const comData = !!(dataIni || dataFim);
