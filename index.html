@@ -1286,8 +1286,10 @@ function montarEscala(frota, ag, ev, dEq){
     const livres = motoristas.filter(m => !m.agregado && m.situacao==='Ativo'
       && !usados.includes(m.nome) && !ocupante(ag,'mo',m.nome,dEq,ev.id));
     const ehCarreta = !!(v && v.tipo === 'CARRETA');
+    /* todo motorista dirige carreta: quem já tem experiência entra primeiro,
+       mas ninguém fica de fora por causa disso */
     const cand = ehCarreta
-      ? livres.filter(m => m.carreta)
+      ? [...livres].sort((a,b) => (b.carreta?1:0) - (a.carreta?1:0))
       : [...livres].sort((a,b) => (a.carreta?1:0) - (b.carreta?1:0));
     if(cand.length){ escala.push({v:id, motorista:cand[0].nome}); usados.push(cand[0].nome); }
     else escala.push({v:id, motorista:null, carreta:ehCarreta});
@@ -1697,6 +1699,12 @@ function limparDatas(){
 
 function noPeriodo(ev){
   if(!ev.mont) return true; /* sem data fica sempre visível para ser resolvido */
+  if(ev.desm && periodo!==9999 && !dataIni && !dataFim){
+    /* desmontagem dentro da janela conta, mesmo que a montagem tenha sido antes */
+    const lim = new Date(); lim.setDate(lim.getDate()+periodo);
+    const dd = dia(ev.desm);
+    if(dd >= HOJE && dd <= lim.toISOString().slice(0,10)) return true;
+  }
   if(dataIni || dataFim) return true;
   if(periodo===9999) return true;
   const d = dia(ev.mont), base = new Date(HOJE+'T00:00');
@@ -1750,18 +1758,34 @@ function renderQuadro(){
     box.innerHTML = '<div class="panel empty"><b>Nenhum evento neste período</b>Amplie o filtro de datas ou cadastre a próxima OS.</div>';
     return;
   }
-  const grupos = {};
-  lista.forEach(e => { const d = dia(e.mont); (grupos[d] = grupos[d]||[]).push(e); });
+  const grupos = {}, tipos = {};
+  const poe = (d, e, tipo) => {
+    (grupos[d] = grupos[d]||[]).push(e);
+    (tipos[d] = tipos[d]||{}).mont = (tipos[d].mont||0) + (tipo==='mont'?1:0);
+    tipos[d].desm = (tipos[d].desm||0) + (tipo==='desm'?1:0);
+    if(tipo==='desm') (e.__desmCol = e.__desmCol||[]).push(d);
+  };
+  lista.forEach(e => {
+    e.__desmCol = null;
+    poe(dia(e.mont), e, 'mont');
+    /* a desmontagem também ganha lugar no quadro, no dia dela */
+    const dd = e.desm ? dia(e.desm) : null;
+    if(dd && dd !== dia(e.mont)) poe(dd, e, 'desm');
+  });
   /* uma coluna por data de montagem, lado a lado — datas diferentes ficam
      uma ao lado da outra e o quadro rola na horizontal */
-  box.innerHTML = Object.keys(grupos).sort().map(d =>
-    '<div class="daycol"><div class="daylabel">'+(d ? fmtD(d) : '📅 Sem data')+
-      '<small>'+grupos[d].length+' evento'+(grupos[d].length>1?'s':'')+(d ? ' · montagem' : ' · defina as datas no evento')+'</small></div>'+
-      '<div class="dcards">'+grupos[d].map(cardEvento).join('')+'</div></div>'
-  ).join('');
+  box.innerHTML = Object.keys(grupos).sort().map(d => {
+    const t = tipos[d] || {};
+    const resumo = !d ? ' · defina as datas no evento'
+      : [t.mont ? t.mont+' montagem'+(t.mont>1?'ns':'') : '', t.desm ? t.desm+' desmontagem'+(t.desm>1?'ns':'') : '']
+        .filter(Boolean).join(' · ');
+    return '<div class="daycol"><div class="daylabel">'+(d ? fmtD(d) : '📅 Sem data')+
+      '<small>'+grupos[d].length+' evento'+(grupos[d].length>1?'s':'')+(resumo?' · '+resumo:'')+'</small></div>'+
+      '<div class="dcards">'+grupos[d].map(e=>cardEvento(e, false, (e.__desmCol||[]).includes(d) ? 'desm' : 'mont')).join('')+'</div></div>';
+  }).join('');
 }
 
-function cardEvento(ev, soSetorJC){
+function cardEvento(ev, soSetorJC, papel){
   const s = situacao(ev), a = s.a;
   const eq = ev.equipe || a.equipe;
   const esc = escalaDo(ev);
@@ -1814,6 +1838,7 @@ function cardEvento(ev, soSetorJC){
         })()+
       '</div>'+
       '<div class="selo">'+
+        (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
         '<span class="badge '+s.classe+'">'+s.texto+'</span>'+
         opChip(ev)+
         faseChip(ev.fase)+
@@ -4023,6 +4048,9 @@ function relatorioOps(){
       time: montadoresOp(ev, eq),
       carro: (e2 && e2.carro) ? e2.carro : '',
       frota: frotaDo(ev).map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : null;}).filter(Boolean),
+      /* mesmo conjunto de caminhões sai na montagem e volta na desmontagem;
+         quando o veículo permanece no local, a desmontagem não precisa de ida */
+      permanece: !!ev.permanece,
       prod: (p && p!==SEM_PRODUTOR) ? p + (ev.produtor?'':' (sugestao)') : '-',
       motoristas: [...new Set(((ev.escala||[]).length ? ev.escala : (plano(ev).escala||[])).map(x=>x.motorista).filter(Boolean))]
     };
@@ -4120,7 +4148,14 @@ function imprimirRelatorio(){
   if(C.equipe) cols.push({th:'<th>Equipe'+(C.montadores?' e montadores':'')+'</th>',
     td:l=>'<td><b>'+esc(l.eq)+'</b>'+(C.montadores && l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'});
   if(C.veiculo) cols.push({th:'<th>Veiculo</th>',
-    td:l=>'<td>'+(l.frota.length?esc(l.frota.join(' / ')):(l.carro?esc(l.carro):'-'))+'</td>'});
+    td:l=>{
+      const base = l.frota.length ? l.frota.join('<br>') : (l.carro ? l.carro : '');
+      if(!base) return '<td>-</td>';
+      const nota = l.tipo==='Montagem'
+        ? '<small>leva o material</small>'
+        : (l.permanece ? '<small>ja esta no local</small>' : '<small>volta com o material</small>');
+      return '<td>'+esc(base).replace(/&lt;br&gt;/g,'<br>')+'<br>'+nota+'</td>';
+    }});
   if(C.motorista) cols.push({th:'<th>Motorista</th>',
     td:l=>'<td>'+(l.motoristas && l.motoristas.length ? esc(l.motoristas.join(', ')) : '-')+'</td>'});
   if(C.produtor) cols.push({th:'<th>Produtor</th>', td:l=>'<td>'+esc(l.prod)+'</td>'});
