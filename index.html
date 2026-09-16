@@ -216,6 +216,8 @@ select.cad{max-width:200px}
 .b-canc{background:#eef1f6;color:#8b95a7}
 .card.encerrado{opacity:.62}
 .card.encerrado:hover{opacity:1}
+.rel-col{display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.rel-col input{width:15px;height:15px;cursor:pointer}
 .rel-dia{font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
 .rel-dia:first-child{margin-top:0}
 .rel-linha{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;cursor:pointer;background:#fff}
@@ -552,7 +554,17 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="marcaRelTipo('Montagem')">Só montagens</button>
         <button class="mini" onclick="marcaRelTipo('Desmontagem')">Só desmontagens</button>
       </div>
-      <div class="rolar" id="rel-lista" style="max-height:360px"></div>
+      <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:14px;background:#f7f9fc">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px">
+          <b style="font-size:12.5px">O que sai no papel</b>
+          <span style="flex:1"></span>
+          <button class="mini" onclick="colsPreset('completo')">Completo</button>
+          <button class="mini" onclick="colsPreset('campo')">Folha de campo</button>
+          <button class="mini" onclick="colsPreset('simples')">Só o essencial</button>
+        </div>
+        <div id="rel-cols" style="display:flex;gap:10px 16px;flex-wrap:wrap"></div>
+      </div>
+      <div class="rolar" id="rel-lista" style="max-height:300px"></div>
     </div>
     <footer style="display:flex;justify-content:flex-end;gap:10px">
       <button class="mini" onclick="fechar('ov-rel')">Cancelar</button>
@@ -4011,7 +4023,8 @@ function relatorioOps(){
       time: montadoresOp(ev, eq),
       carro: (e2 && e2.carro) ? e2.carro : '',
       frota: frotaDo(ev).map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : null;}).filter(Boolean),
-      prod: (p && p!==SEM_PRODUTOR) ? p + (ev.produtor?'':' (sugestao)') : '-'
+      prod: (p && p!==SEM_PRODUTOR) ? p + (ev.produtor?'':' (sugestao)') : '-',
+      motoristas: [...new Set(((ev.escala||[]).length ? ev.escala : (plano(ev).escala||[])).map(x=>x.motorista).filter(Boolean))]
     };
     const dm = dia(ev.mont);
     if(dm >= ini && dm <= fim) linhas.push(Object.assign({tipo:'Montagem', ini:ev.mont, fimD:fimMont(ev)}, base));
@@ -4021,13 +4034,35 @@ function relatorioOps(){
   if(!linhas.length) return toast('Nenhuma operacao propria no periodo (terceirizados nao entram no relatorio).');
   linhas.sort((a,b)=> String(a.ini).localeCompare(String(b.ini)) || a.tipo.localeCompare(b.tipo));
   linhas.forEach((l,i)=>{ l.idx = i; l.marcado = true; });
-  REL = {linhas, ini, fim};
+  REL = {linhas, ini, fim, cols: (REL && REL.cols) ? REL.cols : Object.assign({}, COLS_PADRAO)};
   renderRelSelecao();
+  renderColsSelecao();
   document.getElementById('ov-rel').classList.add('on');
 }
 
 /* ---- seleção do que entra no relatório ---- */
-let REL = {linhas:[], ini:'', fim:''};
+const COLS_PADRAO = {hora:true, os:true, local:true, km:true, equipe:true, montadores:true,
+  veiculo:true, motorista:false, produtor:true, resp:true, material:false, assinatura:false};
+let REL = {linhas:[], ini:'', fim:'', cols:Object.assign({}, COLS_PADRAO)};
+function marcaCol(c, v){ REL.cols[c] = v; }
+function colsPreset(qual){
+  const p = Object.assign({}, COLS_PADRAO);
+  if(qual==='campo'){ /* folha para o líder levar */
+    Object.assign(p, {produtor:false, material:true, assinatura:true, motorista:true, os:false});
+  } else if(qual==='simples'){
+    Object.assign(p, {montadores:false, veiculo:false, motorista:false, produtor:false, resp:false, material:false, os:false, km:false});
+  }
+  REL.cols = p; renderColsSelecao();
+}
+function renderColsSelecao(){
+  const box = document.getElementById('rel-cols');
+  if(!box) return;
+  const itens = [['hora','Horário'],['os','OS'],['local','Local e cidade'],['km','Km'],
+    ['equipe','Equipe'],['montadores','Montadores'],['veiculo','Veículo'],['motorista','Motorista'],
+    ['produtor','Produtor'],['resp','Responsável no local'],['material','Material do evento'],['assinatura','Coluna para visto']];
+  box.innerHTML = itens.map(([k,r])=>
+    '<label class="rel-col"><input type="checkbox" '+(REL.cols[k]?'checked':'')+' onchange="marcaCol(\''+k+'\',this.checked)"> '+r+'</label>').join('');
+}
 function marcaRel(i, v){ if(REL.linhas[i]) REL.linhas[i].marcado = v; atualizaRelTotais(); }
 function marcaRelTodos(v){ REL.linhas.forEach(l=>l.marcado = v); renderRelSelecao(); }
 function marcaRelTipo(tipo){ REL.linhas.forEach(l=>l.marcado = (l.tipo===tipo)); renderRelSelecao(); }
@@ -4066,29 +4101,42 @@ function imprimirRelatorio(){
   if(!linhas.length) return toast('Marque pelo menos uma operacao.');
   fechar('ov-rel');
 
+  const C = REL.cols;
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const hora = s => String(s||'').slice(11,16);
   const porDia = {};
   linhas.forEach(l=>{ (porDia[dia(l.ini)] = porDia[dia(l.ini)] || []).push(l); });
   const SEM = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
 
+  /* só as colunas que o usuário escolheu */
+  const cols = [];
+  cols.push({th:'<th style="width:96px">Operacao</th>', td:l=>'<td><span class="'+(l.tipo==='Montagem'?'fm':'fd')+'">'+l.tipo+'</span>'+
+    (C.hora && hora(l.ini) ? '<br><small>'+hora(l.ini)+'</small>' : '')+
+    (dia(l.ini)!==dia(l.fimD) ? '<br><small>ate '+fmtD(l.fimD)+'</small>' : '')+'</td>'});
+  cols.push({th:'<th>Evento</th>', td:l=>'<td><b>'+esc(l.ev.nome)+'</b>'+
+    (C.os && l.ev.os && l.ev.os!=='-' ? '<br><small>OS '+esc(l.ev.os)+'</small>' : '')+
+    (C.local && l.ev.local && l.ev.local!=='-' ? '<br><small>'+esc(l.ev.local)+'</small>' : '')+
+    (C.local && l.ev.cidade && l.ev.cidade!=='-' ? '<br><small>'+esc(l.ev.cidade)+(C.km && +l.ev.km?' - '+l.ev.km+' km':'')+'</small>' : '')+'</td>'});
+  if(C.equipe) cols.push({th:'<th>Equipe'+(C.montadores?' e montadores':'')+'</th>',
+    td:l=>'<td><b>'+esc(l.eq)+'</b>'+(C.montadores && l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'});
+  if(C.veiculo) cols.push({th:'<th>Veiculo</th>',
+    td:l=>'<td>'+(l.frota.length?esc(l.frota.join(' / ')):(l.carro?esc(l.carro):'-'))+'</td>'});
+  if(C.motorista) cols.push({th:'<th>Motorista</th>',
+    td:l=>'<td>'+(l.motoristas && l.motoristas.length ? esc(l.motoristas.join(', ')) : '-')+'</td>'});
+  if(C.produtor) cols.push({th:'<th>Produtor</th>', td:l=>'<td>'+esc(l.prod)+'</td>'});
+  if(C.resp) cols.push({th:'<th style="width:150px">Responsavel no local</th>',
+    td:l=>'<td>'+(l.ev.respNome?esc(l.ev.respNome):'-')+(l.ev.respTel?'<br><small>'+esc(l.ev.respTel)+'</small>':'')+'</td>'});
+  if(C.material) cols.push({th:'<th style="width:180px">Material</th>',
+    td:l=>{ const it=(l.ev.itens||[]).filter(i=>+i.qtd);
+      return '<td>'+(it.length? it.map(i=>esc(i.nome)+' <b>'+num(i.qtd)+'</b>'+(i.un?' '+esc(i.un):'')).join('<br>') : '-')+'</td>'; }});
+  if(C.assinatura) cols.push({th:'<th style="width:120px">Visto</th>', td:()=>'<td style="border-bottom:1px solid #eef1f6">&nbsp;</td>'});
+
   const corpo = Object.keys(porDia).sort().map(function(d){
     const dt = new Date(d+'T12:00');
     return '<h2>'+fmtD(d)+' - '+SEM[dt.getDay()]+'</h2>'+
-      '<table><thead><tr><th style="width:96px">Operacao</th><th>Evento</th><th>Equipe e montadores</th>'+
-      '<th>Veiculo</th><th>Produtor</th><th style="width:150px">Responsavel no local</th></tr></thead><tbody>'+
-      porDia[d].map(function(l){ return '<tr>'+
-        '<td><span class="'+(l.tipo==='Montagem'?'fm':'fd')+'">'+l.tipo+'</span>'+
-          (hora(l.ini) ? '<br><small>'+hora(l.ini)+'</small>' : '')+
-          (dia(l.ini)!==dia(l.fimD) ? '<br><small>ate '+fmtD(l.fimD)+'</small>' : '')+'</td>'+
-        '<td><b>'+esc(l.ev.nome)+'</b>'+(l.ev.os && l.ev.os!=='-' ? '<br><small>OS '+esc(l.ev.os)+'</small>' : '')+
-          (l.ev.local && l.ev.local!=='-' ? '<br><small>'+esc(l.ev.local)+'</small>' : '')+
-          (l.ev.cidade && l.ev.cidade!=='-' ? '<br><small>'+esc(l.ev.cidade)+(+l.ev.km?' - '+l.ev.km+' km':'')+'</small>' : '')+'</td>'+
-        '<td><b>'+esc(l.eq)+'</b>'+(l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'+
-        '<td>'+(l.frota.length?esc(l.frota.join(' / ')):(l.carro?esc(l.carro):'-'))+'</td>'+
-        '<td>'+esc(l.prod)+'</td>'+
-        '<td>'+(l.ev.respNome?esc(l.ev.respNome):'-')+(l.ev.respTel?'<br><small>'+esc(l.ev.respTel)+'</small>':'')+'</td>'+
-      '</tr>'; }).join('')+'</tbody></table>';
+      '<table><thead><tr>'+cols.map(c=>c.th).join('')+'</tr></thead><tbody>'+
+      porDia[d].map(function(l){ return '<tr>'+cols.map(c=>c.td(l)).join('')+'</tr>'; }).join('')+
+      '</tbody></table>';
   }).join('');
 
   const totM = linhas.filter(function(l){return l.tipo==='Montagem';}).length;
