@@ -346,6 +346,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <h1>Central de Planejamento Logístico</h1>
       <div class="periods" id="periods"></div>
       <select class="pill" id="filtro-fase" style="padding:9px 14px" onchange="faseFiltro=this.value;renderQuadro()"></select>
+      <select class="pill" id="filtro-op" style="padding:9px 14px" onchange="opFiltro=this.value;renderQuadro()">
+        <option value="">Montagens e desmontagens</option>
+        <option value="mont">🔨 Só montagens</option>
+        <option value="desm">📤 Só desmontagens</option>
+      </select>
       <select class="pill" id="filtro-esp" style="padding:9px 14px" onchange="espFiltro=this.value;renderQuadro()">
         <option value="ativos">Esconder encerrados</option>
         <option value="todos">Mostrar tudo</option>
@@ -1669,6 +1674,7 @@ const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); retur
    QUADRO
    ========================================================= */
 let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '', espFiltro = 'ativos';
+let opFiltro = ''; /* '', 'mont', 'desm' — qual operação mostrar nas colunas */
 let tipoFiltro = ''; /* '', 'conflito', 'alinhamento', 'sugestao' — vem dos indicadores */
 function filtrarPorTipo(t){
   tipoFiltro = (tipoFiltro === t) ? '' : t; /* clicar de novo desliga */
@@ -1758,6 +1764,7 @@ function renderQuadro(){
     box.innerHTML = '<div class="panel empty"><b>Nenhum evento neste período</b>Amplie o filtro de datas ou cadastre a próxima OS.</div>';
     return;
   }
+  const rotOp = opFiltro==='mont' ? 'montagem' : opFiltro==='desm' ? 'desmontagem' : '';
   const grupos = {}, tipos = {};
   const poe = (d, e, tipo) => {
     (grupos[d] = grupos[d]||[]).push(e);
@@ -1767,13 +1774,20 @@ function renderQuadro(){
   };
   lista.forEach(e => {
     e.__desmCol = null;
-    poe(dia(e.mont), e, 'mont');
-    /* a desmontagem também ganha lugar no quadro, no dia dela */
     const dd = e.desm ? dia(e.desm) : null;
-    if(dd && dd !== dia(e.mont)) poe(dd, e, 'desm');
+    /* em "só montagens", evento que entrou na lista só pela desmontagem fica de fora */
+    const montVelha = dia(e.mont) < HOJE && periodo!==9999 && !dataIni && !dataFim;
+    if(opFiltro !== 'desm' && !(opFiltro === 'mont' && montVelha)) poe(dia(e.mont), e, 'mont');
+    /* a desmontagem também ganha lugar no quadro, no dia dela */
+    if(dd && (opFiltro === 'desm' || dd !== dia(e.mont)) && opFiltro !== 'mont') poe(dd, e, 'desm');
   });
+  Object.keys(grupos).forEach(d=>{ if(!grupos[d].length) delete grupos[d]; });
   /* uma coluna por data de montagem, lado a lado — datas diferentes ficam
      uma ao lado da outra e o quadro rola na horizontal */
+  if(!Object.keys(grupos).length){
+    box.innerHTML = '<div class="panel empty"><b>Nenhuma '+rotOp+' neste período</b>Troque o filtro de operação ou amplie as datas.</div>';
+    return;
+  }
   box.innerHTML = Object.keys(grupos).sort().map(d => {
     const t = tipos[d] || {};
     const resumo = !d ? ' · defina as datas no evento'
