@@ -3625,7 +3625,6 @@ function mensagemEscala(ev){
   const mot = [...new Set(((ev.escala||[]).length ? ev.escala : (a.escala||[])).map(x=>x.motorista).filter(Boolean))];
   const L = [];
   L.push('*' + ev.nome + '*');
-  if(ev.os && ev.os!=='—') L.push('OS ' + ev.os);
   L.push('');
   L.push('🔨 *Montagem:* ' + (dia(ev.mont)===dia(fimMont(ev)) ? fmtDH(ev.mont) : periodo2(ev.mont, fimMont(ev))));
   if(ev.evt) L.push('🎪 *Evento:* ' + (dia(ev.evt)===dia(ev.evtFim||ev.evt) ? fmtD(ev.evt) : fmtD(ev.evt)+' a '+fmtD(ev.evtFim)));
@@ -3644,13 +3643,6 @@ function mensagemEscala(ev){
   if(ev.respNome || ev.respTel){
     L.push('');
     L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
-  }
-  const mats = (ev.itens||[]).filter(i=>+i.qtd);
-  if(mats.length){
-    L.push('');
-    L.push('📦 *Material:*');
-    mats.slice(0,14).forEach(i=>L.push('• ' + i.nome + ' — ' + num(i.qtd) + ' ' + (i.un||'un')));
-    if(mats.length > 14) L.push('• +' + (mats.length-14) + ' item(ns) — ver no sistema');
   }
   return L.join('\n');
 }
