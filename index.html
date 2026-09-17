@@ -1457,8 +1457,16 @@ function replanejar(){
     if(evSemNossaEquipe(e)) return; /* cancelado, finalizado ou tudo terceirizado: não prende ninguém */
     reservar(ag,'eq', e.equipe===EQUIPE_TERC ? null : e.equipe, diasEquipe(e), e.id);
     reservar(ag,'pr', (e.produtor && e.produtor!==SEM_PRODUTOR) ? e.produtor : null, diasEquipe(e), e.id);
-    (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
-    (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e), e.id));
+    if(temFrotaDesm(e)){
+      /* frotas separadas: cada uma presa só nos seus dias */
+      (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasEntre(e.mont, fimMont(e)), e.id));
+      (e.veiculosD||[]).forEach(v => reservar(ag,'ve', v, diasEntre(e.desm, fimDesm(e)), e.id));
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEntre(e.mont, fimMont(e)), e.id));
+      (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEntre(e.desm, fimDesm(e)), e.id));
+    } else {
+      (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e), e.id));
+    }
     /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
     if(e.equipe && e.equipe!==EQUIPE_TERC)
       montadoresOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasEquipe(e), e.id));
@@ -1658,15 +1666,40 @@ function opChip(ev){
 }
 
 const produtorDo = ev => ev.produtor || plano(ev).produtor || null;
-const frotaDo = ev => ((ev.veiculos && ev.veiculos.length) ? ev.veiculos : plano(ev).frota);
-function escalaDo(ev){
-  const fr = frotaDo(ev), man = ev.escala || [], sug = plano(ev).escala || [];
-  return fr.map(id => {
+/* fase 'mont' (padrão) ou 'desm'. A desmontagem só tem frota própria
+   depois que o gestor separa; até lá, volta com os mesmos caminhões. */
+const temFrotaDesm = ev => Array.isArray(ev.veiculosD);
+const frotaDo = (ev, fase) => (fase==='desm' && temFrotaDesm(ev))
+  ? ev.veiculosD
+  : ((ev.veiculos && ev.veiculos.length) ? ev.veiculos : plano(ev).frota);
+function escalaDo(ev, fase){
+  const desm = fase==='desm' && temFrotaDesm(ev);
+  const fr = frotaDo(ev, fase);
+  const man = (desm ? (ev.escalaD||[]) : (ev.escala||[]));
+  const sug = plano(ev).escala || [];
+  /* uma linha por VIAGEM: o mesmo caminhão pode aparecer várias vezes */
+  const usadosMan = [];
+  return fr.map((id, i) => {
     const v = veiculos.find(x=>x.id===id);
-    if(v && v.agregado) return {v:id, motorista:v.motoristaFixo, fixo:true};
-    const m = (man.find(x=>x.v===id) || sug.find(x=>x.v===id) || {}).motorista || null;
-    return {v:id, motorista:m, fixo:false};
+    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, fixo:true};
+    /* casa pela posição quando existir; senão, pela primeira entrada livre daquele veículo */
+    let reg = man.find(x=>x.i===i);
+    if(!reg){
+      reg = man.find(x=>x.v===id && x.i===undefined && !usadosMan.includes(x));
+      if(reg) usadosMan.push(reg);
+    }
+    const m = (reg || sug.find(x=>x.v===id) || {}).motorista || null;
+    return {i, v:id, motorista:m, fixo:false};
   });
+}
+/* junta repetidos numa linha só, marcando quantas viagens */
+function descViagens(ids){
+  const c = {};
+  ids.forEach(id=>{ c[id] = (c[id]||0)+1; });
+  return Object.keys(c).map(id=>{
+    const v = veiculos.find(x=>x.id===id);
+    return v ? v.tipo+' '+v.placa + (c[id]>1 ? ' ('+c[id]+' viagens)' : '') : '';
+  }).filter(Boolean);
 }
 const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : '';}).filter(Boolean).join(' + ') || 'A definir';
 
@@ -1997,22 +2030,10 @@ function verEvento(id){
           (ev.agendaEnviada ? ' <span class="tag" style="color:#1c5fb8">na agenda desde '+fmtD(ev.agendaEnviada)+'</span>' : '')+
           (ev.escalaEnviada ? ' <span class="tag" style="color:#0f8a4d">na escala desde '+fmtD(ev.escalaEnviada)+'</span>' : '')+
         '</div></div>'+
-      '<label class="f"><i>Adicionar veículo à operação</i><select onchange="addVeiculo(\''+ev.id+'\',this.value)">'+
-        '<option value="">Escolher veículo...</option>'+
-        veiculos.filter(v2=>!fr.includes(v2.id)).map(v2=>'<option value="'+v2.id+'">'+v2.tipo+' '+v2.placa+' — '+num(v2.vol)+' m³ / '+num(v2.peso)+' kg</option>').join('')+'</select></label>'+
+      blocoFrota(ev, 'mont')+
     '</div>'+
-    '<div style="margin-top:14px">'+ (esc.length ? esc.map(x=>{
-        const v2=veiculos.find(y=>y.id===x.v);
-        const sel = x.fixo
-          ? '<span class="tag">'+x.motorista+' · agregado</span>'
-          : '<select style="border:1px solid var(--line);border-radius:7px;padding:7px 10px;max-width:170px" onchange="setMotorista(\''+ev.id+'\',\''+x.v+'\',this.value)">'+
-            '<option value="">A definir</option>'+
-            motoristas.filter(m=>!m.agregado && (v2.tipo!=='CARRETA' || m.carreta)).map(m=>'<option '+(m.nome===x.motorista?'selected':'')+' '+(m.situacao!=='Ativo'?'disabled':'')+'>'+m.nome+'</option>').join('')+
-            '</select>';
-        return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b> <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span></span>'+
-               '<span style="display:flex;gap:10px;align-items:center">'+sel+
-               '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\',\''+x.v+'\')">Tirar</button></span></div>';
-      }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>'+
+    blocoFrota(ev, 'lista-mont')+
+    blocoDesmontagem(ev)+
     (capV ? '<div class="tot"><div><i>Capacidade alocada</i><b>'+num(capV)+' m³ / '+num(capP)+' kg</b></div>'+
          '<div><i>Ocupação estimada</i><b>'+Math.round(c.vol/capV*100)+'% do volume · '+Math.round(c.peso/capP*100)+'% do peso</b></div>'+
          '<div><i>Viagens previstas</i><b>'+(fr.length>1 ? fr.length+' veículos em comboio' : '1 veículo')+'</b></div></div>' : '')+
@@ -2154,25 +2175,97 @@ function aceitar(id){
   ev.estado = 'alinhamento';
   salvar(); renderQuadro(); fechar('ov-ev'); toast('Sugestão aceita. O evento foi para alinhamento.');
 }
-function addVeiculo(id, vid){
+/* separa a frota da desmontagem: começa igual à da montagem e passa a ser editável */
+function separarFrotaDesm(id, ligar){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(ligar){
+    ev.veiculosD = [...frotaDo(ev)];
+    ev.escalaD = escalaDo(ev).map(x=>({v:x.v, motorista:x.motorista}));
+  } else {
+    ev.veiculosD = null; ev.escalaD = null;
+  }
+  salvar(); renderQuadro(); verEvento(id);
+  toast(ligar ? 'Agora a desmontagem tem caminhões próprios — ajuste abaixo.' : 'A desmontagem voltou a usar os caminhões da montagem.');
+}
+/* seletor e lista de veículos de uma fase */
+function blocoFrota(ev, modo){
+  const fase = modo==='desm' || modo==='lista-desm' ? 'desm' : 'mont';
+  const fr = frotaDo(ev, fase);
+  if(modo==='mont' || modo==='desm')
+    return '<label class="f"><i>Adicionar veículo '+(fase==='desm'?'à desmontagem':'à montagem')+'</i>'+
+      '<select onchange="addVeiculo(\''+ev.id+'\',this.value,\''+fase+'\');this.value=\'\'">'+
+      '<option value="">Escolher veículo...</option>'+
+      veiculos.map(v2=>{ const n = fr.filter(x=>x===v2.id).length;
+        return '<option value="'+v2.id+'">'+v2.tipo+' '+v2.placa+' — '+num(v2.vol)+' m³ / '+num(v2.peso)+' kg'+
+          (n ? ' · já com '+n+' viagem'+(n>1?'s':'') : '')+'</option>'; }).join('')+
+      '</select><small style="color:var(--muted);font-size:11.5px">Pode escolher o mesmo caminhão de novo — cada vez é mais uma viagem.</small></label>';
+  const esc = escalaDo(ev, fase);
+  const conta = {}, total = {};
+  esc.forEach(x=>{ total[x.v] = (total[x.v]||0)+1; });
+  return '<div style="margin-top:14px">'+ (esc.length ? esc.map(x=>{
+      const v2 = veiculos.find(y=>y.id===x.v); if(!v2) return '';
+      conta[x.v] = (conta[x.v]||0)+1;
+      const viagem = total[x.v] > 1 ? ' <span class="tag" style="color:var(--blue)">viagem '+conta[x.v]+' de '+total[x.v]+'</span>' : '';
+      const sel = x.fixo
+        ? '<span class="tag">'+x.motorista+' · agregado</span>'
+        : '<select style="border:1px solid var(--line);border-radius:7px;padding:7px 10px;max-width:170px" onchange="setMotorista(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
+          '<option value="">A definir</option>'+
+          motoristas.filter(m=>!m.agregado).map(m=>'<option '+(m.nome===x.motorista?'selected':'')+' '+(m.situacao!=='Ativo'?'disabled':'')+'>'+m.nome+'</option>').join('')+
+          '</select>';
+      return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+viagem+' <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span></span>'+
+             '<span style="display:flex;gap:10px;align-items:center">'+sel+
+             '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>';
+    }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>';
+}
+/* bloco da desmontagem: fechado por padrão, abre quando os caminhões são outros */
+function blocoDesmontagem(ev){
+  const separado = temFrotaDesm(ev);
+  const cab = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">'+
+    '<b style="font-size:13px">📤 Caminhões da desmontagem</b>'+
+    '<span style="flex:1"></span>'+
+    (separado
+      ? '<button class="mini" onclick="separarFrotaDesm(\''+ev.id+'\',false)">Usar os mesmos da montagem</button>'
+      : '<button class="mini" onclick="separarFrotaDesm(\''+ev.id+'\',true)">Usar caminhões diferentes</button>')+
+    '</div>';
+  if(!separado)
+    return cab + '<div class="row"><span style="color:var(--muted)">Volta com os mesmos da montagem: <b style="color:var(--ink2)">'+
+      descFrota(frotaDo(ev))+'</b>'+(ev.permanece?' — o veículo permanece no local durante o evento':'')+'</span></div>';
+  return cab + '<div style="margin-top:10px">'+blocoFrota(ev,'desm')+'</div>' + blocoFrota(ev,'lista-desm');
+}
+
+function addVeiculo(id, vid, fase){
   if(!vid) return;
   const ev = eventos.find(e=>e.id===id);
-  ev.escala = escalaDo(ev).map(x=>({v:x.v, motorista:x.motorista}));
-  ev.veiculos = [...frotaDo(ev)]; if(!ev.veiculos.includes(vid)) ev.veiculos.push(vid);
+  const dz = fase==='desm' && temFrotaDesm(ev);
+  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista}));
+  const frota = [...frotaDo(ev, dz?'desm':'mont')];
+  frota.push(vid); /* mesmo veículo pode entrar de novo: é outra viagem */
   const v = veiculos.find(x=>x.id===vid);
-  ev.escala.push({v:vid, motorista: v && v.agregado ? v.motoristaFixo : null});
+  atual.push({i: frota.length-1, v:vid, motorista: v && v.agregado ? v.motoristaFixo : null});
+  if(dz){ ev.veiculosD = frota; ev.escalaD = atual; }
+  else  { ev.veiculos  = frota; ev.escala  = atual; }
+  salvar(); renderQuadro(); verEvento(id);
+  const vezes = frota.filter(x=>x===vid).length;
+  if(vezes > 1) toast(v.tipo+' '+v.placa+' agora faz '+vezes+' viagens neste evento.');
+}
+function setMotorista(id, vaga, nome, fase){
+  const ev = eventos.find(e=>e.id===id);
+  const dz = fase==='desm' && temFrotaDesm(ev);
+  const nova = escalaDo(ev, dz?'desm':'mont')
+    .map(x=>({i:x.i, v:x.v, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
+  if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
+  else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
 }
-function setMotorista(id, vid, nome){
+function removerVeiculo(id, vaga, fase){
   const ev = eventos.find(e=>e.id===id);
-  ev.veiculos = [...frotaDo(ev)];
-  ev.escala = escalaDo(ev).map(x=>({v:x.v, motorista: x.v===vid ? (nome||null) : x.motorista}));
-  salvar(); renderQuadro(); verEvento(id);
-}
-function removerVeiculo(id, vid){
-  const ev = eventos.find(e=>e.id===id);
-  ev.escala = escalaDo(ev).filter(x=>x.v!==vid).map(x=>({v:x.v, motorista:x.motorista}));
-  ev.veiculos = frotaDo(ev).filter(x=>x!==vid);
+  const dz = fase==='desm' && temFrotaDesm(ev);
+  const frota = frotaDo(ev, dz?'desm':'mont').filter((x,i)=>i!==+vaga);
+  const nova = escalaDo(ev, dz?'desm':'mont')
+    .filter(x=>x.i!==+vaga)
+    .map((x,i)=>({i, v:x.v, motorista:x.motorista})); /* renumera as vagas */
+  if(dz){ ev.veiculosD = frota; ev.escalaD = nova; }
+  else  { ev.veiculos  = frota; ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
 }
 function alinhar(id){ const ev = eventos.find(e=>e.id===id); ev.estado='alinhamento'; salvar(); renderQuadro(); verEvento(id); }
@@ -3515,9 +3608,8 @@ function mensagemEscala(ev){
   const eq = ev.equipe || plano(ev).equipe;
   const a = plano(ev);
   const time = montadoresOp(ev, eq);
-  /* a.frota traz ids; o evento pode ter veículos fixados à mão */
-  const idsFrota = (ev.veiculos||[]).length ? ev.veiculos : (a.frota||[]);
-  const fr = idsFrota.map(id=>veiculos.find(v=>v.id===id)).filter(Boolean);
+  const fr = frotaDo(ev,'mont').map(id=>veiculos.find(v=>v.id===id)).filter(Boolean);
+  const frD = temFrotaDesm(ev) ? frotaDo(ev,'desm').map(id=>veiculos.find(v=>v.id===id)).filter(Boolean) : null;
   const mot = [...new Set(((ev.escala||[]).length ? ev.escala : (a.escala||[])).map(x=>x.motorista).filter(Boolean))];
   const L = [];
   L.push('*' + ev.nome + '*');
@@ -3532,7 +3624,10 @@ function mensagemEscala(ev){
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
   L.push('');
   L.push('👷 *Equipe ' + eq + '*' + (time.length ? ': ' + time.join(', ') : ''));
-  if(fr.length) L.push('🚚 ' + fr.map(v=>v.tipo+' '+v.placa).join(' · '));
+  const frTxt = descViagens(frotaDo(ev,'mont'));
+  const frDTxt = temFrotaDesm(ev) ? descViagens(frotaDo(ev,'desm')) : null;
+  if(frTxt.length) L.push('🚚 ' + (frDTxt?'Montagem: ':'') + frTxt.join(' · '));
+  if(frDTxt && frDTxt.length) L.push('🚚 Desmontagem: ' + frDTxt.join(' · '));
   if(mot.length) L.push('🧑‍✈️ Motorista: ' + mot.join(', '));
   if(ev.respNome || ev.respTel){
     L.push('');
@@ -4061,12 +4156,15 @@ function relatorioOps(){
       ev, eq,
       time: montadoresOp(ev, eq),
       carro: (e2 && e2.carro) ? e2.carro : '',
-      frota: frotaDo(ev).map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : null;}).filter(Boolean),
+      frotaM: descViagens(frotaDo(ev,'mont')),
+      frotaD: descViagens(frotaDo(ev,'desm')),
+      motM: [...new Set(escalaDo(ev,'mont').map(x=>x.motorista).filter(Boolean))],
+      motD: [...new Set(escalaDo(ev,'desm').map(x=>x.motorista).filter(Boolean))],
       /* mesmo conjunto de caminhões sai na montagem e volta na desmontagem;
          quando o veículo permanece no local, a desmontagem não precisa de ida */
       permanece: !!ev.permanece,
       prod: (p && p!==SEM_PRODUTOR) ? p + (ev.produtor?'':' (sugestao)') : '-',
-      motoristas: [...new Set(((ev.escala||[]).length ? ev.escala : (plano(ev).escala||[])).map(x=>x.motorista).filter(Boolean))]
+      frotaSeparada: temFrotaDesm(ev)
     };
     const dm = dia(ev.mont);
     if(dm >= ini && dm <= fim) linhas.push(Object.assign({tipo:'Montagem', ini:ev.mont, fimD:fimMont(ev)}, base));
@@ -4163,7 +4261,8 @@ function imprimirRelatorio(){
     td:l=>'<td><b>'+esc(l.eq)+'</b>'+(C.montadores && l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'});
   if(C.veiculo) cols.push({th:'<th>Veiculo</th>',
     td:l=>{
-      const base = l.frota.length ? l.frota.join('<br>') : (l.carro ? l.carro : '');
+      const lista = l.tipo==='Montagem' ? l.frotaM : l.frotaD;
+      const base = lista.length ? lista.join('<br>') : (l.carro ? l.carro : '');
       if(!base) return '<td>-</td>';
       const nota = l.tipo==='Montagem'
         ? '<small>leva o material</small>'
@@ -4171,7 +4270,8 @@ function imprimirRelatorio(){
       return '<td>'+esc(base).replace(/&lt;br&gt;/g,'<br>')+'<br>'+nota+'</td>';
     }});
   if(C.motorista) cols.push({th:'<th>Motorista</th>',
-    td:l=>'<td>'+(l.motoristas && l.motoristas.length ? esc(l.motoristas.join(', ')) : '-')+'</td>'});
+    td:l=>{ const m = l.tipo==='Montagem' ? l.motM : l.motD;
+      return '<td>'+(m && m.length ? esc(m.join(', ')) : '-')+'</td>'; }});
   if(C.produtor) cols.push({th:'<th>Produtor</th>', td:l=>'<td>'+esc(l.prod)+'</td>'});
   if(C.resp) cols.push({th:'<th style="width:150px">Responsavel no local</th>',
     td:l=>'<td>'+(l.ev.respNome?esc(l.ev.respNome):'-')+(l.ev.respTel?'<br><small>'+esc(l.ev.respTel)+'</small>':'')+'</td>'});
