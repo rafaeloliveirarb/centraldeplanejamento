@@ -1807,12 +1807,15 @@ function renderQuadro(){
   };
   lista.forEach(e => {
     e.__desmCol = null;
-    const dd = e.desm ? dia(e.desm) : null;
-    /* em "só montagens", evento que entrou na lista só pela desmontagem fica de fora */
-    const montVelha = dia(e.mont) < HOJE && periodo!==9999 && !dataIni && !dataFim;
-    if(opFiltro !== 'desm' && !(opFiltro === 'mont' && montVelha)) poe(dia(e.mont), e, 'mont');
-    /* a desmontagem também ganha lugar no quadro, no dia dela */
-    if(dd && (opFiltro === 'desm' || dd !== dia(e.mont)) && opFiltro !== 'mont') poe(dd, e, 'desm');
+    const dm = dia(e.mont), dd = e.desm ? dia(e.desm) : null;
+    /* a montagem já passou e o que traz o evento para a janela é a desmontagem */
+    const montVelha = dm < HOJE && periodo!==9999 && !dataIni && !dataFim;
+    /* UM card por evento: coluna da montagem, salvo quando só a desmontagem
+       está na janela ou quando o filtro pede desmontagens */
+    if(opFiltro === 'desm'){ if(dd) poe(dd, e, 'desm'); return; }
+    if(opFiltro === 'mont'){ if(!montVelha) poe(dm, e, 'mont'); return; }
+    if(montVelha && dd) poe(dd, e, 'desm');
+    else poe(dm, e, 'mont');
   });
   Object.keys(grupos).forEach(d=>{ if(!grupos[d].length) delete grupos[d]; });
   /* uma coluna por data de montagem, lado a lado — datas diferentes ficam
@@ -1824,7 +1827,7 @@ function renderQuadro(){
   box.innerHTML = Object.keys(grupos).sort().map(d => {
     const t = tipos[d] || {};
     const resumo = !d ? ' · defina as datas no evento'
-      : [t.mont ? t.mont+' montagem'+(t.mont>1?'ns':'') : '', t.desm ? t.desm+' desmontagem'+(t.desm>1?'ns':'') : '']
+      : [t.mont ? t.mont+' '+(t.mont>1?'montagens':'montagem') : '', t.desm ? t.desm+' '+(t.desm>1?'desmontagens':'desmontagem') : '']
         .filter(Boolean).join(' · ');
     return '<div class="daycol"><div class="daylabel">'+(d ? fmtD(d) : '📅 Sem data')+
       '<small>'+grupos[d].length+' evento'+(grupos[d].length>1?'s':'')+(resumo?' · '+resumo:'')+'</small></div>'+
