@@ -2033,13 +2033,22 @@ function verEvento(id){
           (ev.agendaEnviada ? ' <span class="tag" style="color:#1c5fb8">na agenda desde '+fmtD(ev.agendaEnviada)+'</span>' : '')+
           (ev.escalaEnviada ? ' <span class="tag" style="color:#0f8a4d">na escala desde '+fmtD(ev.escalaEnviada)+'</span>' : '')+
         '</div></div>'+
+      '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">'+
+        '<b style="font-size:13px">🔨 Caminhões da montagem</b>'+
+        '<span style="color:var(--muted);font-size:12px">levam o material para o evento</span></div>'+
       blocoFrota(ev, 'mont')+
     '</div>'+
     blocoFrota(ev, 'lista-mont')+
     blocoDesmontagem(ev)+
     (capV ? '<div class="tot"><div><i>Capacidade alocada</i><b>'+num(capV)+' m³ / '+num(capP)+' kg</b></div>'+
          '<div><i>Ocupação estimada</i><b>'+Math.round(c.vol/capV*100)+'% do volume · '+Math.round(c.peso/capP*100)+'% do peso</b></div>'+
-         '<div><i>Viagens previstas</i><b>'+(fr.length>1 ? fr.length+' veículos em comboio' : '1 veículo')+'</b></div></div>' : '')+
+         '<div><i>Viagens previstas</i><b>'+(function(){
+           const c = {}; fr.forEach(id=>{ c[id]=(c[id]||0)+1; });
+           const distintos = Object.keys(c).length, total = fr.length;
+           if(total<=1) return '1 viagem';
+           if(distintos===1) return total+' viagens do mesmo caminhão';
+           return total+' viagens · '+distintos+' veículo'+(distintos>1?'s':'');
+         })()+'</b></div></div>' : '')+
     '</div>'+
 
   '</div>'+
