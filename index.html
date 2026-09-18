@@ -1479,15 +1479,17 @@ function replanejar(){
     if(evSemNossaEquipe(e)) return; /* cancelado, finalizado ou tudo terceirizado: não prende ninguém */
     reservar(ag,'eq', e.equipe===EQUIPE_TERC ? null : e.equipe, diasEquipe(e), e.id);
     reservar(ag,'pr', (e.produtor && e.produtor!==SEM_PRODUTOR) ? e.produtor : null, diasEquipe(e), e.id);
+    /* viagem com dia próprio (dias alternados) prende só naquele dia */
+    const regDe = (arr, i) => (arr||[]).find(x=>x.i===i) || {};
     if(temFrotaDesm(e)){
-      /* frotas separadas: cada uma presa só nos seus dias */
-      (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasEntre(e.mont, fimMont(e)), e.id));
-      (e.veiculosD||[]).forEach(v => reservar(ag,'ve', v, diasEntre(e.desm, fimDesm(e)), e.id));
-      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEntre(e.mont, fimMont(e)), e.id));
-      (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEntre(e.desm, fimDesm(e)), e.id));
+      const dM = diasEntre(e.mont, fimMont(e)), dD = diasEntre(e.desm, fimDesm(e));
+      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, r.dia?[r.dia]:dM, e.id); });
+      (e.veiculosD||[]).forEach((v,i) => { const r = regDe(e.escalaD, i); reservar(ag,'ve', v, r.dia?[r.dia]:dD, e.id); });
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:dM, e.id));
+      (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:dD, e.id));
     } else {
-      (e.veiculos||[]).forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
-      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e), e.id));
+      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, r.dia?[r.dia]:diasVeiculo(e), e.id); });
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:diasEquipe(e), e.id));
     }
     /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
     if(e.equipe && e.equipe!==EQUIPE_TERC)
@@ -1703,15 +1705,16 @@ function escalaDo(ev, fase){
   const usadosMan = [];
   return fr.map((id, i) => {
     const v = veiculos.find(x=>x.id===id);
-    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, fixo:true};
     /* casa pela posição quando existir; senão, pela primeira entrada livre daquele veículo */
     let reg = man.find(x=>x.i===i);
     if(!reg){
       reg = man.find(x=>x.v===id && x.i===undefined && !usadosMan.includes(x));
       if(reg) usadosMan.push(reg);
     }
+    const diaProprio = (reg && reg.dia) || null; /* viagem em dia alternado */
+    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, dia:diaProprio, fixo:true};
     const m = (reg || sug.find(x=>x.v===id) || {}).motorista || null;
-    return {i, v:id, motorista:m, fixo:false};
+    return {i, v:id, motorista:m, dia:diaProprio, fixo:false};
   });
 }
 /* junta repetidos numa linha só, marcando quantas viagens */
@@ -1721,6 +1724,15 @@ function descViagens(ids){
   return Object.keys(c).map(id=>{
     const v = veiculos.find(x=>x.id===id);
     return v ? v.tipo+' '+v.placa + (c[id]>1 ? ' ('+c[id]+' viagens)' : '') : '';
+  }).filter(Boolean);
+}
+/* como descViagens, mas marcando o dia das viagens que saem em dia alternado */
+function descViagensFase(ev, fase){
+  const esc2 = escalaDo(ev, fase);
+  if(!esc2.some(x=>x.dia)) return descViagens(frotaDo(ev, fase));
+  return esc2.map(x=>{
+    const v = veiculos.find(y=>y.id===x.v);
+    return v ? v.tipo+' '+v.placa + (x.dia ? ' (' + fmtD(x.dia).slice(0,5) + ')' : '') : '';
   }).filter(Boolean);
 }
 const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); return v ? v.tipo+' '+v.placa : '';}).filter(Boolean).join(' + ') || 'A definir';
@@ -2259,8 +2271,13 @@ function blocoFrota(ev, modo){
           '<option value="">A definir</option>'+
           motoristas.filter(m=>!m.agregado).map(m=>'<option '+(m.nome===x.motorista?'selected':'')+' '+(m.situacao!=='Ativo'?'disabled':'')+'>'+m.nome+'</option>').join('')+
           '</select>';
-      return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+viagem+' <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span></span>'+
-             '<span style="display:flex;gap:10px;align-items:center">'+sel+
+      const padraoDia = dia(fase==='desm' ? ev.desm : ev.mont) || '';
+      const alternado = x.dia && x.dia !== padraoDia;
+      return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+viagem+' <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span>'+
+             (alternado?' <span class="tag" style="color:#a86412">sai '+fmtD(x.dia)+'</span>':'')+'</span>'+
+             '<span style="display:flex;gap:10px;align-items:center">'+
+             '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
+             sel+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>';
     }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>';
 }
@@ -2285,7 +2302,7 @@ function addVeiculo(id, vid, fase){
   if(!vid) return;
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
-  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista}));
+  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null}));
   const frota = [...frotaDo(ev, dz?'desm':'mont')];
   frota.push(vid); /* mesmo veículo pode entrar de novo: é outra viagem */
   const v = veiculos.find(x=>x.id===vid);
@@ -2300,7 +2317,19 @@ function setMotorista(id, vaga, nome, fase){
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
   const nova = escalaDo(ev, dz?'desm':'mont')
-    .map(x=>({i:x.i, v:x.v, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
+    .map(x=>({i:x.i, v:x.v, dia:x.dia||null, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
+  if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
+  else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
+  salvar(); renderQuadro(); verEvento(id);
+}
+/* dia próprio de uma viagem: vazio ou igual ao padrão volta a acompanhar a fase */
+function setDiaViagem(id, vaga, val, fase){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const dz = fase==='desm' && temFrotaDesm(ev);
+  const padrao = dia(fase==='desm' ? ev.desm : ev.mont);
+  const nova = escalaDo(ev, dz?'desm':'mont')
+    .map(x=>({i:x.i, v:x.v, motorista:x.motorista,
+      dia: x.i===+vaga ? ((val && val!==padrao) ? val : null) : (x.dia||null)}));
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
@@ -2311,7 +2340,7 @@ function removerVeiculo(id, vaga, fase){
   const frota = frotaDo(ev, dz?'desm':'mont').filter((x,i)=>i!==+vaga);
   const nova = escalaDo(ev, dz?'desm':'mont')
     .filter(x=>x.i!==+vaga)
-    .map((x,i)=>({i, v:x.v, motorista:x.motorista})); /* renumera as vagas */
+    .map((x,i)=>({i, v:x.v, motorista:x.motorista, dia:x.dia||null})); /* renumera as vagas */
   if(dz){ ev.veiculosD = frota; ev.escalaD = nova; }
   else  { ev.veiculos  = frota; ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
@@ -3672,8 +3701,8 @@ function mensagemEscala(ev){
   L.push('');
   L.push('👷 *Equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + (time.length ? ': ' + time.join(', ') : ''));
   if((ev.folgas||[]).filter(f=>f!==eq).length) L.push('💤 De folga: ' + ev.folgas.filter(f=>f!==eq).join(', '));
-  const frTxt = descViagens(frotaDo(ev,'mont'));
-  const frDTxt = temFrotaDesm(ev) ? descViagens(frotaDo(ev,'desm')) : null;
+  const frTxt = descViagensFase(ev,'mont');
+  const frDTxt = temFrotaDesm(ev) ? descViagensFase(ev,'desm') : null;
   if(frTxt.length) L.push('🚚 ' + (frDTxt?'Montagem: ':'') + frTxt.join(' · '));
   if(frDTxt && frDTxt.length) L.push('🚚 Desmontagem: ' + frDTxt.join(' · '));
   if(mot.length) L.push('🧑‍✈️ Motorista: ' + mot.join(', '));
@@ -4197,8 +4226,8 @@ function relatorioOps(){
       ev, eq,
       time: montadoresOp(ev, eq),
       carro: (e2 && e2.carro) ? e2.carro : '',
-      frotaM: descViagens(frotaDo(ev,'mont')),
-      frotaD: descViagens(frotaDo(ev,'desm')),
+      frotaM: descViagensFase(ev,'mont'),
+      frotaD: descViagensFase(ev,'desm'),
       motM: [...new Set(escalaDo(ev,'mont').map(x=>x.motorista).filter(Boolean))],
       motD: [...new Set(escalaDo(ev,'desm').map(x=>x.motorista).filter(Boolean))],
       /* mesmo conjunto de caminhões sai na montagem e volta na desmontagem;
