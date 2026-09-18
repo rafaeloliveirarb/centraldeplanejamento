@@ -483,7 +483,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
     <div class="panel">
       <h2>Catálogo de materiais</h2>
       <p class="sub">Peso e volume unitários alimentam o cálculo da carga. Ajuste os valores conforme a medição real do galpão.</p>
-      <table><thead><tr><th>Material</th><th>Categoria</th><th>Unidade</th><th>Peso unitário (kg)</th><th>Volume unitário (m³)</th><th>Equipe Jailson</th><th></th></tr></thead>
+      <table><thead><tr><th>Material</th><th>Categoria</th><th>Unidade</th><th>Peso unitário (kg)</th><th>Volume unitário (m³)</th><th>Maior peça (m)</th><th>Equipe Jailson</th><th></th></tr></thead>
       <tbody id="tb-materiais"></tbody></table>
       <div style="margin-top:16px"><button class="mini" onclick="addMaterialCatalogo()">+ Adicionar material</button></div>
     </div>
@@ -549,6 +549,34 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 
 <!-- ============ MODAL NOVO EVENTO ============ -->
 <button id="sino-hoje" class="sino hide" title="Operações de hoje" onclick="abrirHoje()">🔔<span class="sino-n" id="sino-n"></span></button>
+
+<div class="overlay" id="ov-os" onclick="if(event.target===this)fechar('ov-os')">
+  <div class="modal" style="max-width:640px">
+    <header>
+      <div><h2>📄 Ler material da OS</h2><div class="os" id="os-evnome"></div></div>
+      <button class="x" onclick="fechar('ov-os')">✕</button>
+    </header>
+    <div class="mbody">
+      <div class="alert" style="margin-top:0">Cole abaixo o texto da OS (no PDF: Ctrl+A, Ctrl+C) ou abra um arquivo .txt/.csv. Eu caso cada linha com o catálogo de materiais — medidas como 10x20 em item por m² viram a metragem.</div>
+      <textarea id="os-texto" style="width:100%;min-height:220px;border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;font-size:13px" placeholder="Ex.:
+- GALPÃO 10x30 EM Q30
+- TENDA 5X5 — 6 UN
+- PISO 10x20
+- OCTANORM 120 MÓDULOS"></textarea>
+      <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <input type="file" id="os-arquivo" accept=".txt,.csv" style="font-size:12.5px" onchange="lerArquivoOS(this)">
+        <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="os-substituir" checked style="width:15px;height:15px"> substituir a lista atual do evento</label>
+      </div>
+      <div id="os-preview" style="margin-top:12px;font-size:13px"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="mini" onclick="fechar('ov-os')">Cancelar</button>
+      <button class="mini" onclick="previewOS()">👁 Conferir antes</button>
+      <button class="btn-orange" onclick="aplicarOS()">Aplicar ao evento</button>
+    </footer>
+  </div>
+</div>
 
 <div class="overlay" id="ov-rel" onclick="if(event.target===this)fechar('ov-rel')">
   <div class="modal" style="max-width:620px">
@@ -871,12 +899,89 @@ function montadoresOp(ev, eq){
   const f = ev.folgas || [];
   return montadoresBase(ev, eq).filter(m => !f.includes(m));
 }
-/* dias de trabalho de UMA pessoa neste evento (frentes começam em dias
-   diferentes): sem registro próprio, acompanha os dias da equipe */
+/* a desmontagem pode ter equipe própria (ev.timeD); sem isso, desmonta quem montou */
+const temTimeDesm = ev => Array.isArray(ev.timeD);
+function timeDesmBase(ev, eq){ return temTimeDesm(ev) ? ev.timeD : montadoresBase(ev, eq); }
+function timeDesmOp(ev, eq){ const f = ev.folgas || []; return timeDesmBase(ev, eq).filter(m => !f.includes(m)); }
+/* todo mundo que pisa no evento, nas duas fases */
+function pessoasOp(ev, eq){ return [...new Set([...montadoresOp(ev, eq), ...timeDesmOp(ev, eq)])]; }
+function blocoEquipeDesm(ev, eq){
+  if(eq===EQUIPE_TERC || !ev.desm) return '';
+  const sep = temTimeDesm(ev);
+  const cab = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:12px;border-top:1px dashed var(--line)">'+
+    '<b style="font-size:13px">📤 Equipe da desmontagem</b>'+
+    '<span style="color:var(--muted);font-size:12px"><b style="color:var(--ink2)">'+fmtD(ev.desm)+(dia(ev.desm)!==dia(fimDesm(ev))?' a '+fmtD(fimDesm(ev)):'')+'</b></span>'+
+    '<span style="flex:1"></span>'+
+    (sep
+      ? '<button class="mini" onclick="separarTimeDesm(\''+ev.id+'\',false)">Desmontar com a equipe da montagem</button>'
+      : '<button class="mini" onclick="separarTimeDesm(\''+ev.id+'\',true)">Usar equipe diferente</button>')+
+    '</div>';
+  if(!sep)
+    return cab + '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Desmonta quem montou: <b style="color:var(--ink2)">'+eq+' + '+montadoresOp(ev, eq).length+' montador(es)</b>. Se a desmontagem for com outra equipe, clique em "Usar equipe diferente".</div>';
+  const chips = ev.timeD.map((m,ix)=>{
+    const tt = todosMontadores().find(t=>t.nome===m) || {};
+    const rot = (tt.lider?'líder ':'') + (tt.equipe==='piloto'?'piloto':(tt.equipe||''));
+    const dpz = (ev.diasPessoa||{})[m];
+    const selo = dpz && dpz.ini ? ' <small style="color:#a86412;font-weight:700">📅 '+fmtD(dpz.ini).slice(0,5)+(dpz.fim&&dpz.fim!==dpz.ini?'–'+fmtD(dpz.fim).slice(0,5):'')+'</small>' : '';
+    return '<span class="mtag" style="background:#fdeceb;color:#8c2f27">'+m+
+      (rot?' <small style="opacity:.7">('+rot+')</small>':'')+selo+
+      ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho desta pessoa" onclick="abreDiasPessoa(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">📅</button>'+
+      ' <button style="border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px" title="Tirar da desmontagem" onclick="trocaMontadorD(\''+ev.id+'\','+ix+',null)">✕</button></span>';
+  }).join('');
+  return cab + '<div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:8px">'+chips+
+    '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px;color:var(--ink2)" onchange="if(this.value){trocaMontadorD(\''+ev.id+'\',-1,this.value);this.value=\'\'}">'+
+      '<option value="">+ trazer montador...</option>'+
+      todosMontadores().filter(t=>!ev.timeD.includes(t.nome) && t.nome!==eq)
+        .map(t=>'<option value="'+t.nome.replace(/"/g,'&quot;')+'">'+t.nome+' — '+(t.equipe==='piloto'?'montador piloto':(t.lider?'líder da equipe '+t.equipe:t.equipe))+'</option>').join('')+
+    '</select>'+
+    '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px;color:var(--ink2)" onchange="if(this.value){addFrenteD(\''+ev.id+'\',this.value);this.value=\'\'}">'+
+      '<option value="">🚩 + trazer outra frente...</option>'+
+      equipes.filter(e2=>e2.nome!==eq && e2.nome!==EQUIPE_TERC)
+        .map(e2=>'<option value="'+e2.nome.replace(/"/g,'&quot;')+'">Equipe '+e2.nome+' — líder + '+(e2.membros||[]).length+' montadores</option>').join('')+
+    '</select>'+
+  '</div>';
+}
+function separarTimeDesm(id, ligar){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const eq = ev.equipe || plano(ev).equipe;
+  ev.timeD = ligar ? [...montadoresBase(ev, eq)] : null;
+  salvar(); renderQuadro(); verEvento(id);
+  toast(ligar ? '📤 A desmontagem agora tem equipe própria — ajuste os nomes e as datas abaixo.' : 'A desmontagem voltou a ser com a equipe da montagem.');
+}
+function trocaMontadorD(id, ix, nome){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !temTimeDesm(ev)) return;
+  const atual = [...ev.timeD];
+  if(ix >= 0) atual.splice(ix, 1);
+  if(nome && !atual.includes(nome)) atual.push(nome);
+  ev.timeD = atual;
+  salvar(); renderQuadro(); verEvento(id);
+}
+function addFrenteD(id, nomeEq){
+  if(!nomeEq) return;
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const eq = ev.equipe || plano(ev).equipe;
+  if(!temTimeDesm(ev)) ev.timeD = [...montadoresBase(ev, eq)];
+  const outra = equipes.find(e=>e.nome===nomeEq); if(!outra) return;
+  const novos = [outra.nome, ...(outra.membros||[])].filter(n=>!ev.timeD.includes(n) && n!==eq);
+  if(!novos.length) return toast('Todo mundo da equipe ' + nomeEq + ' já está na desmontagem.');
+  ev.timeD = [...ev.timeD, ...novos];
+  salvar(); renderQuadro(); verEvento(id);
+  toast('🚩 Frente da equipe ' + nomeEq + ' adicionada à desmontagem: ' + novos.length + ' pessoa(s).');
+}
+
+/* dias de trabalho de UMA pessoa neste evento: registro próprio manda;
+   senão, os dias das fases em que ela está escalada */
 function diasDe(ev, nome){
   const r = (ev.diasPessoa || {})[nome];
-  if(!r || !r.ini) return diasEquipe(ev);
-  return diasEntre(r.ini, r.fim || r.ini);
+  if(r && r.ini) return diasEntre(r.ini, r.fim || r.ini);
+  if(!temTimeDesm(ev)) return diasEquipe(ev);
+  const eq = ev.equipe || plano(ev).equipe;
+  const out = [];
+  const emM = nome===eq || montadoresOp(ev, eq).includes(nome);
+  const emD = nome===eq || timeDesmOp(ev, eq).includes(nome);
+  if(emM) diasEntre(ev.mont, fimMont(ev)).forEach(d=>out.push(d));
+  if(emD) diasEntre(ev.desm, fimDesm(ev)).forEach(d=>{ if(!out.includes(d)) out.push(d); });
+  return out;
 }
 function setDiasPessoa(id, nome){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
@@ -916,7 +1021,7 @@ function editorDiasPessoa(ev, eq){
   if(!pessoaDias) return '';
   const nome = pessoaDias;
   const ehLider = nome===eq;
-  if(!ehLider && !montadoresBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
+  if(!ehLider && !montadoresBase(ev, eq).includes(nome) && !timeDesmBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
   const reg = (ev.diasPessoa||{})[nome] || {};
   const ini = reg.ini || dia(ev.mont) || '';
   const fim = reg.fim || reg.ini || dia(fimDesm(ev)) || dia(ev.desm) || ini;
@@ -1114,9 +1219,13 @@ const diasVeiculo = ev => ev.permanece ? diasEntre(ev.mont, fimDesm(ev)) : diasE
 const periodo2 = (a,b) => dia(a)===dia(b) ? fmtD(a) : fmtD(a)+' a '+fmtD(b);
 
 function carga(ev){
-  let peso=0, vol=0;
-  (ev.itens||[]).forEach(i => { peso += i.peso*i.qtd; vol += i.vol*i.qtd; });
-  return {peso, vol, pesoF: peso*1.15, volF: vol*1.15};
+  let peso=0, vol=0, maiorPeca=0, itemMaior=null;
+  (ev.itens||[]).forEach(i => {
+    peso += i.peso*i.qtd; vol += i.vol*i.qtd;
+    const m = catalogo.find(c=>c.nome===i.nome);
+    if(m && +m.comp && i.qtd>0 && +m.comp > maiorPeca){ maiorPeca = +m.comp; itemMaior = m.nome; }
+  });
+  return {peso, vol, pesoF: peso*1.15, volF: vol*1.15, maiorPeca, itemMaior};
 }
 const precisaJailson = ev => (ev.itens||[]).some(i => { const m = catalogo.find(c=>c.nome===i.nome); return m && m.jailson; });
 
@@ -1347,11 +1456,13 @@ function escolherFrota(c, ag, dias, ev, semCarreta){
   /* custo primeiro: o veículo (ou combinação) mais enxuto que fecha a carga.
      A regra de distância (longe puxa agregado) vira só desempate. */
   const foraDaRegra = v => (!!v.agregado === longe) ? 0 : 1;
-  const livres = veiculos.filter(v => !ocupante(ag,'ve',v.id,dias,ev.id))
+  const livres = veiculos.filter(v => !v.manut)
+                         .filter(v => !ocupante(ag,'ve',v.id,dias,ev.id))
                          .filter(v => !semCarreta || v.tipo !== 'CARRETA');
 
   /* 1 veículo: o MENOR que atende peso e volume */
   const cabem = livres.filter(v => v.peso >= c.pesoF && v.vol >= c.volF)
+                      .filter(v => !c.maiorPeca || (+v.c||0) >= c.maiorPeca)
                       .sort((a,b) => (a.vol - b.vol) || (foraDaRegra(a) - foraDaRegra(b)) || (a.peso - b.peso));
   if(cabem.length){
     const v = cabem[0];
@@ -1513,18 +1624,35 @@ function analisar(ev, ag){
   if(semMot.length - semCarreta) r.conflitos.push({msg:(semMot.length - semCarreta) + ' veículo(s) da operação estão sem motorista livre nas datas de viagem.', dica:'Escalone as saídas, use um agregado ou libere alguém da frota própria em outro evento.'});
 
   const semPeso = (ev.itens||[]).filter(i => { const m = catalogo.find(c=>c.nome===i.nome); return !m || m.pendente || (!m.peso && !m.vol); }).map(i=>i.nome);
+  /* veículo em manutenção preso na operação
+     (sem chamar frotaDo aqui dentro: ela voltaria para esta análise) */
+  const frM = (ev.veiculos && ev.veiculos.length) ? ev.veiculos : (r.frota || []);
+  const frTodas = [...new Set([...frM, ...(temFrotaDesm(ev) ? (ev.veiculosD||[]) : [])])];
+  const emManut = frTodas.map(id=>veiculos.find(v=>v.id===id)).filter(v=>v && v.manut);
+  if(emManut.length)
+    r.conflitos.push({msg: emManut.map(v=>v.tipo+' '+v.placa).join(' e ') + ' está em manutenção e segue alocado nesta operação.',
+      dica:'Troque por outro veículo no bloco de caminhões, ou tire o veículo da manutenção na aba Veículos.'});
+
+  /* a maior peça precisa caber no comprimento de algum caminhão da operação */
+  if(c.maiorPeca && frTodas.length){
+    const maxC = Math.max(0, ...frTodas.map(id=>{const v=veiculos.find(x=>x.id===id); return v ? (+v.c||0) : 0;}));
+    if(maxC && maxC < c.maiorPeca)
+      r.conflitos.push({msg:'A maior peça do material ('+c.itemMaior+', '+num(c.maiorPeca)+' m) não cabe em nenhum caminhão da operação — o maior tem '+num(maxC)+' m de carroceria.',
+        dica:'Inclua um veículo mais comprido (carreta) ou reveja o material.'});
+  }
+
   /* montador escalado em dois lugares no mesmo dia */
   if(ev.equipe && ev.equipe!==EQUIPE_TERC && !evSemNossaEquipe(ev)){
     const repetidos = [];
-    montadoresOp(ev, ev.equipe).forEach(m=>{
+    pessoasOp(ev, ev.equipe).forEach(m=>{
       const oc = ocupante(ag,'mt', m, diasDe(ev, m), ev.id);
       if(oc) repetidos.push({nome:m, ev:oc.id, dia:oc.dia});
     });
     /* o outro lado do choque: mesmos nomes, nos dias de cada um */
     eventos.forEach(o=>{
       if(o.id===ev.id || evSemNossaEquipe(o) || !o.equipe || o.equipe===EQUIPE_TERC) return;
-      montadoresOp(o, o.equipe).forEach(m=>{
-        if(!montadoresOp(ev, ev.equipe).includes(m) || repetidos.some(x=>x.nome===m)) return;
+      pessoasOp(o, o.equipe).forEach(m=>{
+        if(!pessoasOp(ev, ev.equipe).includes(m) || repetidos.some(x=>x.nome===m)) return;
         const meus = diasDe(ev, m);
         const comuns = meus.filter(d=>diasDe(o, m).includes(d));
         if(comuns.length) repetidos.push({nome:m, ev:o.id, dia:comuns[0]});
@@ -1573,7 +1701,7 @@ function replanejar(){
     }
     /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
     if(e.equipe && e.equipe!==EQUIPE_TERC)
-      montadoresOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasDe(e, m), e.id));
+      pessoasOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasDe(e, m), e.id));
   });
   ordem.forEach(e=>{
     const a = analisar(e, ag);
@@ -2098,7 +2226,8 @@ function verEvento(id){
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
     '</div></div>'+
 
-    '<div class="sec"><h4>MATERIAIS DO EVENTO</h4>'+
+    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">MATERIAIS DO EVENTO'+
+      '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button></h4>'+
       '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
       '<div class="tot"><div><i>Peso total</i><b>'+num(c.peso)+' kg</b></div>'+
       '<div><i>Volume total</i><b>'+num(c.vol)+' m³</b></div>'+
@@ -2125,7 +2254,8 @@ function verEvento(id){
       '<label class="f"><i>Equipe (montagem e desmontagem)</i><select onchange="setCampo(\''+ev.id+'\',\'equipe\',this.value)">'+
         equipes.map(e=>'<option '+(e.nome===eq?'selected':'')+'>'+e.nome+'</option>').join('')+
         '<option '+(eq===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option></select></label>'+
-      '<div class="f" style="grid-column:1/-1"><i>Montadores desta operação'+(ev.montOp?' — com troca':'')+(eq===EQUIPE_TERC?' — equipe do fornecedor':'')+'</i>'+
+      '<div class="f" style="grid-column:1/-1"><i>🔨 Equipe da montagem'+(ev.montOp?' — com troca':'')+(eq===EQUIPE_TERC?' — equipe do fornecedor':'')+
+        (ev.mont?' · <b style="text-transform:none;letter-spacing:0">'+fmtD(ev.mont)+(dia(ev.mont)!==dia(fimMont(ev))?' a '+fmtD(fimMont(ev)):'')+'</b>':'')+'</i>'+
         (eq===EQUIPE_TERC && !montadoresOp(ev, eq).length ? '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Montagem por equipe terceirizada. Se algum montador da casa for acompanhar, adicione ao lado.</div>' : '')+
         '<div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:6px">'+
           (eq!==EQUIPE_TERC ? (function(){
@@ -2168,6 +2298,7 @@ function verEvento(id){
           (ev.escalaEnviada ? ' <span class="tag" style="color:#0f8a4d">na escala desde '+fmtD(ev.escalaEnviada)+'</span>' : '')+
         '</div>'+
         editorDiasPessoa(ev, eq)+
+        blocoEquipeDesm(ev, eq)+
       '</div>'+
       '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<b style="font-size:13px">🔨 Caminhões da montagem</b>'+
@@ -2348,7 +2479,8 @@ function blocoFrota(ev, modo){
       '<select onchange="addVeiculo(\''+ev.id+'\',this.value,\''+fase+'\');this.value=\'\'">'+
       '<option value="">Escolher veículo...</option>'+
       veiculos.map(v2=>{ const n = fr.filter(x=>x===v2.id).length;
-        return '<option value="'+v2.id+'">'+v2.tipo+' '+v2.placa+' — '+num(v2.vol)+' m³ / '+num(v2.peso)+' kg'+
+        return '<option value="'+v2.id+'"'+(v2.manut?' disabled':'')+'>'+v2.tipo+' '+v2.placa+' — '+num(v2.vol)+' m³ / '+num(v2.peso)+' kg'+
+          (v2.manut ? ' · 🔧 EM MANUTENÇÃO' : '')+
           (n ? ' · já com '+n+' viagem'+(n>1?'s':'') : '')+'</option>'; }).join('')+
       '</select><small style="color:var(--muted);font-size:11.5px">Pode escolher o mesmo caminhão de novo — cada vez é mais uma viagem.</small></label>';
   const esc = escalaDo(ev, fase);
@@ -2675,6 +2807,79 @@ let lote = [];
 /* aceita número, data ou qualquer coisa que venha da planilha */
 const semAcento = t => (t === null || t === undefined ? '' : String(t))
   .normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+
+/* ---------- leitor de OS: texto da OS vira lista de material ---------- */
+let osEventoId = null;
+function abrirOS(id){
+  osEventoId = id;
+  const ev = eventos.find(e=>e.id===id);
+  document.getElementById('os-evnome').textContent = ev ? ev.nome : '';
+  document.getElementById('os-texto').value = '';
+  document.getElementById('os-preview').innerHTML = '';
+  document.getElementById('ov-os').classList.add('on');
+}
+function lerArquivoOS(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => { document.getElementById('os-texto').value = r.result; previewOS(); };
+  r.readAsText(f, 'utf-8');
+}
+function parseOS(txt){
+  const achados = [], ignoradas = [];
+  const porTamanho = [...catalogo].sort((a,b)=>b.nome.length-a.nome.length);
+  String(txt||'').split(/\r?\n|;/).forEach(l0=>{
+    const l = l0.trim(); if(!l) return;
+    const lcomp = semAcento(l);
+    if(!lcomp) return;
+    const cand = porTamanho.find(c=>lcomp.includes(semAcento(c.nome)));
+    if(!cand){ if(/[a-z]/i.test(l)) ignoradas.push(l); return; }
+    /* tira as palavras do nome para sobrar só quantidade e medidas */
+    let resto = ' ' + semAcentoSimples(l) + ' ';
+    semAcentoSimples(cand.nome).split(/\s+/).forEach(tk=>{
+      if(tk) resto = resto.replace(new RegExp('(^|[^a-z0-9])'+tk.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=$|[^a-z0-9])','i'), '$1 ');
+    });
+    let qtd = null;
+    const dim = resto.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/);
+    if(dim && /m²|m2/.test(cand.un||'')) qtd = parseFloat(dim[1].replace(',','.')) * parseFloat(dim[2].replace(',','.'));
+    if(qtd===null){
+      const semDim = resto.replace(/\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?/g,' ');
+      const n = semDim.match(/(\d+(?:[.,]\d+)?)/);
+      if(n) qtd = parseFloat(n[1].replace(',','.'));
+    }
+    if(!qtd || qtd<=0) qtd = 1;
+    const ja = achados.find(a=>a.nome===cand.nome);
+    if(ja) ja.qtd += qtd;
+    else achados.push({nome:cand.nome, qtd, un:cand.un, peso:cand.peso, vol:cand.vol});
+  });
+  return {achados, ignoradas};
+}
+function previewOS(){
+  const {achados, ignoradas} = parseOS(document.getElementById('os-texto').value);
+  document.getElementById('os-preview').innerHTML =
+    (achados.length
+      ? '<b style="color:#0f8a4d">Entendi ' + achados.length + ' material(is):</b><br>' +
+        achados.map(a=>'• ' + a.nome + ' — <b>' + num(a.qtd) + '</b> ' + (a.un||'un')).join('<br>')
+      : '<b style="color:#b0483c">Não reconheci nenhum material do catálogo neste texto.</b>')+
+    (ignoradas.length ? '<br><span style="color:#b47f08">Linhas que não casei com o catálogo: ' + ignoradas.slice(0,4).join(' · ').slice(0,180) + (ignoradas.length>4?'…':'') + '</span>' : '');
+  return achados;
+}
+function aplicarOS(){
+  const ev = eventos.find(e=>e.id===osEventoId); if(!ev) return;
+  const achados = previewOS();
+  if(!achados.length) return toast('Nenhum material reconhecido — confira o texto ou cadastre o item no catálogo antes.');
+  const substituir = document.getElementById('os-substituir').checked;
+  if(substituir) ev.itens = achados;
+  else {
+    ev.itens = ev.itens || [];
+    achados.forEach(a=>{
+      const ja = ev.itens.find(i=>i.nome===a.nome);
+      if(ja) ja.qtd = a.qtd; else ev.itens.push(a);
+    });
+  }
+  fechar('ov-os');
+  salvar(); renderQuadro(); verEvento(ev.id);
+  toast('📄 OS lida: ' + achados.length + ' material(is) ' + (substituir?'definidos':'atualizados') + ' no evento.');
+}
 
 const SINONIMOS = {
   nome:['nome','evento','titulo','title','descricao','cliente','nomeevento','nomedoevento'],
@@ -3545,10 +3750,14 @@ function renderCadastros(){
       '<input class="cad dim" type="number" step="0.05" value="'+v.a+'" title="Altura" onchange="setVeiculoDim(\''+v.id+'\',\'a\',this.value)"> m</td>'+
     '<td style="white-space:nowrap"><input class="cad num" style="width:76px" type="number" step="0.1" value="'+v.vol+'" onchange="setVeiculoCampo(\''+v.id+'\',\'vol\',+this.value||0)"> m³</td>'+
     '<td style="white-space:nowrap"><input class="cad num" style="width:86px" type="number" step="10" value="'+v.peso+'" onchange="setVeiculoCampo(\''+v.id+'\',\'peso\',+this.value||0)"> kg</td>'+
-    '<td style="white-space:nowrap"><span class="dot" style="background:'+(ocupado?'var(--amber)':'var(--green)')+'"></span>'+(ocupado?'Alocado':'Livre')+' · '+
+    '<td style="white-space:nowrap">'+
+      (v.manut ? '<span class="dot" style="background:var(--red)"></span><b style="color:var(--red)">🔧 Em manutenção</b> · '
+               : '<span class="dot" style="background:'+(ocupado?'var(--amber)':'var(--green)')+'"></span>'+(ocupado?'Alocado':'Livre')+' · ')+
       '<select class="cad" style="width:100px" onchange="setVeiculoCampo(\''+v.id+'\',\'status\',this.value)">'+
         ['Aferido','Estimado'].map(s2=>'<option '+(s2===v.status?'selected':'')+'>'+s2+'</option>').join('')+'</select></td>'+
-    '<td style="text-align:right"><button class="mini danger" onclick="removerVeiculoFrota(\''+v.id+'\')">Excluir</button></td></tr>';
+    '<td style="text-align:right;white-space:nowrap">'+
+      '<button class="mini" style="'+(v.manut?'border-color:var(--green);color:var(--green)':'border-color:#b47f08;color:#b47f08')+'" onclick="toggleManutencao(\''+v.id+'\')">'+(v.manut?'✔ Voltar à frota':'🔧 Manutenção')+'</button> '+
+      '<button class="mini danger" onclick="removerVeiculoFrota(\''+v.id+'\')">Excluir</button></td></tr>';
   }).join('')+
   '<tr><td colspan="8"><button class="mini" onclick="addVeiculoFrota()">+ Adicionar veículo</button></td></tr>';
 
@@ -3556,6 +3765,7 @@ function renderCadastros(){
     '<tr'+(c.pendente||(!c.peso&&!c.vol)?' style="background:#fdf7ee"':'')+'><td><b>'+c.nome+'</b>'+((c.pendente||(!c.peso&&!c.vol))?' <span class="tag" style="color:#b47f08">preencher peso e volume</span>':(c.estimado?' <span class="tag" style="color:#5d7bab">estimado pela área, confira</span>':''))+'</td><td><span class="tag">'+c.cat+'</span></td><td>'+c.un+'</td>'+
     '<td><input value="'+c.peso+'" type="number" step="0.1" style="width:100px;border:1px solid var(--line);border-radius:6px;padding:6px 8px" onchange="catalogo['+i+'].peso=+this.value;if(catalogo['+i+'].peso&&catalogo['+i+'].vol)catalogo['+i+'].pendente=false;salvar();renderQuadro();renderCadastros()"></td>'+
     '<td><input value="'+c.vol+'" type="number" step="0.01" style="width:100px;border:1px solid var(--line);border-radius:6px;padding:6px 8px" onchange="catalogo['+i+'].vol=+this.value;if(catalogo['+i+'].peso&&catalogo['+i+'].vol)catalogo['+i+'].pendente=false;salvar();renderQuadro();renderCadastros()"></td>'+
+    '<td><input value="'+(c.comp||'')+'" type="number" step="0.1" placeholder="—" title="Comprimento da MAIOR peça deste material: o caminhão precisa ter carroceria maior que isso" style="width:80px;border:1px solid var(--line);border-radius:6px;padding:6px 8px" onchange="catalogo['+i+'].comp=+this.value||null;salvar();renderQuadro();renderCadastros()"></td>'+
     '<td>'+(c.jailson?'Sim':'Não')+'</td>'+
     '<td style="text-align:right"><button class="mini danger" onclick="removerMaterial('+i+')">Excluir</button></td></tr>').join('');
 
@@ -3659,6 +3869,14 @@ function setMotoristaFixo(id, nome){
     v.agregado = true; v.motoristaFixo = nome;
   }
   salvar(); renderCadastros(); renderQuadro();
+}
+function toggleManutencao(id){
+  const v = veiculos.find(x=>x.id===id); if(!v) return;
+  v.manut = !v.manut;
+  salvar(); renderQuadro(); renderCadastros();
+  toast(v.manut
+    ? '🔧 ' + v.tipo + ' ' + v.placa + ' em manutenção: sai das sugestões, e os eventos que contavam com ele vão acusar pendência.'
+    : v.tipo + ' ' + v.placa + ' voltou à frota.');
 }
 function addVeiculoFrota(){
   const id = 'v' + Date.now();
@@ -3820,7 +4038,12 @@ function mensagemEscala(ev){
     const f = r.fim && r.fim !== r.ini;
     return m + ' (' + fmtD(r.ini).slice(0,5) + (f ? ' a ' + fmtD(r.fim).slice(0,5) : '') + ')';
   };
-  L.push('👷 *Equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + (time.length ? ': ' + time.map(comDias).join(', ') : ''));
+  if(temTimeDesm(ev)){
+    L.push('👷 *Montagem — equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + ': ' + montadoresOp(ev, eq).map(comDias).join(', '));
+    L.push('👷 *Desmontagem:* ' + timeDesmOp(ev, eq).map(comDias).join(', '));
+  } else {
+    L.push('👷 *Equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + (time.length ? ': ' + time.map(comDias).join(', ') : ''));
+  }
   if((ev.folgas||[]).filter(f=>f!==eq).length) L.push('💤 De folga: ' + ev.folgas.filter(f=>f!==eq).join(', '));
   const frTxt = descViagensFase(ev,'mont');
   const frDTxt = temFrotaDesm(ev) ? descViagensFase(ev,'desm') : null;
@@ -4108,7 +4331,7 @@ async function enviarParaEscala(id, silencioso){
   if(evSemNossaEquipe(ev)){ if(!silencioso) toast('Evento cancelado, finalizado ou totalmente terceirizado — não vai para a escala.'); return; }
   const eq = ev.equipe || plano(ev).equipe;
   /* o líder trabalha junto, salvo quando está de folga neste evento */
-  const time = montadoresOp(ev, eq);
+  const time = pessoasOp(ev, eq);
   const nomes = (eq && eq !== EQUIPE_TERC && !liderFolga(ev, eq)) ? [...new Set([eq, ...time])] : time;
   const dias = diasEquipe(ev);
   if(!nomes.length){ if(!silencioso) toast('Este evento não tem montadores da casa (equipe terceirizada?).'); return; }
@@ -4345,7 +4568,8 @@ function relatorioOps(){
     const p = produtorDo(ev);
     const base = {
       ev, eq,
-      time: montadoresOp(ev, eq),
+      timeM: montadoresOp(ev, eq),
+      timeD: timeDesmOp(ev, eq),
       carro: (e2 && e2.carro) ? e2.carro : '',
       frotaM: descViagensFase(ev,'mont'),
       frotaD: descViagensFase(ev,'desm'),
@@ -4449,7 +4673,8 @@ function imprimirRelatorio(){
     (C.local && l.ev.local && l.ev.local!=='-' ? '<br><small>'+esc(l.ev.local)+'</small>' : '')+
     (C.local && l.ev.cidade && l.ev.cidade!=='-' ? '<br><small>'+esc(l.ev.cidade)+(C.km && +l.ev.km?' - '+l.ev.km+' km':'')+'</small>' : '')+'</td>'});
   if(C.equipe) cols.push({th:'<th>Equipe'+(C.montadores?' e montadores':'')+'</th>',
-    td:l=>'<td><b>'+esc(l.eq)+'</b>'+(C.montadores && l.time.length?'<br><small>'+esc(l.time.join(', '))+'</small>':'')+'</td>'});
+    td:l=>{ const tm = l.tipo==='Montagem' ? l.timeM : l.timeD;
+      return '<td><b>'+esc(l.eq)+'</b>'+(C.montadores && tm.length?'<br><small>'+esc(tm.join(', '))+'</small>':'')+'</td>'; }});
   if(C.veiculo) cols.push({th:'<th>Veiculo</th>',
     td:l=>{
       const lista = l.tipo==='Montagem' ? l.frotaM : l.frotaD;
