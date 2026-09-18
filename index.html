@@ -557,14 +557,14 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <button class="x" onclick="fechar('ov-os')">✕</button>
     </header>
     <div class="mbody">
-      <div class="alert" style="margin-top:0">Cole abaixo o texto da OS (no PDF: Ctrl+A, Ctrl+C) ou abra um arquivo .txt/.csv. Eu caso cada linha com o catálogo de materiais — medidas como 10x20 em item por m² viram a metragem.</div>
+      <div class="alert" style="margin-top:0">Abra o arquivo da OS — <b>PDF, Excel, Word, CSV ou texto</b> — ou cole o texto abaixo. Eu caso cada linha com o catálogo de materiais; medidas como 10x20 em item por m² viram a metragem.</div>
       <textarea id="os-texto" style="width:100%;min-height:220px;border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit;font-size:13px" placeholder="Ex.:
 - GALPÃO 10x30 EM Q30
 - TENDA 5X5 — 6 UN
 - PISO 10x20
 - OCTANORM 120 MÓDULOS"></textarea>
       <div style="display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap">
-        <input type="file" id="os-arquivo" accept=".txt,.csv" style="font-size:12.5px" onchange="lerArquivoOS(this)">
+        <input type="file" id="os-arquivo" accept=".pdf,.xlsx,.xls,.csv,.txt,.docx,.xml" style="font-size:12.5px" onchange="lerArquivoOS(this)">
         <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)">
           <input type="checkbox" id="os-substituir" checked style="width:15px;height:15px"> substituir a lista atual do evento</label>
       </div>
@@ -2881,16 +2881,97 @@ function abrirOS(id){
   document.getElementById('os-preview').innerHTML = '';
   document.getElementById('ov-os').classList.add('on');
 }
-function lerArquivoOS(inp){
+/* um arquivo dentro de um .docx/.xlsx (zip), sem biblioteca: usa o
+   descompactador nativo do navegador */
+async function arquivoDoZip(buf, alvo){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for(let i = u8.length - 22; i >= 0 && i > u8.length - 66000; i--)
+    if(dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  if(eocd < 0) throw new Error('arquivo compactado inválido');
+  const total = dv.getUint16(eocd + 10, true);
+  let p2 = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  for(let n = 0; n < total; n++){
+    const nLen = dv.getUint16(p2 + 28, true), eLen = dv.getUint16(p2 + 30, true), cLen = dv.getUint16(p2 + 32, true);
+    const nome = dec.decode(u8.subarray(p2 + 46, p2 + 46 + nLen));
+    if(nome === alvo){
+      const lh = dv.getUint32(p2 + 42, true);
+      const metodo = dv.getUint16(lh + 8, true);
+      const comp = dv.getUint32(lh + 18, true);
+      const nL2 = dv.getUint16(lh + 26, true), eL2 = dv.getUint16(lh + 28, true);
+      const ini = lh + 30 + nL2 + eL2;
+      const dados = u8.subarray(ini, ini + (comp || dv.getUint32(p2 + 20, true)));
+      if(metodo === 0) return dec.decode(dados);
+      if(typeof DecompressionStream === 'undefined') throw new Error('este navegador não abre arquivos compactados — salve a OS como PDF ou texto');
+      const ds = new DecompressionStream('deflate-raw');
+      const out = new Response(new Blob([dados]).stream().pipeThrough(ds));
+      return dec.decode(await out.arrayBuffer());
+    }
+    p2 += 46 + nLen + eLen + cLen;
+  }
+  throw new Error('não achei o conteúdo dentro do arquivo');
+}
+/* texto de qualquer formato de OS */
+async function textoDoArquivo(f){
+  const nome = (f.name||'').toLowerCase();
+  if(/\.pdf$/.test(nome)) return await lerPDF(f);
+  if(/\.(xlsx|xls)$/.test(nome)){
+    if(!window.XLSX) throw new Error('biblioteca de planilha não carregou — tente com PDF ou CSV');
+    const wb = XLSX.read(await f.arrayBuffer(), {type:'array'});
+    return wb.SheetNames.map(n => XLSX.utils.sheet_to_csv(wb.Sheets[n], {FS:' '})).join('\n');
+  }
+  if(/\.docx$/.test(nome)){
+    const xml = await arquivoDoZip(await f.arrayBuffer(), 'word/document.xml');
+    return xml.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+  }
+  if(/\.xml$/.test(nome)){
+    const t = await f.text();
+    return t.replace(/<\/(row|Row|item|Item|linha)>/g, '\n').replace(/<[^>]+>/g, ' ');
+  }
+  return await f.text();
+}
+async function lerArquivoOS(inp){
   const f = inp.files && inp.files[0]; if(!f) return;
-  const r = new FileReader();
-  r.onload = () => { document.getElementById('os-texto').value = r.result; previewOS(); };
-  r.readAsText(f, 'utf-8');
+  const pv = document.getElementById('os-preview');
+  pv.innerHTML = '<span style="color:var(--muted)">lendo <b>' + f.name + '</b>...</span>';
+  try{
+    const txt = await textoDoArquivo(f);
+    document.getElementById('os-texto').value = txt;
+    if(!String(txt||'').trim()){
+      pv.innerHTML = '<b style="color:#b47f08">O arquivo abriu, mas não tem texto.</b> Se for um PDF escaneado (foto do papel), copie o conteúdo à mão no campo acima.';
+      return;
+    }
+    previewOS();
+  }catch(e){
+    pv.innerHTML = '<b style="color:#b0483c">Não consegui ler o arquivo:</b> ' + e.message + '. Você pode colar o texto da OS no campo acima.';
+  }
 }
 function parseOS(txt){
   const achados = [], ignoradas = [];
   const porTamanho = [...catalogo].sort((a,b)=>b.nome.length-a.nome.length);
-  String(txt||'').split(/\r?\n|;/).forEach(l0=>{
+  /* uma linha pode trazer mais de um material ("Tenda 5x5: 6; Piso 200"):
+     acha onde cada um começa e corta ali. Assim o ; de CSV não vira quebra. */
+  const pedacos = [];
+  String(txt||'').split(/\r?\n/).forEach(linha=>{
+    const l0 = linha.trim(); if(!l0) return;
+    const base = semAcentoSimples(l0);
+    const marcas = [];
+    porTamanho.forEach(c=>{
+      const alvo = semAcentoSimples(c.nome).replace(/\s+/g,'\\s*');
+      const re = new RegExp(alvo, 'g'); let m;
+      while((m = re.exec(base))){
+        if(!marcas.some(x=>m.index >= x.i && m.index < x.i + x.len)) marcas.push({i:m.index, len:m[0].length});
+      }
+    });
+    marcas.sort((a,b)=>a.i-b.i);
+    if(marcas.length <= 1){ pedacos.push(l0); return; }
+    marcas.forEach((mk, ix)=>{
+      const fim = ix+1 < marcas.length ? marcas[ix+1].i : l0.length;
+      pedacos.push(l0.slice(mk.i, fim).trim());
+    });
+  });
+  pedacos.forEach(l0=>{
     const l = l0.trim(); if(!l) return;
     const lcomp = semAcento(l);
     if(!lcomp) return;
@@ -2918,13 +2999,39 @@ function parseOS(txt){
 }
 function previewOS(){
   const {achados, ignoradas} = parseOS(document.getElementById('os-texto').value);
+  /* linha com cara de material (tem quantidade) que o catálogo ainda não conhece */
+  const novos = [];
+  ignoradas.forEach(l=>{
+    const m = String(l).match(/^[\s•\-–*\d.)]*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ./x×-]{2,40}?)\s*[:\-–]?\s*(\d+(?:[.,]\d+)?)\s*(un|pç|pc|m2|m²|m|kg|modulos?|módulos?)?\s*$/i);
+    if(!m) return;
+    const nome = m[1].trim().replace(/\s+/g,' ');
+    if(nome.length < 3 || novos.some(n=>n.nome.toLowerCase()===nome.toLowerCase())) return;
+    novos.push({nome, qtd: parseFloat(m[2].replace(',','.')), un: (m[3]||'un').toLowerCase().replace('módulos','módulo').replace('modulos','módulo')});
+  });
+  osNovos = novos;
   document.getElementById('os-preview').innerHTML =
     (achados.length
       ? '<b style="color:#0f8a4d">Entendi ' + achados.length + ' material(is):</b><br>' +
         achados.map(a=>'• ' + a.nome + ' — <b>' + num(a.qtd) + '</b> ' + (a.un||'un')).join('<br>')
       : '<b style="color:#b0483c">Não reconheci nenhum material do catálogo neste texto.</b>')+
-    (ignoradas.length ? '<br><span style="color:#b47f08">Linhas que não casei com o catálogo: ' + ignoradas.slice(0,4).join(' · ').slice(0,180) + (ignoradas.length>4?'…':'') + '</span>' : '');
+    (novos.length
+      ? '<div style="margin-top:10px;padding:10px 12px;border:1px solid #f0dfb5;background:#fdf7ee;border-radius:9px">'+
+        '<b style="color:#b47f08">Fora do catálogo:</b> ' + novos.map(n=>n.nome + ' (' + num(n.qtd) + ' ' + n.un + ')').join(' · ') +
+        '<br><button class="mini" style="margin-top:8px" onclick="cadastrarNovosOS()">+ Cadastrar ' + novos.length + ' no catálogo e usar</button>'+
+        '<span style="color:var(--muted);font-size:12px;margin-left:8px">peso e volume você completa depois na aba Materiais</span></div>'
+      : (ignoradas.length ? '<br><span style="color:var(--muted);font-size:12px">Linhas ignoradas: ' + ignoradas.slice(0,3).join(' · ').slice(0,140) + (ignoradas.length>3?'…':'') + '</span>' : ''));
   return achados;
+}
+let osNovos = [];
+function cadastrarNovosOS(){
+  if(!osNovos.length) return;
+  osNovos.forEach(n=>{
+    if(catalogo.some(c=>semAcento(c.nome)===semAcento(n.nome))) return;
+    catalogo.push({nome:n.nome, cat:'Outros', un:n.un, peso:0, vol:0, jailson:false, pendente:true});
+  });
+  salvar(); renderCadastros();
+  toast('📦 ' + osNovos.length + ' material(is) criados no catálogo. Preencha peso e volume na aba Materiais para a carga ficar certa.');
+  previewOS();
 }
 function aplicarOS(){
   const ev = eventos.find(e=>e.id===osEventoId); if(!ev) return;
