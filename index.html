@@ -885,9 +885,26 @@ function toggleFolga(id, nome){
 /* todos os montadores da empresa + o piloto, para as trocas */
 function todosMontadores(){
   const s = [];
-  equipes.forEach(e => (e.membros||[]).forEach(m => s.push({nome:m, equipe:e.nome})));
+  equipes.forEach(e => {
+    if(e.nome !== EQUIPE_TERC) s.push({nome:e.nome, equipe:e.nome, lider:true});
+    (e.membros||[]).forEach(m => s.push({nome:m, equipe:e.nome}));
+  });
   if(CONFIG.piloto) s.push({nome:CONFIG.piloto, equipe:'piloto'});
   return s;
+}
+/* várias frentes de trabalho: traz outra equipe INTEIRA (líder + montadores)
+   para esta operação, somando ao time que já está nela */
+function addFrente(id, nomeEq){
+  if(!nomeEq) return;
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const eq = ev.equipe || plano(ev).equipe;
+  const outra = equipes.find(e=>e.nome===nomeEq); if(!outra) return;
+  const atual = [...montadoresBase(ev, eq)];
+  const novos = [outra.nome, ...(outra.membros||[])].filter(n=>!atual.includes(n) && n!==eq);
+  if(!novos.length) return toast('Todo mundo da equipe ' + nomeEq + ' já está nesta operação.');
+  ev.montOp = [...atual, ...novos];
+  salvar(); renderQuadro(); verEvento(id);
+  toast('🚩 Frente da equipe ' + nomeEq + ' adicionada: ' + novos.length + ' pessoa(s), líder incluído. Agora são ' + ev.montOp.length + ' pessoas na operação.');
 }
 
 /* Cada equipe é o líder e mais 4 montadores. Os montadores giram
@@ -2055,18 +2072,25 @@ function verEvento(id){
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga ao líder neste evento')+'" onclick="toggleFolga(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button></span>';
           })() : '')+
           montadoresBase(ev, eq).map((m,ix)=>{
-            const casa = (todosMontadores().find(t=>t.nome===m)||{}).equipe;
+            const tt = todosMontadores().find(t=>t.nome===m) || {};
+            const casa = tt.equipe;
             const fora = casa && casa!==eq;
+            const rotCasa = (tt.lider ? 'líder ' : '') + (casa==='piloto' ? 'piloto' : casa);
             const fo = (ev.folgas||[]).includes(m);
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':(fora?'background:#eaf2fd;color:#1c5fb8':''))+'">'+(fo?'💤 ':'')+m+
-              (fora ? ' <small style="opacity:.7">('+(casa==='piloto'?'piloto':casa)+')</small>' : '')+
+              (fora ? ' <small style="opacity:.7">('+rotCasa+')</small>' : '')+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga neste evento — sai da escala e dos conflitos, sem sair do time')+'" onclick="toggleFolga(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button>'+
               ' <button style="border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px" title="Tirar desta montagem" onclick="trocaMontador(\''+ev.id+'\','+ix+',null)">✕</button></span>';
           }).join('')+
           '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px;color:var(--ink2)" onchange="if(this.value){trocaMontador(\''+ev.id+'\',-1,this.value)}">'+
             '<option value="">+ trazer montador...</option>'+
-            todosMontadores().filter(t=>!montadoresBase(ev, eq).includes(t.nome))
-              .map(t=>'<option value="'+t.nome.replace(/"/g,'&quot;')+'">'+t.nome+' — '+(t.equipe==='piloto'?'montador piloto':t.equipe)+'</option>').join('')+
+            todosMontadores().filter(t=>!montadoresBase(ev, eq).includes(t.nome) && t.nome!==eq)
+              .map(t=>'<option value="'+t.nome.replace(/"/g,'&quot;')+'">'+t.nome+' — '+(t.equipe==='piloto'?'montador piloto':(t.lider?'líder da equipe '+t.equipe:t.equipe))+'</option>').join('')+
+          '</select>'+
+          '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px;color:var(--ink2)" title="Evento grande com várias frentes de trabalho: traz outra equipe inteira, líder e montadores" onchange="if(this.value){addFrente(\''+ev.id+'\',this.value);this.value=\'\'}">'+
+            '<option value="">🚩 + trazer outra frente (equipe inteira)...</option>'+
+            equipes.filter(e2=>e2.nome!==eq && e2.nome!==EQUIPE_TERC)
+              .map(e2=>'<option value="'+e2.nome.replace(/"/g,'&quot;')+'">Equipe '+e2.nome+' — líder + '+(e2.membros||[]).length+' montadores</option>').join('')+
           '</select>'+
           (ev.montOp ? ' <button class="mini" onclick="trocaMontador(\''+ev.id+'\',-2,null)">Voltar ao time padrão</button>' : '')+
           ' <button class="mini" onclick="enviarParaEscala(\''+ev.id+'\')" title="Marca TRABALHOU para estes montadores nos dias de montagem e desmontagem, lá na Escala de Montadores">📅 Preencher na Escala</button>'+
