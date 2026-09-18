@@ -962,6 +962,7 @@ function separarTimeDesm(id, ligar){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const eq = ev.equipe || plano(ev).equipe;
   ev.timeD = ligar ? [...montadoresBase(ev, eq)] : null;
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
   toast(ligar ? '📤 A desmontagem agora tem equipe própria — ajuste os nomes e as datas abaixo.' : 'A desmontagem voltou a ser com a equipe da montagem.');
 }
@@ -971,6 +972,7 @@ function trocaMontadorD(id, ix, nome){
   if(ix >= 0) atual.splice(ix, 1);
   if(nome && !atual.includes(nome)) atual.push(nome);
   ev.timeD = atual;
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
 }
 function addFrenteD(id, nomeEq){
@@ -982,6 +984,7 @@ function addFrenteD(id, nomeEq){
   const novos = [outra.nome, ...(outra.membros||[])].filter(n=>!ev.timeD.includes(n) && n!==eq);
   if(!novos.length) return toast('Todo mundo da equipe ' + nomeEq + ' já está na desmontagem.');
   ev.timeD = [...ev.timeD, ...novos];
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
   toast('🚩 Frente da equipe ' + nomeEq + ' adicionada à desmontagem: ' + novos.length + ' pessoa(s).');
 }
@@ -1023,20 +1026,37 @@ function alvoDias(ev, nome){
   });
   return alvo;
 }
-/* liga/desliga UM dia — é assim que se marca folga no meio do período */
+/* faltas por pessoa e dia: estava escalado, não apareceu */
+function faltouDia(ev, nome, iso){ return ((ev.faltas || {})[nome] || []).includes(iso); }
+function setFalta(ev, nome, iso, liga){
+  ev.faltas = Object.assign({}, ev.faltas || {});
+  const f = new Set(ev.faltas[nome] || []);
+  if(liga) f.add(iso); else f.delete(iso);
+  if(f.size) ev.faltas[nome] = [...f].sort(); else delete ev.faltas[nome];
+  if(!Object.keys(ev.faltas).length) ev.faltas = null;
+}
+/* um clique no dia alterna: TRABALHA → FALTOU → folga → TRABALHA */
 function toggleDiaPessoa(id, nome, iso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const alvo = alvoDias(ev, nome);
+  /* o estado de quem foi clicado decide a ação para o grupo todo */
+  const trab = diasDe(ev, nome).includes(iso);
+  const fa = faltouDia(ev, nome, iso);
+  const acao = (trab && !fa) ? 'faltou' : (trab && fa) ? 'folga' : 'trabalha';
   ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
   alvo.forEach(n=>{
     const atuais = new Set(diasDe(ev, n));
-    if(atuais.has(iso)) atuais.delete(iso); else atuais.add(iso);
+    if(acao === 'trabalha'){ atuais.add(iso); setFalta(ev, n, iso, false); }
+    else if(acao === 'faltou'){ atuais.add(iso); setFalta(ev, n, iso, true); }
+    else { atuais.delete(iso); setFalta(ev, n, iso, false); }
     const lista = [...atuais].sort();
     if(!lista.length) delete ev.diasPessoa[n];
     else ev.diasPessoa[n] = {dias: lista};
   });
   if(!Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
+  if(acao==='faltou') toast('✖ ' + (alvo.length>1 ? alvo.length+' pessoas marcadas com FALTA' : nome + ' marcado com FALTA') + ' em ' + fmtD(iso) + ' — vai para a Escala como FALTOU.');
 }
 /* resumo legível: "13 a 15, 17 a 20" */
 function resumoDias(lista){
@@ -1064,9 +1084,19 @@ function setDiasPessoa(id, nome){
     else ev.diasPessoa[n] = {dias: lista};
   });
   if(!Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
   toast(alvo.length>1 ? '📅 Dias da frente ('+alvo.length+' pessoas): '+resumoDias(lista)+'. Clique nos quadradinhos para tirar um dia de folga no meio.'
     : (ev.diasPessoa && ev.diasPessoa[nome] ? '📅 '+nome+': '+resumoDias(lista)+'. Clique nos quadradinhos para marcar folga no meio.' : nome+' voltou aos dias normais do evento.'));
+}
+/* mexeu no time, nas folgas ou nos dias de alguém: se o evento já estava na
+   Escala, reenvia sozinho em seguida (grava o que falta e apaga o que sobrou) */
+let filaEscalaEv = {};
+function agendarEscalaEv(id){
+  const ev = eventos.find(e=>e.id===id);
+  if(!ev || !ev.escalaEnviada) return;
+  clearTimeout(filaEscalaEv[id]);
+  filaEscalaEv[id] = setTimeout(()=>enviarParaEscala(id, true), 2500);
 }
 let pessoaDias = null;
 function abreDiasPessoa(id, nome){
@@ -1090,14 +1120,16 @@ function editorDiasPessoa(ev, eq){
   const grade = janelaDias(ev).map(d=>{
     const dt = new Date(d+'T12:00');
     const on = meus.includes(d);
+    const fa = faltouDia(ev, nome, d);
     const dsem = ['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()];
     const fds = dt.getDay()===0 || dt.getDay()===6;
+    const estilo = (on && fa) ? 'background:#e07b2c;color:#fff;border:1px solid #e07b2c;font-weight:700'
+      : on ? 'background:#0f8a4d;color:#fff;border:1px solid #0f8a4d;font-weight:700'
+      : 'background:#fff;color:'+(fds?'#c0392b':'var(--muted)')+';border:1px dashed var(--line)';
     return '<button onclick="toggleDiaPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\',\''+d+'\')" '+
-      'title="'+(on?'Trabalha':'Não trabalha')+' em '+fmtD(d)+' — clique para '+(on?'marcar folga':'marcar trabalho')+'" '+
-      'style="min-width:46px;border-radius:8px;padding:5px 4px;cursor:pointer;font:inherit;font-size:11px;line-height:1.25;text-align:center;'+
-      (on ? 'background:#0f8a4d;color:#fff;border:1px solid #0f8a4d;font-weight:700'
-          : 'background:#fff;color:'+(fds?'#c0392b':'var(--muted)')+';border:1px dashed var(--line)')+'">'+
-      dsem+'<br><b style="font-size:13px">'+String(dt.getDate()).padStart(2,'0')+'</b></button>';
+      'title="'+((on&&fa)?'FALTOU':on?'Trabalha':'Folga')+' em '+fmtD(d)+' — o clique alterna trabalha → faltou → folga" '+
+      'style="min-width:46px;border-radius:8px;padding:5px 4px;cursor:pointer;font:inherit;font-size:11px;line-height:1.25;text-align:center;'+estilo+'">'+
+      dsem+'<br><b style="font-size:13px">'+String(dt.getDate()).padStart(2,'0')+'</b>'+((on&&fa)?'<br><span style="font-size:8.5px;letter-spacing:.4px">FALTOU</span>':'')+'</button>';
   }).join('');
   return '<div style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fbf7ef">'+
     '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
@@ -1113,10 +1145,11 @@ function editorDiasPessoa(ev, eq){
     '<button class="mini" onclick="pessoaDias=null;verEvento(\''+ev.id+'\')">Fechar</button>'+
     '</div>'+
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">Clique no dia para marcar ou tirar. <b>Verde = trabalha</b>; dia sem marcação é folga. Serve para quem começa, folga no meio e volta.</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">O clique alterna: <b style="color:#0f8a4d">verde = trabalha</b> → <b style="color:#e07b2c">laranja = FALTOU</b> → branco = folga. Serve para quem começa, folga no meio, volta — e para registrar quem não apareceu.</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:5px">'+grade+'</div>'+
       '<div style="font-size:12.5px;color:var(--ink2);margin-top:9px">'+
         (proprio ? '<b>'+meus.length+' dia(s):</b> '+resumoDias(meus) : '<span style="color:var(--muted)">Seguindo os dias normais do evento ('+meus.length+' dias). Clique em qualquer dia para definir os dias desta pessoa.</span>')+
+        (((ev.faltas||{})[nome]||[]).length ? '<br><b style="color:#e07b2c">✖ Faltou:</b> '+ev.faltas[nome].map(d=>fmtD(d).slice(0,5)).join(', ') : '')+
       '</div>'+
     '</div>'+
   '</div>';
@@ -1129,6 +1162,7 @@ function toggleFolga(id, nome){
   if(f.has(nome)) f.delete(nome); else f.add(nome);
   ev.folgas = [...f];
   if(!ev.folgas.length) ev.folgas = null;
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
   toast(f.has(nome) ? '💤 ' + nome + ' de folga neste evento — fora da escala e dos conflitos.' : nome + ' voltou ao time deste evento.');
 }
@@ -1153,6 +1187,7 @@ function addFrente(id, nomeEq){
   const novos = [outra.nome, ...(outra.membros||[])].filter(n=>!atual.includes(n) && n!==eq);
   if(!novos.length) return toast('Todo mundo da equipe ' + nomeEq + ' já está nesta operação.');
   ev.montOp = [...atual, ...novos];
+  agendarEscalaEv(id);
   salvar(); renderQuadro(); verEvento(id);
   toast('🚩 Frente da equipe ' + nomeEq + ' adicionada: ' + novos.length + ' pessoa(s), líder incluído. Agora são ' + ev.montOp.length + ' pessoas na operação.');
 }
@@ -2506,6 +2541,8 @@ function trocaMontador(id, ix, nome){
     if(nome && !atual.includes(nome)) atual.push(nome);
     ev.montOp = atual;
     if(saiu && (ev.folgas||[]).includes(saiu)){ ev.folgas = ev.folgas.filter(x=>x!==saiu); if(!ev.folgas.length) ev.folgas = null; }
+    if(saiu && ev.faltas && ev.faltas[saiu]){ delete ev.faltas[saiu]; if(!Object.keys(ev.faltas).length) ev.faltas = null; }
+    agendarEscalaEv(id);
   }
   salvar(); renderQuadro(); verEvento(id);
 }
@@ -4704,6 +4741,10 @@ async function sincronizarEscala(silencioso){
     const limite = ate.toISOString().slice(0,10);
     const naJanela = eventos.filter(e => e.mont && diasEquipe(e).some(d => d >= HOJE && d <= limite));
     const alvo = naJanela.filter(e => e.equipe && !evSemNossaEquipe(e));
+    /* encerrados que ainda têm marcação lá: o envio deles agora só limpa */
+    for(const e of eventos.filter(x => evSemNossaEquipe(x) && x.escalaEnviada)){
+      await enviarParaEscala(e.id, true);
+    }
     if(!alvo.length){
       const motivo = !naJanela.length
         ? 'Nenhum evento com montagem ou desmontagem nos próximos 30 dias.'
@@ -4726,7 +4767,19 @@ async function sincronizarEscala(silencioso){
 
 async function enviarParaEscala(id, silencioso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
-  if(evSemNossaEquipe(ev)){ if(!silencioso) toast('Evento cancelado, finalizado ou totalmente terceirizado — não vai para a escala.'); return; }
+  if(evSemNossaEquipe(ev)){
+    if(ev.escalaEnviada){
+      try{
+        const minhas = await escReq('escala_marcas?obs=eq.' + encodeURIComponent(ev.nome) + '&status=in.(T,FA)&select=chave');
+        if((minhas||[]).length) await escReq('escala_marcas?chave=in.(' + minhas.map(m2=>encodeURIComponent(m2.chave)).join(',') + ')', 'DELETE');
+        ev.escalaEnviada = null; salvar();
+        if(!silencioso) toast('Evento encerrado: ' + (minhas||[]).length + ' marcação(ões) dele removidas da Escala.');
+        return;
+      }catch(x){}
+    }
+    if(!silencioso) toast('Evento cancelado, finalizado ou totalmente terceirizado — não vai para a escala.');
+    return;
+  }
   const eq = ev.equipe || plano(ev).equipe;
   /* o líder trabalha junto, salvo quando está de folga neste evento */
   const time = pessoasOp(ev, eq);
@@ -4753,21 +4806,39 @@ async function enviarParaEscala(id, silencioso){
     /* não atropela férias, atestado, folga...: só preenche onde está vazio ou já é T */
     const chaves = [];
     casados.forEach(c => diasDe(ev, c.plan).forEach(d => chaves.push(d + '|' + c.id)));
-    const existentes = await escReq('escala_marcas?chave=in.(' + chaves.map(encodeURIComponent).join(',') + ')&select=chave,status');
+    const existentes = await escReq('escala_marcas?chave=in.(' + chaves.map(encodeURIComponent).join(',') + ')&select=chave,status,obs');
     const ocupado = {};
-    (existentes||[]).forEach(r=>{ if(r.status && r.status!=='T') ocupado[r.chave] = r.status; });
+    (existentes||[]).forEach(r=>{
+      /* preserva o que NÃO é deste evento e não é TRABALHOU (férias, atestado...);
+         as marcas do próprio evento podem virar T ou FALTOU à vontade */
+      if(r.status && r.status!=='T' && r.obs !== ev.nome) ocupado[r.chave] = r.status;
+    });
     const agora = new Date().toISOString();
     const linhas = [];
     let pulados = 0;
     casados.forEach(c => diasDe(ev, c.plan).forEach(d => {
       const k = d + '|' + c.id;
       if(ocupado[k]){ pulados++; return; }
-      linhas.push({chave:k, dia:d, montador_id:c.id, status:'T', obs:ev.nome, atualizado_em:agora});
+      linhas.push({chave:k, dia:d, montador_id:c.id,
+        status: faltouDia(ev, c.plan, d) ? 'FA' : 'T', obs:ev.nome, atualizado_em:agora});
     }));
     if(linhas.length) await escReq('escala_marcas?on_conflict=chave', 'POST', linhas);
+    /* tirou um dia (folga no meio), trocou gente ou remarcou datas?
+       Apaga as marcações que ESTE evento tinha feito e que não valem mais. */
+    let removidas = 0;
+    try{
+      const minhas = await escReq('escala_marcas?obs=eq.' + encodeURIComponent(ev.nome) + '&status=in.(T,FA)&select=chave,dia,montador_id');
+      const validas = new Set(chaves);
+      const sobrando = (minhas||[]).filter(m2=>!validas.has(m2.dia + '|' + m2.montador_id)).map(m2=>m2.chave);
+      if(sobrando.length){
+        await escReq('escala_marcas?chave=in.(' + sobrando.map(encodeURIComponent).join(',') + ')', 'DELETE');
+        removidas = sobrando.length;
+      }
+    }catch(x){ /* sem conexão: a próxima sincronização limpa */ }
     ev.escalaEnviada = HOJE;
     salvar(); if(!silencioso) verEvento(id);
     const partes = ['📅 Escala preenchida: ' + casados.map(c=>c.plan).join(', ') + ' (' + dias.length + ' dia(s), ' + linhas.length + ' marcação(ões))'];
+    if(removidas) partes.push(removidas + ' marcação(ões) antigas apagadas (dias de folga ou remarcados)');
     if(pulados) partes.push(pulados + ' dia(s) preservados (férias/folga/atestado já marcados lá)');
     if(semCadastro.length) partes.push('⚠ não encontrei na Escala: ' + semCadastro.join(', ') + ' — confira o nome no cadastro dela');
     toast(partes.join(' · ') + '.');
