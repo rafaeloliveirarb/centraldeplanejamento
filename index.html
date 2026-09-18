@@ -871,6 +871,71 @@ function montadoresOp(ev, eq){
   const f = ev.folgas || [];
   return montadoresBase(ev, eq).filter(m => !f.includes(m));
 }
+/* dias de trabalho de UMA pessoa neste evento (frentes começam em dias
+   diferentes): sem registro próprio, acompanha os dias da equipe */
+function diasDe(ev, nome){
+  const r = (ev.diasPessoa || {})[nome];
+  if(!r || !r.ini) return diasEquipe(ev);
+  return diasEntre(r.ini, r.fim || r.ini);
+}
+function setDiasPessoa(id, nome){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const ini = (document.getElementById('dp-ini')||{}).value || '';
+  const fim = (document.getElementById('dp-fim')||{}).value || ini;
+  const chkEq = (document.getElementById('dp-eq')||{}).checked;
+  const padraoIni = dia(ev.mont), padraoFim = dia(fimDesm(ev)) || dia(ev.desm) || padraoIni;
+  const alvo = [nome];
+  if(chkEq){
+    const casa = (todosMontadores().find(t=>t.nome===nome)||{}).equipe;
+    if(casa){
+      const eq = ev.equipe || plano(ev).equipe;
+      [...montadoresBase(ev, eq), ...(casa===eq?[eq]:[casa])].forEach(n=>{
+        const c2 = n===casa ? casa : (todosMontadores().find(t=>t.nome===n)||{}).equipe;
+        if(c2===casa && !alvo.includes(n)) alvo.push(n);
+      });
+    }
+  }
+  ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
+  alvo.forEach(n=>{
+    if(!ini || (ini===padraoIni && fim===padraoFim)) delete ev.diasPessoa[n];
+    else ev.diasPessoa[n] = {ini, fim};
+  });
+  if(!Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  pessoaDias = null;
+  salvar(); renderQuadro(); verEvento(id);
+  toast(alvo.length>1 ? '📅 Dias de trabalho da frente ('+alvo.length+' pessoas) definidos: '+fmtD(ini)+(fim!==ini?' a '+fmtD(fim):'')+'.'
+    : (ev.diasPessoa && ev.diasPessoa[nome] ? '📅 '+nome+' trabalha '+fmtD(ini)+(fim!==ini?' a '+fmtD(fim):'')+' neste evento.' : nome+' voltou aos dias normais do evento.'));
+}
+let pessoaDias = null;
+function abreDiasPessoa(id, nome){
+  pessoaDias = (pessoaDias===nome) ? null : nome;
+  verEvento(id);
+}
+/* painel que abre no 📅 do chip: período de trabalho da pessoa no evento */
+function editorDiasPessoa(ev, eq){
+  if(!pessoaDias) return '';
+  const nome = pessoaDias;
+  const ehLider = nome===eq;
+  if(!ehLider && !montadoresBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
+  const reg = (ev.diasPessoa||{})[nome] || {};
+  const ini = reg.ini || dia(ev.mont) || '';
+  const fim = reg.fim || reg.ini || dia(fimDesm(ev)) || dia(ev.desm) || ini;
+  const casa = ehLider ? eq : ((todosMontadores().find(t=>t.nome===nome)||{}).equipe);
+  const colegas = casa ? [...montadoresBase(ev, eq), eq].filter(n=>n!==nome &&
+      (n===casa || ((todosMontadores().find(t=>t.nome===n)||{}).equipe)===casa)).length : 0;
+  return '<div style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fbf7ef;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+    '<b style="font-size:13px">📅 Dias de '+nome+' nesta operação</b>'+
+    '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)">de '+
+      '<input type="date" id="dp-ini" value="'+ini+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px"></label>'+
+    '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)">até '+
+      '<input type="date" id="dp-fim" value="'+fim+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px"></label>'+
+    (colegas ? '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="dp-eq" style="width:15px;height:15px"> aplicar à frente inteira ('+(colegas+1)+' pessoas da equipe '+casa+')</label>' : '')+
+    '<span style="flex:1"></span>'+
+    '<button class="mini" onclick="setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Aplicar</button>'+
+    '<button class="mini" onclick="document.getElementById(\'dp-ini\').value=\''+ (dia(ev.mont)||'') +'\';document.getElementById(\'dp-fim\').value=\''+ (dia(fimDesm(ev))||dia(ev.desm)||'') +'\';setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Voltar ao padrão</button>'+
+    '<button class="mini" onclick="pessoaDias=null;verEvento(\''+ev.id+'\')">Fechar</button>'+
+  '</div>';
+}
 /* o líder também pode folgar num evento */
 function liderFolga(ev, eq){ return ((ev.folgas || []).includes(eq || ev.equipe || plano(ev).equipe)); }
 function toggleFolga(id, nome){
@@ -1450,21 +1515,19 @@ function analisar(ev, ag){
   const semPeso = (ev.itens||[]).filter(i => { const m = catalogo.find(c=>c.nome===i.nome); return !m || m.pendente || (!m.peso && !m.vol); }).map(i=>i.nome);
   /* montador escalado em dois lugares no mesmo dia */
   if(ev.equipe && ev.equipe!==EQUIPE_TERC && !evSemNossaEquipe(ev)){
-    const dias = diasEquipe(ev);
     const repetidos = [];
     montadoresOp(ev, ev.equipe).forEach(m=>{
-      const oc = ocupante(ag,'mt', m, dias, ev.id);
+      const oc = ocupante(ag,'mt', m, diasDe(ev, m), ev.id);
       if(oc) repetidos.push({nome:m, ev:oc.id, dia:oc.dia});
     });
-    /* o outro lado do choque: eventos que usam o mesmo nome nos mesmos dias */
+    /* o outro lado do choque: mesmos nomes, nos dias de cada um */
     eventos.forEach(o=>{
       if(o.id===ev.id || evSemNossaEquipe(o) || !o.equipe || o.equipe===EQUIPE_TERC) return;
-      const diasO = diasEquipe(o);
-      const comuns = dias.filter(d=>diasO.includes(d));
-      if(!comuns.length) return;
       montadoresOp(o, o.equipe).forEach(m=>{
-        if(montadoresOp(ev, ev.equipe).includes(m) && !repetidos.some(x=>x.nome===m))
-          repetidos.push({nome:m, ev:o.id, dia:comuns[0]});
+        if(!montadoresOp(ev, ev.equipe).includes(m) || repetidos.some(x=>x.nome===m)) return;
+        const meus = diasDe(ev, m);
+        const comuns = meus.filter(d=>diasDe(o, m).includes(d));
+        if(comuns.length) repetidos.push({nome:m, ev:o.id, dia:comuns[0]});
       });
     });
     if(repetidos.length){
@@ -1510,7 +1573,7 @@ function replanejar(){
     }
     /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
     if(e.equipe && e.equipe!==EQUIPE_TERC)
-      montadoresOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasEquipe(e), e.id));
+      montadoresOp(e, e.equipe).forEach(m => reservar(ag,'mt', m, diasDe(e, m), e.id));
   });
   ordem.forEach(e=>{
     const a = analisar(e, ag);
@@ -2069,6 +2132,7 @@ function verEvento(id){
             const fo = liderFolga(ev, eq);
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':'background:#fdf1e2;color:#a86412')+'" title="Líder da equipe">'+
               (fo?'💤 ':'👑 ')+eq+' <small style="opacity:.7">(líder)</small>'+
+              ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho do líder neste evento" onclick="abreDiasPessoa(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">📅</button>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga ao líder neste evento')+'" onclick="toggleFolga(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button></span>';
           })() : '')+
           montadoresBase(ev, eq).map((m,ix)=>{
@@ -2077,8 +2141,11 @@ function verEvento(id){
             const fora = casa && casa!==eq;
             const rotCasa = (tt.lider ? 'líder ' : '') + (casa==='piloto' ? 'piloto' : casa);
             const fo = (ev.folgas||[]).includes(m);
+            const dpz = (ev.diasPessoa||{})[m];
+            const seloDias = dpz && dpz.ini ? ' <small style="color:#a86412;font-weight:700">📅 '+fmtD(dpz.ini).slice(0,5)+(dpz.fim&&dpz.fim!==dpz.ini?'–'+fmtD(dpz.fim).slice(0,5):'')+'</small>' : '';
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':(fora?'background:#eaf2fd;color:#1c5fb8':''))+'">'+(fo?'💤 ':'')+m+
-              (fora ? ' <small style="opacity:.7">('+rotCasa+')</small>' : '')+
+              (fora ? ' <small style="opacity:.7">('+rotCasa+')</small>' : '')+seloDias+
+              ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho desta pessoa no evento (frentes que começam em dias diferentes)" onclick="abreDiasPessoa(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">📅</button>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga neste evento — sai da escala e dos conflitos, sem sair do time')+'" onclick="toggleFolga(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button>'+
               ' <button style="border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px" title="Tirar desta montagem" onclick="trocaMontador(\''+ev.id+'\','+ix+',null)">✕</button></span>';
           }).join('')+
@@ -2099,7 +2166,9 @@ function verEvento(id){
           ' <button class="mini" onclick="copiarEscala(\''+ev.id+'\')" title="Copia a mensagem para colar onde quiser">⧉ Copiar</button>'+
           (ev.agendaEnviada ? ' <span class="tag" style="color:#1c5fb8">na agenda desde '+fmtD(ev.agendaEnviada)+'</span>' : '')+
           (ev.escalaEnviada ? ' <span class="tag" style="color:#0f8a4d">na escala desde '+fmtD(ev.escalaEnviada)+'</span>' : '')+
-        '</div></div>'+
+        '</div>'+
+        editorDiasPessoa(ev, eq)+
+      '</div>'+
       '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<b style="font-size:13px">🔨 Caminhões da montagem</b>'+
         '<span style="color:var(--muted);font-size:12px">levam o material'+
@@ -3745,7 +3814,13 @@ function mensagemEscala(ev){
   else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
   L.push('');
-  L.push('👷 *Equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + (time.length ? ': ' + time.join(', ') : ''));
+  const comDias = m => {
+    const r = (ev.diasPessoa||{})[m];
+    if(!r || !r.ini) return m;
+    const f = r.fim && r.fim !== r.ini;
+    return m + ' (' + fmtD(r.ini).slice(0,5) + (f ? ' a ' + fmtD(r.fim).slice(0,5) : '') + ')';
+  };
+  L.push('👷 *Equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + (time.length ? ': ' + time.map(comDias).join(', ') : ''));
   if((ev.folgas||[]).filter(f=>f!==eq).length) L.push('💤 De folga: ' + ev.folgas.filter(f=>f!==eq).join(', '));
   const frTxt = descViagensFase(ev,'mont');
   const frDTxt = temFrotaDesm(ev) ? descViagensFase(ev,'desm') : null;
@@ -4056,14 +4131,14 @@ async function enviarParaEscala(id, silencioso){
     }
     /* não atropela férias, atestado, folga...: só preenche onde está vazio ou já é T */
     const chaves = [];
-    casados.forEach(c => dias.forEach(d => chaves.push(d + '|' + c.id)));
+    casados.forEach(c => diasDe(ev, c.plan).forEach(d => chaves.push(d + '|' + c.id)));
     const existentes = await escReq('escala_marcas?chave=in.(' + chaves.map(encodeURIComponent).join(',') + ')&select=chave,status');
     const ocupado = {};
     (existentes||[]).forEach(r=>{ if(r.status && r.status!=='T') ocupado[r.chave] = r.status; });
     const agora = new Date().toISOString();
     const linhas = [];
     let pulados = 0;
-    casados.forEach(c => dias.forEach(d => {
+    casados.forEach(c => diasDe(ev, c.plan).forEach(d => {
       const k = d + '|' + c.id;
       if(ocupado[k]){ pulados++; return; }
       linhas.push({chave:k, dia:d, montador_id:c.id, status:'T', obs:ev.nome, atualizado_em:agora});
