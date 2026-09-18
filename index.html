@@ -550,6 +550,23 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 <!-- ============ MODAL NOVO EVENTO ============ -->
 <button id="sino-hoje" class="sino hide" title="Operações de hoje" onclick="abrirHoje()">🔔<span class="sino-n" id="sino-n"></span></button>
 
+<div class="overlay" id="ov-remarc" onclick="if(event.target===this)fechar('ov-remarc')">
+  <div class="modal" style="max-width:620px">
+    <header>
+      <div><h2>📅 Datas mudaram na importação</h2><div class="os" id="remarc-resumo"></div></div>
+      <button class="x" onclick="fechar('ov-remarc')">✕</button>
+    </header>
+    <div class="mbody">
+      <div class="alert amber" style="margin-top:0">A planilha trouxe datas diferentes das que estavam no quadro. Onde a escala ou a agenda <b>já tinham sido enviadas</b>, o que foi combinado com a equipe está defasado — avise Produção e Frota.</div>
+      <div id="remarc-corpo" style="margin-top:12px"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="mini" onclick="limparRemarcados()">Já avisei, limpar marcadores</button>
+      <button class="btn-orange" onclick="fechar('ov-remarc')">Fechar</button>
+    </footer>
+  </div>
+</div>
+
 <div class="overlay" id="ov-os" onclick="if(event.target===this)fechar('ov-os')">
   <div class="modal" style="max-width:640px">
     <header>
@@ -1742,7 +1759,13 @@ function analisar(ev, ag){
 
 /* ---- replanejamento geral: o que já foi decidido reserva primeiro ---- */
 let PLANO = {};
-function replanejar(){
+/* o plano só depende dos dados (eventos, equipes, frota, catálogo), nunca
+   dos filtros da tela. Enquanto nada disso muda, reaproveita o resultado. */
+let planoSujo = true;
+function marcarPlanoSujo(){ planoSujo = true; }
+function replanejar(forcar){
+  if(!forcar && !planoSujo) return;  /* filtro mudou: a conta continua valendo */
+  planoSujo = false;
   PLANO = {};
   const ag = novaAgenda();
   const ordem = [...eventos].sort((a,b)=> a.mont.localeCompare(b.mont));
@@ -1776,6 +1799,10 @@ function replanejar(){
   });
 }
 const plano = ev => PLANO[ev.id] || analisar(ev, novaAgenda());
+/* qualquer coisa vinda de fora (realtime, restauração, importação) refaz a conta */
+function dadosMudaram(){ marcarPlanoSujo(); }
+/* propriedades internas que não devem viajar para a nuvem/backup */
+const LIMPAR_AO_SALVAR = ['__desmCol'];
 
 /* telas por operação do dia: montagem, andamento e desmontagem */
 /* ---------- carga das equipes: quem está sobrecarregado no período ---------- */
@@ -2042,19 +2069,18 @@ function limparDatas(){
 }
 
 function noPeriodo(ev){
-  if(!ev.mont) return true; /* sem data fica sempre visível para ser resolvido */
-  if(ev.desm && periodo!==9999 && !dataIni && !dataFim){
-    /* desmontagem dentro da janela conta, mesmo que a montagem tenha sido antes */
-    const lim = new Date(); lim.setDate(lim.getDate()+periodo);
-    const dd = dia(ev.desm);
-    if(dd >= HOJE && dd <= lim.toISOString().slice(0,10)) return true;
-  }
-  if(dataIni || dataFim) return true;
+  if(!ev.mont) return true;               /* sem data fica visível para ser resolvido */
+  if(dataIni || dataFim) return true;     /* filtro por datas tem regra própria */
   if(periodo===9999) return true;
-  const d = dia(ev.mont), base = new Date(HOJE+'T00:00');
-  const lim = new Date(base); lim.setDate(lim.getDate()+periodo);
-  const dd = new Date(d+'T00:00');
-  return dd >= base && dd <= lim;
+  /* o evento OCUPA da montagem até o fim da desmontagem (ou do evento).
+     Basta esse intervalo encostar na janela: assim o que está em andamento
+     — montou ontem, desmonta daqui a 20 dias — continua no quadro, contando
+     nos indicadores e mostrando conflitos. */
+  const ini = dia(ev.mont);
+  const fim = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.evtFim) || dia(ev.evt) || dia(fimMont(ev)) || ini;
+  const lim = new Date(HOJE+'T00:00'); lim.setDate(lim.getDate()+periodo);
+  const limISO = lim.toISOString().slice(0,10);
+  return ini <= limISO && fim >= HOJE;    /* intervalos se cruzam */
 }
 
 function filtrados(){
@@ -2104,14 +2130,14 @@ function renderQuadro(){
   }
   const rotOp = opFiltro==='mont' ? 'montagem' : opFiltro==='desm' ? 'desmontagem' : '';
   const grupos = {}, tipos = {};
+  const colDesm = new Map(); /* fora do objeto: não vai para a nuvem nem para o backup */
   const poe = (d, e, tipo) => {
     (grupos[d] = grupos[d]||[]).push(e);
     (tipos[d] = tipos[d]||{}).mont = (tipos[d].mont||0) + (tipo==='mont'?1:0);
     tipos[d].desm = (tipos[d].desm||0) + (tipo==='desm'?1:0);
-    if(tipo==='desm') (e.__desmCol = e.__desmCol||[]).push(d);
+    if(tipo==='desm'){ const a = colDesm.get(e.id) || []; a.push(d); colDesm.set(e.id, a); }
   };
   lista.forEach(e => {
-    e.__desmCol = null;
     const dm = dia(e.mont), dd = e.desm ? dia(e.desm) : null;
     /* a montagem já passou e o que traz o evento para a janela é a desmontagem */
     const montVelha = dm < HOJE && periodo!==9999 && !dataIni && !dataFim;
@@ -2136,7 +2162,7 @@ function renderQuadro(){
         .filter(Boolean).join(' · ');
     return '<div class="daycol"><div class="daylabel">'+(d ? fmtD(d) : '📅 Sem data')+
       '<small>'+grupos[d].length+' evento'+(grupos[d].length>1?'s':'')+(resumo?' · '+resumo:'')+'</small></div>'+
-      '<div class="dcards">'+grupos[d].map(e=>cardEvento(e, false, (e.__desmCol||[]).includes(d) ? 'desm' : 'mont')).join('')+'</div></div>';
+      '<div class="dcards">'+grupos[d].map(e=>cardEvento(e, false, (colDesm.get(e.id)||[]).includes(d) ? 'desm' : 'mont')).join('')+'</div></div>';
   }).join('');
 }
 
@@ -2195,6 +2221,7 @@ function cardEvento(ev, soSetorJC, papel){
       '</div>'+
       '<div class="selo">'+
         (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
+        (ev.datasMudaram ? '<span class="fase" style="background:'+(ev.datasMudaram.avisar?'#b0483c':'#b47f08')+'" title="'+String(ev.datasMudaram.o_que.join(' · ')).replace(/"/g,'&quot;')+'">📅 DATAS MUDARAM'+(ev.datasMudaram.avisar?' — AVISAR':'')+'</span>' : '')+
         '<span class="badge '+s.classe+'">'+s.texto+'</span>'+
         opChip(ev)+
         faseChip(ev.fase)+
@@ -2275,6 +2302,10 @@ function verEvento(id){
         '<div class="ate">a <input type="date" class="dtin" value="'+valD(ev.evtFim)+'" onchange="setData(\''+ev.id+'\',\'evtFim\',this.value)" title="Deixe vazio se o evento é de um dia só"></div></div>'+
       '<div><i>Desmontagem</i><input type="datetime-local" class="dtin" value="'+valDT(ev.desm)+'" onchange="setData(\''+ev.id+'\',\'desm\',this.value)">'+
         '<div class="ate">até <input type="date" class="dtin" value="'+valD(ev.desmFim)+'" onchange="setData(\''+ev.id+'\',\'desmFim\',this.value)" title="Deixe vazio se a desmontagem termina no mesmo dia"></div></div>'+
+      (ev.datasMudaram ? '<div style="grid-column:1/-1"><div class="alert '+(ev.datasMudaram.avisar?'red':'amber')+'" style="margin:0">'+
+        '📅 <b>A importação mudou as datas deste evento:</b> '+ev.datasMudaram.o_que.join(' · ')+'.'+
+        (ev.datasMudaram.avisar ? ' A escala e a agenda já tinham sido enviadas com as datas antigas — <b>avise Produção e Frota</b>.' : '')+
+        ' <button class="mini" onclick="okRemarcado(\''+ev.id+'\')">Ciente, tirar o aviso</button></div></div>' : '')+
       (function(){
         const hs = horaSugerida(ev);
         if(!hs || !ev.mont || String(ev.mont).slice(11,16) === hs.hora) return '';
@@ -3765,13 +3796,27 @@ function marcarLote(v){
 }
 function gravarLote(){
   let n = 0, atualizados = 0;
+  const remarcados = [];
   lote.forEach(e => {
     if(!e.marcado || !e.nome) return;
     if(e.repetido) return; /* linha repetida da própria planilha nunca entra */
     const ex = eventoExistente(e);
     if(ex){
-      /* já está no quadro: atualiza os dados em vez de criar outro,
-         preservando equipe, veículos e escala já definidos */
+      /* já está no quadro: antes de sobrescrever, guarda o que MUDOU nas datas.
+         Escala e agenda já enviadas ficam defasadas — a pessoa precisa saber. */
+      const rot = {mont:'montagem', montFim:'fim da montagem', evt:'evento', evtFim:'fim do evento', desm:'desmontagem', desmFim:'fim da desmontagem'};
+      const mudancas = [];
+      Object.keys(rot).forEach(k=>{
+        const antes = dia(ex[k]) || null;
+        const depois = dia(k==='evt' ? (e.evt || dia(e.mont)) : e[k]) || null;
+        if(depois && antes && antes !== depois) mudancas.push(rot[k] + ' ' + fmtD(antes) + ' → ' + fmtD(depois));
+        else if(depois && !antes) mudancas.push(rot[k] + ' definida em ' + fmtD(depois));
+      });
+      if(mudancas.length){
+        ex.datasMudaram = {quando: HOJE, o_que: mudancas,
+          avisar: !!(ex.escalaEnviada || ex.agendaEnviada)};
+        remarcados.push({nome: ex.nome, mudancas, enviado: !!(ex.escalaEnviada || ex.agendaEnviada)});
+      }
       Object.assign(ex, {
         nome:e.nome, os: osDigitos(e) || e.os, cidade:e.cidade,
         local:e.local, km:e.km,
@@ -3807,8 +3852,36 @@ function gravarLote(){
   if(atualizados) partes.push(atualizados + ' atualizado(s)');
   toast((partes.length ? partes.join(' e ') : 'Nada novo para gravar') +
     (semData ? ' · ' + semData + ' sem data na coluna "📅 Sem data"' : '') + '. A IA já montou as sugestões.');
+  if(remarcados.length) mostrarRemarcados(remarcados);
 }
 
+/* mostra o que a planilha mudou de data, separando o que já tinha sido enviado */
+function mostrarRemarcados(lista){
+  const criticos = lista.filter(x=>x.enviado);
+  const corpo = lista.map(x=>
+    '<div style="padding:9px 11px;border:1px solid var(--line);border-left:4px solid '+(x.enviado?'var(--red)':'var(--amber)')+';border-radius:9px;margin-bottom:7px">'+
+      '<b style="font-size:13.5px">'+x.nome+'</b>'+
+      (x.enviado ? ' <span class="tag" style="color:var(--red)">já estava na escala/agenda — avise Produção e Frota</span>' : '')+
+      '<div style="font-size:12.5px;color:var(--ink2);margin-top:3px">'+x.mudancas.join('<br>')+'</div>'+
+    '</div>').join('');
+  const el2 = document.getElementById('remarc-corpo');
+  if(!el2) return;
+  document.getElementById('remarc-resumo').textContent =
+    lista.length + ' evento(s) tiveram datas alteradas pela planilha' + (criticos.length ? ' · ' + criticos.length + ' já estavam na escala ou na agenda' : '');
+  el2.innerHTML = corpo;
+  document.getElementById('ov-remarc').classList.add('on');
+}
+function okRemarcado(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.datasMudaram = null;
+  salvar(); renderQuadro(); verEvento(id);
+  toast('Aviso de remarcação removido deste evento.');
+}
+function limparRemarcados(){
+  eventos.forEach(e=>{ if(e.datasMudaram) e.datasMudaram = null; });
+  salvar(); renderQuadro(); fechar('ov-remarc');
+  toast('Marcadores de remarcação limpos.');
+}
 function baixarModeloExcel(){
   if(!window.XLSX) return toast('A biblioteca de planilha não carregou. Recarregue a página.');
   const eventosAba = [
@@ -4985,8 +5058,15 @@ function renderPeriodos(){
   const df = document.querySelector('.datefiltro');
   if(df) df.classList.toggle('ativo', comData);
 }
-document.getElementById('busca').addEventListener('input', e=>{ busca = e.target.value; document.getElementById('busca-jc').value = busca; renderQuadro(); });
-document.getElementById('busca-jc').addEventListener('input', e=>{ busca = e.target.value; document.getElementById('busca').value = busca; renderQuadro(); renderQuadroJC(); });
+/* digitar não pode travar o quadro: espera a pessoa parar de teclar */
+let filaBusca = null;
+function buscarDepois(valor, tambemJC){
+  busca = valor;
+  clearTimeout(filaBusca);
+  filaBusca = setTimeout(()=>{ renderQuadro(); if(tambemJC) renderQuadroJC(); }, 180);
+}
+document.getElementById('busca').addEventListener('input', e=>{ document.getElementById('busca-jc').value = e.target.value; buscarDepois(e.target.value, false); });
+document.getElementById('busca-jc').addEventListener('input', e=>{ document.getElementById('busca').value = e.target.value; buscarDepois(e.target.value, true); });
 
 let tid, acaoToast = null;
 function toast(msg, rotulo, acao){
@@ -5006,6 +5086,7 @@ function toast(msg, rotulo, acao){
 }
 let filaSync = null;
 async function salvar(){
+  marcarPlanoSujo();
   await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
   if(sb && nuvemOk){
     clearTimeout(filaSync);
