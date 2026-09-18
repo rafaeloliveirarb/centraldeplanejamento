@@ -2292,9 +2292,19 @@ function blocoDesmontagem(ev){
       ? '<button class="mini" onclick="separarFrotaDesm(\''+ev.id+'\',false)">Usar os mesmos da montagem</button>'
       : '<button class="mini" onclick="separarFrotaDesm(\''+ev.id+'\',true)">Usar caminhões diferentes</button>')+
     '</div>';
-  if(!separado)
-    return cab + '<div class="row"><span style="color:var(--muted)">Volta com os mesmos da montagem: <b style="color:var(--ink2)">'+
-      descFrota(frotaDo(ev))+'</b>'+(ev.permanece?' — o veículo permanece no local durante o evento':'')+'</span></div>';
+  if(!separado){
+    const padraoD = dia(ev.desm) || '';
+    const linhas = escalaDo(ev,'mont').map(x=>{
+      const v2 = veiculos.find(y=>y.id===x.v); if(!v2) return '';
+      return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+
+        (x.motorista?' <span style="color:var(--muted);font-size:12px">'+x.motorista+'</span>':'')+'</span>'+
+        '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">volta em '+
+        '<input type="date" value="'+padraoD+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--muted)" title="Se este caminhão volta em outro dia (dias alternados), troque aqui — a frota da desmontagem passa a ser própria" onchange="diaDesmViagem(\''+ev.id+'\','+x.i+',this.value)"></span></div>';
+    }).join('');
+    return cab + '<div class="row"><span style="color:var(--muted)">Volta com os mesmos da montagem'+
+      (ev.permanece?' — o veículo permanece no local durante o evento':'')+
+      '. Se algum voltar em outro dia, é só trocar a data dele:</span></div>' + linhas;
+  }
   return cab + '<div style="margin-top:10px">'+blocoFrota(ev,'desm')+'</div>' + blocoFrota(ev,'lista-desm');
 }
 
@@ -2333,6 +2343,18 @@ function setDiaViagem(id, vaga, val, fase){
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
+}
+/* dia alternado na VOLTA sem precisar clicar em "usar caminhões diferentes":
+   separa a frota da desmontagem por baixo dos panos, com os mesmos caminhões */
+function diaDesmViagem(id, vaga, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(!val || val === dia(ev.desm)) return; /* continua igual ao padrão: nada muda */
+  if(!temFrotaDesm(ev)){
+    ev.veiculosD = [...frotaDo(ev,'mont')];
+    ev.escalaD = escalaDo(ev,'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:null}));
+    toast('A desmontagem agora tem dias próprios por caminhão — os mesmos veículos da montagem.');
+  }
+  setDiaViagem(id, vaga, val, 'desm');
 }
 function removerVeiculo(id, vaga, fase){
   const ev = eventos.find(e=>e.id===id);
