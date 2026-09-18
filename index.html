@@ -2320,6 +2320,17 @@ function verEvento(id){
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
     '</div></div>'+
 
+    '<div class="sec"><h4>🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span></h4>'+
+      ((ev.estruturas||[]).length
+        ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
+            '<button class="mini danger" onclick="removerEstrutura(\''+ev.id+'\','+ix+')">✕</button></div>').join('')
+        : '<div style="font-size:12.5px;color:var(--muted);margin:4px 0 8px">Nada lançado — use o 📄 Ler material da OS ou escreva abaixo.</div>')+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<input id="estr-nova" placeholder="ex.: 01 PÓRTICO 8,80x2,60x5,60h COM TESTEIRA" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px" onkeydown="if(event.key===\'Enter\')addEstrutura(\''+ev.id+'\')">'+
+        '<button class="mini" onclick="addEstrutura(\''+ev.id+'\')">+ Adicionar</button>'+
+      '</div>'+
+    '</div>'+
+
     '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">MATERIAIS DO EVENTO'+
       '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button></h4>'+
       '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
@@ -2811,7 +2822,7 @@ async function processarArquivo(file){
 function lerBase64(file){
   return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('leitura')); r.readAsDataURL(file); });
 }
-async function lerPDF(file){
+async function lerPDF(file, marcarQde){
   const buf = await file.arrayBuffer();
   if(!window.pdfjsLib) throw new Error('biblioteca de PDF não carregou');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -2819,12 +2830,16 @@ async function lerPDF(file){
   let out = '';
   for(let p=1; p<=pdf.numPages; p++){
     const page = await pdf.getPage(p);
+    const larg = page.getViewport({scale:1}).width || 600;
     const tc = await page.getTextContent();
     let linha = -999, buff = [];
     tc.items.forEach(i=>{
       const y = Math.round(i.transform[5]);
       if(Math.abs(y - linha) > 3){ if(buff.length) out += buff.join(' ')+'\n'; buff=[]; linha=y; }
-      buff.push(i.str);
+      /* OS em tabela: número sozinho na coluna da direita é a Qde do bloco */
+      const t = (marcarQde && /^\s*\d{1,4}\s*$/.test(i.str) && i.transform[4] > larg*0.78)
+        ? '【' + i.str.trim() + '】' : i.str;
+      buff.push(t);
     });
     if(buff.length) out += buff.join(' ')+'\n';
     out += '\n';
@@ -2946,7 +2961,7 @@ async function arquivoDoZip(buf, alvo){
 /* texto de qualquer formato de OS */
 async function textoDoArquivo(f){
   const nome = (f.name||'').toLowerCase();
-  if(/\.pdf$/.test(nome)) return await lerPDF(f);
+  if(/\.pdf$/.test(nome)) return await lerPDF(f, true);
   if(/\.(xlsx|xls)$/.test(nome)){
     if(!window.XLSX) throw new Error('biblioteca de planilha não carregou — tente com PDF ou CSV');
     const wb = XLSX.read(await f.arrayBuffer(), {type:'array'});
@@ -2979,10 +2994,11 @@ async function lerArquivoOS(inp){
   }
 }
 function parseOS(txt){
-  const achados = [], ignoradas = [];
+  const achados = [], ignoradas = [], sugestoes = [];
   const porTamanho = [...catalogo].sort((a,b)=>b.nome.length-a.nome.length);
+
   /* uma linha pode trazer mais de um material ("Tenda 5x5: 6; Piso 200"):
-     acha onde cada um começa e corta ali. Assim o ; de CSV não vira quebra. */
+     acha onde cada um começa e corta ali. */
   const pedacos = [];
   String(txt||'').split(/\r?\n/).forEach(linha=>{
     const l0 = linha.trim(); if(!l0) return;
@@ -2996,51 +3012,171 @@ function parseOS(txt){
       }
     });
     marcas.sort((a,b)=>a.i-b.i);
-    if(marcas.length <= 1){ pedacos.push(l0); return; }
+    if(marcas.length <= 1){ pedacos.push({t:l0, orig:l0}); return; }
     marcas.forEach((mk, ix)=>{
-      const fim = ix+1 < marcas.length ? marcas[ix+1].i : l0.length;
-      pedacos.push(l0.slice(mk.i, fim).trim());
+      const fimP = ix+1 < marcas.length ? marcas[ix+1].i : l0.length;
+      pedacos.push({t:l0.slice(mk.i, fimP).trim(), orig:l0});
     });
   });
-  pedacos.forEach(l0=>{
-    const l = l0.trim(); if(!l) return;
+
+  /* OS em tabela: o item é o título do bloco e a Qde vem na coluna da direita
+     (marcada como 【N】 pelo leitor de PDF). "Considerando/Para montar" é
+     detalhamento. Um item fica ABERTO até a quantidade dele aparecer. */
+  const somar = (nome, qtd, un, peso, vol) => {
+    const ja = achados.find(a=>a.nome===nome);
+    if(ja) ja.qtd += qtd; else achados.push({nome, qtd, un, peso, vol});
+  };
+  /* ESTRUTURAS: o que vai ser montado, do jeito que está escrito na OS —
+     o título com a medida e as linhas de "Considerando:"/"Para montar:" */
+  const estruturas = [];
+  let tituloAtual = null;      /* título do bloco, para virar estrutura no "Considerando:" */
+  let tipoComp = null;         /* 'considerando' põe as linhas do bloco nas estruturas */
+  const pushEstr = (txt) => {
+    const t = String(txt||'').replace(/\s+/g,' ').trim();
+    if(t && estruturas[estruturas.length-1] !== t) estruturas.push(t);
+  };
+  let pendente = null;
+  let detalhando = false; /* depois de "Considerando:"/"Para montar:", as linhas
+                             descrevem a composição do item — não abrem item novo */
+  const fecharCom = (q) => {
+    if(!pendente) return;
+    if(pendente.cand){
+      const qtd = (q!=null) ? q : (pendente.area!=null ? pendente.area : (pendente.solto!=null ? pendente.solto : 1));
+      somar(pendente.cand.nome, qtd, pendente.cand.un, pendente.cand.peso, pendente.cand.vol);
+    } else if(q!=null){
+      const s = sugestoes.find(x=>x.nome.toLowerCase()===pendente.nome.toLowerCase());
+      if(s) s.qtd += q; else sugestoes.push({nome:pendente.nome, qtd:q, un:pendente.un});
+    } else ignoradas.push(pendente.bruto);
+    pendente = null;
+  };
+
+  pedacos.forEach(ped=>{
+    const l0 = ped.t, orig = ped.orig;
+    let l = l0.trim(); if(!l) return;
+    /* Qde da coluna tem prioridade máxima, onde quer que tenha caído na linha */
+    let qdeCol = null;
+    const mCol = l.match(/【(\d{1,4})】/);
+    if(mCol){ qdeCol = +mCol[1]; l = l.replace(/【\d{1,4}】/g,' ').replace(/\s+/g,' ').trim(); }
+    if(!l){ if(qdeCol!=null) fecharCom(qdeCol); return; }
+
+    const ls = semAcentoSimples(l);
     const lcomp = semAcento(l);
-    if(!lcomp) return;
-    const cand = porTamanho.find(c=>lcomp.includes(semAcento(c.nome)));
-    if(!cand){ if(/[a-z]/i.test(l)) ignoradas.push(l); return; }
-    /* tira as palavras do nome para sobrar só quantidade e medidas */
-    let resto = ' ' + semAcentoSimples(l) + ' ';
-    semAcentoSimples(cand.nome).split(/\s+/).forEach(tk=>{
-      if(tk) resto = resto.replace(new RegExp('(^|[^a-z0-9])'+tk.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=$|[^a-z0-9])','i'), '$1 ');
-    });
-    let qtd = null;
-    const dim = resto.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/);
-    if(dim && /m²|m2/.test(cand.un||'')) qtd = parseFloat(dim[1].replace(',','.')) * parseFloat(dim[2].replace(',','.'));
-    if(qtd===null){
-      const semDim = resto.replace(/\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?/g,' ');
-      const n = semDim.match(/(\d+(?:[.,]\d+)?)/);
-      if(n) qtd = parseFloat(n[1].replace(',','.'));
+    /* cabeçalho é pontual; composição ("considerando", "para montar") liga o
+       modo detalhe até o próximo item, seção ou quantidade */
+    const cabecalho = /^(descricao|qde\b|qtd\b|observa|obs[\s:.]|total\b|valor\b)/.test(ls);
+    const composicao = /^(considerando|para montar|sendo\b)/.test(ls);
+    const detalhe = cabecalho || composicao;
+    const numeroPuro = /^\d{1,4}$/.test(ls);
+    const secao = !/\d/.test(l) && l.length<=45 && !detalhe && l===l.toUpperCase() && /[A-ZÀ-Ü].*[A-ZÀ-Ü]{2}/.test(l);
+    /* número no fim da linha (fora de medida) também serve de Qde de coluna */
+    const mFim = l.match(/[\s:—–-]\s{0,2}(\d{1,4})\s*$/);
+    const qdeFim = qdeCol!=null ? qdeCol : (mFim ? +mFim[1] : null);
+
+    if(numeroPuro){ fecharCom(+ls); return; } /* qde da coluna: o quadro continua */
+    if(secao){ fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null; return; }
+    if(detalhe){
+      if(cabecalho){ detalhando = false; tipoComp = null; if(qdeFim!=null) fecharCom(qdeFim); return; }
+      detalhando = true;
+      if(/^considerando/.test(ls)){
+        tipoComp = 'considerando';
+        if(tituloAtual){ pushEstr(tituloAtual); tituloAtual = null; }
+      } else if(/^para montar/.test(ls)){
+        tipoComp = 'paramontar';
+        /* a estrutura está na própria linha, depois do rótulo */
+        let corpo = orig.replace(/【\d{1,4}】/g,' ').replace(/^\s*para\s+montar\s*:?\s*/i,'');
+        if(qdeFim!=null) corpo = corpo.replace(/[\s:—–-]\s{0,2}\d{1,4}\s*$/,'');
+        pushEstr(corpo);
+      } else tipoComp = null; /* "Sendo:" e afins não são estrutura */
+      if(qdeFim!=null) fecharCom(qdeFim);
+      return;
     }
-    if(!qtd || qtd<=0) qtd = 1;
-    const ja = achados.find(a=>a.nome===cand.nome);
-    if(ja) ja.qtd += qtd;
-    else achados.push({nome:cand.nome, qtd, un:cand.un, peso:cand.peso, vol:cand.vol});
+    if(detalhando){
+      if(tipoComp === 'considerando'){
+        let corpo = orig.replace(/【\d{1,4}】/g,' ');
+        if(qdeFim!=null) corpo = corpo.replace(/[\s:—–-]\s{0,2}\d{1,4}\s*$/,'');
+        pushEstr(corpo);
+        if(qdeFim!=null) fecharCom(qdeFim);
+        return;
+      }
+      if(tipoComp === 'paramontar' && !pendente){
+        /* o "Para montar" já fechou: esta linha é o PRÓXIMO item do quadro */
+        detalhando = false; tipoComp = null; /* segue o fluxo normal abaixo */
+      } else {
+        if(qdeFim!=null) fecharCom(qdeFim);
+        return;
+      }
+    }
+
+    const cand = porTamanho.find(c=>lcomp.includes(semAcento(c.nome)));
+    if(cand){
+      /* tira as palavras do nome para sobrar quantidade e medidas */
+      let resto = ' ' + ls + ' ';
+      semAcentoSimples(cand.nome).split(/\s+/).forEach(tk=>{
+        if(tk) resto = resto.replace(new RegExp('(^|[^a-z0-9])'+tk.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?=$|[^a-z0-9])','i'), '$1 ');
+      });
+      let area = null;
+      const dim = resto.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)(?![\d.,]*\s*[x×h])/);
+      if(dim && /m²|m2/.test(cand.un||'')) area = parseFloat(dim[1].replace(',','.')) * parseFloat(dim[2].replace(',','.'));
+      const semDim = resto.replace(/\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?h?/g,' ');
+      const nSolto = semDim.match(/(\d+(?:[.,]\d+)?)/);
+      const solto = nSolto ? parseFloat(nSolto[1].replace(',','.')) : null;
+      const restoLimpo = resto.replace(/[\s.,:—–-]+/g,'');
+      const fechaImediato = qdeCol!=null || (area!=null && restoLimpo.length <= 10) || (solto!=null && restoLimpo.length <= 12);
+      /* bloco aberto + linha que também dependeria da coluna = é detalhamento
+         do bloco ("HOUSE MIX ... PISO TELESCÓPICO 4x4"), não item novo */
+      if(pendente && !fechaImediato){ if(qdeFim!=null) fecharCom(qdeFim); return; }
+      fecharCom(null); /* fecha o item anterior do jeito que der */
+      pendente = {cand, area, solto, bruto:l0};
+      tituloAtual = orig.replace(/【\d{1,4}】/g,' ').split(/\s+c\/\s+/i)[0].replace(/\s+/g,' ').trim();
+      if(qdeCol!=null) fecharCom(qdeCol);                    /* a coluna manda */
+      else if(fechaImediato) fecharCom(null);                /* "PISO 10x20", "TENDA 5X5 - 6 UN" */
+      /* senão fica aberto esperando a Qde da coluna */
+      return;
+    }
+
+    if(pendente){ if(qdeFim!=null) fecharCom(qdeFim); return; } /* linha interna do bloco */
+
+    /* título de item fora do catálogo: vira sugestão quando a Qde chegar */
+    if(/[a-zà-öø-ÿ]{4,}/i.test(l) && ls.length >= 5){
+      /* "FORRAÇÃO 300 M2", "GUARDA-CORPO 40 UN": número + unidade no fim é a
+         quantidade ("2m" colado é medida, não quantidade — precisa do espaço) */
+      const mUn = l.match(/(\d+(?:[.,]\d+)?)\s+(un|p[cç]s?|m2|m²|m|kg|mod(?:ulo)?s?|módulos?)\.?\s*$/i);
+      let nome = l.split(/\s+c\/\s+|\s+com\s+/i)[0];
+      if(mUn) nome = nome.replace(mUn[0], '');
+      nome = nome
+        .replace(/\s*\d+(?:[.,]\d+)?\s*[x×]\s*\d+(?:[.,]\d+)?(?:\s*[x×]\s*\d+(?:[.,]\d+)?)?h?\s*-?\s*$/,'')
+        .replace(/[\s:—–-]+$/,'')
+        .replace(/\s+/g,' ').trim();
+      if(nome.length > 48) nome = nome.slice(0,48).trim();
+      const un = (mUn && /m2|m²/i.test(mUn[2])) ? 'm²' : (mUn && /^m$/i.test(mUn[2])) ? 'm'
+        : /m²|m2/i.test(l) ? 'm²' : (/metro linear/i.test(ls) ? 'm' : 'un');
+      pendente = {nome: nome || l.slice(0,40), un, bruto:l0};
+      tituloAtual = orig.replace(/【\d{1,4}】/g,' ').split(/\s+c\/\s+/i)[0].replace(/\s+/g,' ').trim();
+      if(qdeFim!=null) fecharCom(qdeFim);
+      else if(mUn) fecharCom(parseFloat(mUn[1].replace(',','.')));
+    } else ignoradas.push(l0);
   });
-  return {achados, ignoradas};
+  fecharCom(null);
+  return {achados, ignoradas, sugestoes, estruturas};
 }
 function previewOS(){
-  const {achados, ignoradas} = parseOS(document.getElementById('os-texto').value);
-  /* linha com cara de material (tem quantidade) que o catálogo ainda não conhece */
-  const novos = [];
+  const {achados, ignoradas, sugestoes, estruturas} = parseOS(document.getElementById('os-texto').value);
+  osEstruturas = estruturas || [];
+  /* sugestões do parser (blocos de OS em tabela) + linhas simples "nome qtd" */
+  const novos = [...(sugestoes||[])];
   ignoradas.forEach(l=>{
     const m = String(l).match(/^[\s•\-–*\d.)]*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ./x×-]{2,40}?)\s*[:\-–]?\s*(\d+(?:[.,]\d+)?)\s*(un|pç|pc|m2|m²|m|kg|modulos?|módulos?)?\s*$/i);
     if(!m) return;
     const nome = m[1].trim().replace(/\s+/g,' ');
-    if(nome.length < 3 || novos.some(n=>n.nome.toLowerCase()===nome.toLowerCase())) return;
+    if(nome.length < 3 || novos.some(n2=>n2.nome.toLowerCase()===nome.toLowerCase())) return;
     novos.push({nome, qtd: parseFloat(m[2].replace(',','.')), un: (m[3]||'un').toLowerCase().replace('módulos','módulo').replace('modulos','módulo')});
   });
   osNovos = novos;
   document.getElementById('os-preview').innerHTML =
+    (osEstruturas.length
+      ? '<div style="margin-bottom:10px"><b style="color:#1c5fb8">🏗 O que vai ser montado ('+osEstruturas.length+'):</b><br>'+
+        osEstruturas.map(e2=>'• '+e2).join('<br>')+'</div>'
+      : '')+
     (achados.length
       ? '<b style="color:#0f8a4d">Entendi ' + achados.length + ' material(is):</b><br>' +
         achados.map(a=>'• ' + a.nome + ' — <b>' + num(a.qtd) + '</b> ' + (a.un||'un')).join('<br>')
@@ -3064,22 +3200,42 @@ function cadastrarNovosOS(){
   toast('📦 ' + osNovos.length + ' material(is) criados no catálogo. Preencha peso e volume na aba Materiais para a carga ficar certa.');
   previewOS();
 }
+let osEstruturas = [];
 function aplicarOS(){
   const ev = eventos.find(e=>e.id===osEventoId); if(!ev) return;
   const achados = previewOS();
-  if(!achados.length) return toast('Nenhum material reconhecido — confira o texto ou cadastre o item no catálogo antes.');
+  if(!achados.length && !osEstruturas.length) return toast('Nenhum material ou estrutura reconhecidos — confira o texto ou cadastre o item no catálogo antes.');
   const substituir = document.getElementById('os-substituir').checked;
-  if(substituir) ev.itens = achados;
-  else {
-    ev.itens = ev.itens || [];
-    achados.forEach(a=>{
-      const ja = ev.itens.find(i=>i.nome===a.nome);
-      if(ja) ja.qtd = a.qtd; else ev.itens.push(a);
-    });
+  if(achados.length){
+    if(substituir) ev.itens = achados;
+    else {
+      ev.itens = ev.itens || [];
+      achados.forEach(a=>{
+        const ja = ev.itens.find(i=>i.nome===a.nome);
+        if(ja) ja.qtd = a.qtd; else ev.itens.push(a);
+      });
+    }
+  }
+  if(osEstruturas.length){
+    if(substituir || !(ev.estruturas||[]).length) ev.estruturas = [...osEstruturas];
+    else osEstruturas.forEach(e2=>{ if(!ev.estruturas.includes(e2)) ev.estruturas.push(e2); });
   }
   fechar('ov-os');
   salvar(); renderQuadro(); verEvento(ev.id);
-  toast('📄 OS lida: ' + achados.length + ' material(is) ' + (substituir?'definidos':'atualizados') + ' no evento.');
+  toast('📄 OS lida: ' + osEstruturas.length + ' estrutura(s) e ' + achados.length + ' material(is) no evento.');
+}
+function removerEstrutura(id, ix){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !ev.estruturas) return;
+  ev.estruturas.splice(ix, 1);
+  if(!ev.estruturas.length) ev.estruturas = null;
+  salvar(); renderQuadro(); verEvento(id);
+}
+function addEstrutura(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const inp = document.getElementById('estr-nova');
+  const t = (inp && inp.value || '').trim(); if(!t) return;
+  ev.estruturas = [...(ev.estruturas||[]), t];
+  salvar(); renderQuadro(); verEvento(id);
 }
 
 const SINONIMOS = {
