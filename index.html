@@ -922,7 +922,7 @@ function blocoEquipeDesm(ev, eq){
     const tt = todosMontadores().find(t=>t.nome===m) || {};
     const rot = (tt.lider?'líder ':'') + (tt.equipe==='piloto'?'piloto':(tt.equipe||''));
     const dpz = (ev.diasPessoa||{})[m];
-    const selo = dpz && dpz.ini ? ' <small style="color:#a86412;font-weight:700">📅 '+fmtD(dpz.ini).slice(0,5)+(dpz.fim&&dpz.fim!==dpz.ini?'–'+fmtD(dpz.fim).slice(0,5):'')+'</small>' : '';
+    const selo = dpz ? ' <small style="color:#a86412;font-weight:700" title="Dias desta pessoa no evento">📅 '+resumoDias(diasDe(ev, m))+'</small>' : '';
     return '<span class="mtag" style="background:#fdeceb;color:#8c2f27">'+m+
       (rot?' <small style="opacity:.7">('+rot+')</small>':'')+selo+
       ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho desta pessoa" onclick="abreDiasPessoa(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">📅</button>'+
@@ -973,6 +973,7 @@ function addFrenteD(id, nomeEq){
    senão, os dias das fases em que ela está escalada */
 function diasDe(ev, nome){
   const r = (ev.diasPessoa || {})[nome];
+  if(r && r.dias && r.dias.length) return [...r.dias].sort();  /* dias escolhidos um a um */
   if(r && r.ini) return diasEntre(r.ini, r.fim || r.ini);
   if(!temTimeDesm(ev)) return diasEquipe(ev);
   const eq = ev.equipe || plano(ev).equipe;
@@ -983,33 +984,72 @@ function diasDe(ev, nome){
   if(emD) diasEntre(ev.desm, fimDesm(ev)).forEach(d=>{ if(!out.includes(d)) out.push(d); });
   return out;
 }
+/* janela de dias que o calendário mostra: do evento, com 3 dias de folga nas pontas */
+function janelaDias(ev){
+  const i0 = dia(ev.mont), f0 = dia(fimDesm(ev)) || dia(ev.desm) || i0;
+  if(!i0) return [];
+  const a = new Date(i0+'T12:00'); a.setDate(a.getDate()-3);
+  const b = new Date((f0||i0)+'T12:00'); b.setDate(b.getDate()+3);
+  return diasEntre(a.toISOString().slice(0,10), b.toISOString().slice(0,10));
+}
+/* quem recebe a mudança: só a pessoa, ou a frente inteira dela */
+function alvoDias(ev, nome){
+  const alvo = [nome];
+  const chkEq = (document.getElementById('dp-eq')||{}).checked;
+  if(!chkEq) return alvo;
+  const casa = (todosMontadores().find(t=>t.nome===nome)||{}).equipe;
+  if(!casa) return alvo;
+  const eq = ev.equipe || plano(ev).equipe;
+  [...montadoresBase(ev, eq), ...timeDesmBase(ev, eq), eq].forEach(n=>{
+    const c2 = (todosMontadores().find(t=>t.nome===n)||{}).equipe;
+    if(c2===casa && !alvo.includes(n)) alvo.push(n);
+  });
+  return alvo;
+}
+/* liga/desliga UM dia — é assim que se marca folga no meio do período */
+function toggleDiaPessoa(id, nome, iso){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const alvo = alvoDias(ev, nome);
+  ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
+  alvo.forEach(n=>{
+    const atuais = new Set(diasDe(ev, n));
+    if(atuais.has(iso)) atuais.delete(iso); else atuais.add(iso);
+    const lista = [...atuais].sort();
+    if(!lista.length) delete ev.diasPessoa[n];
+    else ev.diasPessoa[n] = {dias: lista};
+  });
+  if(!Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  salvar(); renderQuadro(); verEvento(id);
+}
+/* resumo legível: "13 a 15, 17 a 20" */
+function resumoDias(lista){
+  if(!lista || !lista.length) return '';
+  const s = [...lista].sort(), blocos = [];
+  let ini = s[0], ant = s[0];
+  for(let i=1;i<=s.length;i++){
+    const d = s[i];
+    const seguinte = (()=>{ const x=new Date(ant+'T12:00'); x.setDate(x.getDate()+1); return x.toISOString().slice(0,10); })();
+    if(d !== seguinte){ blocos.push(ini===ant ? fmtD(ini).slice(0,5) : fmtD(ini).slice(0,5)+' a '+fmtD(ant).slice(0,5)); ini = d; }
+    ant = d;
+  }
+  return blocos.join(', ');
+}
 function setDiasPessoa(id, nome){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const ini = (document.getElementById('dp-ini')||{}).value || '';
   const fim = (document.getElementById('dp-fim')||{}).value || ini;
-  const chkEq = (document.getElementById('dp-eq')||{}).checked;
   const padraoIni = dia(ev.mont), padraoFim = dia(fimDesm(ev)) || dia(ev.desm) || padraoIni;
-  const alvo = [nome];
-  if(chkEq){
-    const casa = (todosMontadores().find(t=>t.nome===nome)||{}).equipe;
-    if(casa){
-      const eq = ev.equipe || plano(ev).equipe;
-      [...montadoresBase(ev, eq), ...(casa===eq?[eq]:[casa])].forEach(n=>{
-        const c2 = n===casa ? casa : (todosMontadores().find(t=>t.nome===n)||{}).equipe;
-        if(c2===casa && !alvo.includes(n)) alvo.push(n);
-      });
-    }
-  }
+  const alvo = alvoDias(ev, nome);
+  const lista = diasEntre(ini, fim || ini);
   ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
   alvo.forEach(n=>{
     if(!ini || (ini===padraoIni && fim===padraoFim)) delete ev.diasPessoa[n];
-    else ev.diasPessoa[n] = {ini, fim};
+    else ev.diasPessoa[n] = {dias: lista};
   });
   if(!Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
-  pessoaDias = null;
   salvar(); renderQuadro(); verEvento(id);
-  toast(alvo.length>1 ? '📅 Dias de trabalho da frente ('+alvo.length+' pessoas) definidos: '+fmtD(ini)+(fim!==ini?' a '+fmtD(fim):'')+'.'
-    : (ev.diasPessoa && ev.diasPessoa[nome] ? '📅 '+nome+' trabalha '+fmtD(ini)+(fim!==ini?' a '+fmtD(fim):'')+' neste evento.' : nome+' voltou aos dias normais do evento.'));
+  toast(alvo.length>1 ? '📅 Dias da frente ('+alvo.length+' pessoas): '+resumoDias(lista)+'. Clique nos quadradinhos para tirar um dia de folga no meio.'
+    : (ev.diasPessoa && ev.diasPessoa[nome] ? '📅 '+nome+': '+resumoDias(lista)+'. Clique nos quadradinhos para marcar folga no meio.' : nome+' voltou aos dias normais do evento.'));
 }
 let pessoaDias = null;
 function abreDiasPessoa(id, nome){
@@ -1028,7 +1068,22 @@ function editorDiasPessoa(ev, eq){
   const casa = ehLider ? eq : ((todosMontadores().find(t=>t.nome===nome)||{}).equipe);
   const colegas = casa ? [...montadoresBase(ev, eq), eq].filter(n=>n!==nome &&
       (n===casa || ((todosMontadores().find(t=>t.nome===n)||{}).equipe)===casa)).length : 0;
-  return '<div style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fbf7ef;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+  const meus = diasDe(ev, nome);
+  const proprio = !!((ev.diasPessoa||{})[nome]);
+  const grade = janelaDias(ev).map(d=>{
+    const dt = new Date(d+'T12:00');
+    const on = meus.includes(d);
+    const dsem = ['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()];
+    const fds = dt.getDay()===0 || dt.getDay()===6;
+    return '<button onclick="toggleDiaPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\',\''+d+'\')" '+
+      'title="'+(on?'Trabalha':'Não trabalha')+' em '+fmtD(d)+' — clique para '+(on?'marcar folga':'marcar trabalho')+'" '+
+      'style="min-width:46px;border-radius:8px;padding:5px 4px;cursor:pointer;font:inherit;font-size:11px;line-height:1.25;text-align:center;'+
+      (on ? 'background:#0f8a4d;color:#fff;border:1px solid #0f8a4d;font-weight:700'
+          : 'background:#fff;color:'+(fds?'#c0392b':'var(--muted)')+';border:1px dashed var(--line)')+'">'+
+      dsem+'<br><b style="font-size:13px">'+String(dt.getDate()).padStart(2,'0')+'</b></button>';
+  }).join('');
+  return '<div style="margin-top:10px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fbf7ef">'+
+    '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
     '<b style="font-size:13px">📅 Dias de '+nome+' nesta operação</b>'+
     '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)">de '+
       '<input type="date" id="dp-ini" value="'+ini+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px"></label>'+
@@ -1039,6 +1094,14 @@ function editorDiasPessoa(ev, eq){
     '<button class="mini" onclick="setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Aplicar</button>'+
     '<button class="mini" onclick="document.getElementById(\'dp-ini\').value=\''+ (dia(ev.mont)||'') +'\';document.getElementById(\'dp-fim\').value=\''+ (dia(fimDesm(ev))||dia(ev.desm)||'') +'\';setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Voltar ao padrão</button>'+
     '<button class="mini" onclick="pessoaDias=null;verEvento(\''+ev.id+'\')">Fechar</button>'+
+    '</div>'+
+    '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">Clique no dia para marcar ou tirar. <b>Verde = trabalha</b>; dia sem marcação é folga. Serve para quem começa, folga no meio e volta.</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:5px">'+grade+'</div>'+
+      '<div style="font-size:12.5px;color:var(--ink2);margin-top:9px">'+
+        (proprio ? '<b>'+meus.length+' dia(s):</b> '+resumoDias(meus) : '<span style="color:var(--muted)">Seguindo os dias normais do evento ('+meus.length+' dias). Clique em qualquer dia para definir os dias desta pessoa.</span>')+
+      '</div>'+
+    '</div>'+
   '</div>';
 }
 /* o líder também pode folgar num evento */
@@ -2272,7 +2335,7 @@ function verEvento(id){
             const rotCasa = (tt.lider ? 'líder ' : '') + (casa==='piloto' ? 'piloto' : casa);
             const fo = (ev.folgas||[]).includes(m);
             const dpz = (ev.diasPessoa||{})[m];
-            const seloDias = dpz && dpz.ini ? ' <small style="color:#a86412;font-weight:700">📅 '+fmtD(dpz.ini).slice(0,5)+(dpz.fim&&dpz.fim!==dpz.ini?'–'+fmtD(dpz.fim).slice(0,5):'')+'</small>' : '';
+            const seloDias = dpz ? ' <small style="color:#a86412;font-weight:700" title="Dias desta pessoa no evento">📅 '+resumoDias(diasDe(ev, m))+'</small>' : '';
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':(fora?'background:#eaf2fd;color:#1c5fb8':''))+'">'+(fo?'💤 ':'')+m+
               (fora ? ' <small style="opacity:.7">('+rotCasa+')</small>' : '')+seloDias+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho desta pessoa no evento (frentes que começam em dias diferentes)" onclick="abreDiasPessoa(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">📅</button>'+
@@ -4033,10 +4096,9 @@ function mensagemEscala(ev){
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
   L.push('');
   const comDias = m => {
-    const r = (ev.diasPessoa||{})[m];
-    if(!r || !r.ini) return m;
-    const f = r.fim && r.fim !== r.ini;
-    return m + ' (' + fmtD(r.ini).slice(0,5) + (f ? ' a ' + fmtD(r.fim).slice(0,5) : '') + ')';
+    if(!(ev.diasPessoa||{})[m]) return m;
+    const res = resumoDias(diasDe(ev, m));
+    return res ? m + ' (' + res + ')' : m;
   };
   if(temTimeDesm(ev)){
     L.push('👷 *Montagem — equipe ' + eq + '*' + (liderFolga(ev, eq) ? ' _(líder de folga)_' : '') + ': ' + montadoresOp(ev, eq).map(comDias).join(', '));
