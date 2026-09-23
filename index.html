@@ -572,12 +572,13 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div id="km-status" style="margin-top:8px;font-size:12.5px;color:var(--muted)"></div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
-        <label>Tempo para carregar <input id="cfg-carga" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoCarga=+this.value||0;salvar()"> min</label>
+        <label>🌉 Ponte Rio-Niterói: caminhão atravessa até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
+        <label>e depois das <input id="cfg-ponte2" type="time" title="Deixe vazio se não pode atravessar à noite" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteDepois=this.value||'';salvar();renderQuadro()"></label>
         <label>Margem de trânsito <input id="cfg-margem" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.margemSaida=+this.value||0;salvar()"> min</label>
         <label>Descarga em cada parada <input id="cfg-desc" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoDescarga=+this.value||0;salvar()"> min</label>
         <label>Juntar viagens até <input id="cfg-raio" type="number" min="0" step="1" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.raioJuntar=+this.value||0;salvar()"> km entre eventos</label>
       </div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">A chegada é a hora de início da montagem (ou da desmontagem). Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">O carregamento é sempre no dia anterior à saída. A chegada é a hora de início da montagem (ou da desmontagem). Se a rota passa pela Ponte Rio-Niterói, a saída é antecipada para atravessar dentro do horário. Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2 style="margin:0">🖼 Logo para documentos</h2>
@@ -1207,8 +1208,9 @@ function addFrenteD(id, nomeEq){
    senão, os dias das fases em que ela está escalada */
 function diasDe(ev, nome){
   const r = (ev.diasPessoa || {})[nome];
-  if(r && r.dias && r.dias.length) return [...r.dias].sort();  /* dias escolhidos um a um */
-  if(r && r.ini) return diasEntre(r.ini, r.fim || r.ini);
+  /* dias escolhidos um a um — só valem dentro da janela do evento (restos de data errada saem) */
+  if(r && r.dias && r.dias.length){ const jan = new Set(janelaDias(ev)); return [...r.dias].filter(d=>jan.has(d)).sort(); }
+  if(r && r.ini){ const jan = new Set(janelaDias(ev)); return diasEntre(r.ini, r.fim || r.ini).filter(d=>jan.has(d)); }
   if(!temTimeDesm(ev)) return diasEquipe(ev);
   const eq = ev.equipe || plano(ev).equipe;
   const out = [];
@@ -1552,8 +1554,20 @@ function diasEntre(a,b){
 }
 /* Montagem e desmontagem podem levar mais de um dia. Quando a planilha
    traz o término, a equipe fica presa o período inteiro. */
-const fimMont = ev => ev.montFim && dia(ev.montFim) >= dia(ev.mont) ? ev.montFim : ev.mont;
-const fimDesm = ev => ev.desmFim && dia(ev.desmFim) >= dia(ev.desm) ? ev.desmFim : ev.desm;
+/* "até" da montagem/desmontagem só vale se fizer sentido: não passa do evento
+   nem de 45 dias — data trocada (dia/mês) ou ano errado viraria meses de montagem */
+const difDias = (a, b) => Math.round((new Date(dia(b)+'T12:00') - new Date(dia(a)+'T12:00')) / 864e5);
+function fimMontInvalido(ev){
+  if(!ev.montFim || !ev.mont || dia(ev.montFim) < dia(ev.mont)) return false;
+  const fimEvt = dia(ev.evtFim) || dia(ev.evt);
+  return difDias(ev.mont, ev.montFim) > 45 || (fimEvt && dia(ev.montFim) > fimEvt);
+}
+function fimDesmInvalido(ev){
+  if(!ev.desmFim || !ev.desm || dia(ev.desmFim) < dia(ev.desm)) return false;
+  return difDias(ev.desm, ev.desmFim) > 45;
+}
+const fimMont = ev => ev.montFim && dia(ev.montFim) >= dia(ev.mont) && !fimMontInvalido(ev) ? ev.montFim : ev.mont;
+const fimDesm = ev => ev.desmFim && dia(ev.desmFim) >= dia(ev.desm) && !fimDesmInvalido(ev) ? ev.desmFim : ev.desm;
 const diasEquipe = ev => [...new Set([...diasEntre(ev.mont, fimMont(ev)), ...diasEntre(ev.desm, fimDesm(ev))])];
 const diasVeiculo = ev => ev.permanece ? diasEntre(ev.mont, fimDesm(ev)) : diasEquipe(ev);
 const periodo2 = (a,b) => dia(a)===dia(b) ? fmtD(a) : fmtD(a)+' a '+fmtD(b);
@@ -1869,8 +1883,13 @@ function analisar(ev, ag){
   }
   ag = ag || novaAgenda();
   const c = carga(ev);
+  const datasRuins = [];
+  if(fimMontInvalido(ev)) datasRuins.push({msg:'A montagem está de ' + fmtD(ev.mont) + ' até ' + fmtD(ev.montFim) + ' (' + (difDias(ev.mont, ev.montFim)+1) + ' dias)' + ((dia(ev.evtFim)||dia(ev.evt)) && dia(ev.montFim) > (dia(ev.evtFim)||dia(ev.evt)) ? ', terminando depois do evento' : '') + '. A Central está considerando só o dia ' + fmtD(ev.mont) + ' até você corrigir.',
+    dica:'Abra o evento e corrija o "até" da montagem — provavelmente dia e mês trocados ou ano errado na planilha.'});
+  if(fimDesmInvalido(ev)) datasRuins.push({msg:'A desmontagem está de ' + fmtD(ev.desm) + ' até ' + fmtD(ev.desmFim) + ' (' + (difDias(ev.desm, ev.desmFim)+1) + ' dias). A Central está considerando só o dia ' + fmtD(ev.desm) + ' até você corrigir.',
+    dica:'Abra o evento e corrija o "até" da desmontagem.'});
   const dEq = diasEquipe(ev), dVe = diasVeiculo(ev);
-  const r = {carga:c, conflitos:[], just:{}, frota:[]};
+  const r = {carga:c, conflitos:[...datasRuins], just:{}, frota:[]};
 
   /* 1 e 2 — o material define a equipe */
   if(precisaJailson(ev)){
@@ -2203,8 +2222,9 @@ function opsDoDia(D){
       .map(pp => Object.assign({}, pp, {mt: manutDia(ev, pp.nome, D)}));
     if(!fase && !viagens.length && !pessoas.length) return;
     const lista = fase==='desm' ? dD : dM;
-    ops.push({ev, fase: fase || (viagens[0] && viagens[0].fase) || 'mont',
-      n: lista.indexOf(D)+1, tot: lista.length,
+    const fora = !fase && !viagens.length;   /* alguém marcado num dia que não é de montagem nem de desmontagem */
+    ops.push({ev, dia: D, fase: fase || (viagens[0] && viagens[0].fase) || 'mont', fora,
+      n: fase ? lista.indexOf(D)+1 : 0, tot: fase ? lista.length : 0,
       hora: String(fase==='desm' ? ev.desm : ev.mont || '').slice(11,16),
       equipe: ev.equipe || plano(ev).equipe, pessoas, viagens});
   });
@@ -2227,12 +2247,49 @@ function opsDoDia(D){
   const camDuplo = Object.keys(cam).filter(k=>cam[k].size>1).map(k=>({v:veiculos.find(y=>y.id===k), onde:[...grupo[k]]}));
   return {ops, duplos, camDuplo};
 }
+/* pessoas com dia marcado fora da montagem e da desmontagem deste evento */
+function diasForaFases(ev){
+  if(!ev.mont) return [];
+  const fases = new Set([...diasEntre(ev.mont, fimMont(ev)), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [])]);
+  return pessoasNaEscala(ev).filter(pp=>!pp.prod && (ev.diasPessoa||{})[pp.nome])
+    .map(pp=>({nome:pp.nome, dias: diasDe(ev, pp.nome).filter(d=>!fases.has(d))})).filter(x=>x.dias.length);
+}
+function blocoDiasFora(ev){
+  const l = diasForaFases(ev); if(!l.length) return '';
+  return '<div style="grid-column:1/-1"><div class="alert amber" style="margin:0">📅 <b>Dias marcados fora da montagem e da desmontagem:</b> '+
+    l.map(x=>x.nome+' ('+x.dias.map(d=>fmtD(d).slice(0,5)).join(', ')+')').join('; ')+
+    '. Se foi engano (sobra de data errada), tire esses dias; se for plantão no evento, pode deixar. '+
+    '<button class="mini" onclick="limparDiasFora(\''+ev.id+'\')">Tirar esses dias</button></div></div>';
+}
+function limparDiasFora(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const l = diasForaFases(ev);
+  l.forEach(x=>{
+    const r = ev.diasPessoa[x.nome];
+    const fica = diasDe(ev, x.nome).filter(d=>!x.dias.includes(d));
+    ev.diasPessoa[x.nome] = {dias: fica};
+    if(!fica.length) delete ev.diasPessoa[x.nome];
+  });
+  if(ev.diasPessoa && !Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  if(typeof agendarEscalaEv === 'function') agendarEscalaEv(id);
+  salvar(); renderQuadro(); verEvento(id);
+  toast('📅 Dias fora da montagem e da desmontagem retirados — a Escala de Montadores é atualizada em seguida.');
+}
+/* rótulo da operação: fase e dia dela */
+function rotuloOp(o, sep){
+  sep = sep || ' · ';
+  if(o.fora){
+    const noEvento = diasEntre(o.ev.evt, o.ev.evtFim || o.ev.evt).includes(o.dia);
+    return (noEvento ? 'Dia do evento' : 'Fora da montagem e da desmontagem') + sep + 'dias marcados de ' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ');
+  }
+  return (o.fase==='desm' ? 'Desmontagem' : 'Montagem') + (o.tot>1 ? sep + 'dia ' + o.n + ' de ' + o.tot : '');
+}
 /* mensagem do líder só com o que acontece NAQUELE dia */
 function mensagemDia(o, D){
   const ev = o.ev, L = [];
   L.push('*' + (D===diaSeguinte() ? 'AMANHÃ' : 'ESCALA') + ' — ' + rotDia(D) + '*');
   L.push('*' + ev.nome + '*');
-  L.push((o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
+  L.push(o.fora ? '📅 ' + rotuloOp(o, ' — ') : (o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
   if(ev.local && ev.local!=='—') L.push('📍 ' + ev.local + (ev.cidade && ev.cidade!=='—' ? ' — ' + ev.cidade : ''));
   else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
@@ -2272,10 +2329,11 @@ function renderAmanha(){
     if(x.manut) alertas.push('🔧 <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> está em manutenção e segue escalado em ' + esc(o.ev.nome));
     else if(!x.motorista && !x.jaLocal) alertas.push('🧑‍✈️ <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> sem motorista em ' + esc(o.ev.nome));
   }));
+  ops.forEach(o=>{ if(o.fora) alertas.push('📅 <b>' + esc(o.ev.nome) + '</b>: ' + esc(o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ')) + ' marcado(s) num dia fora da montagem e da desmontagem — confira os 📅 dias no evento'); });
   ops.forEach(o=>{ if(!o.pessoas.some(pp=>!pp.prod) && o.fase) alertas.push('👷 <b>' + esc(o.ev.nome) + '</b> sem ninguém escalado para o dia'); });
   ops.forEach(o=>{ const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
     if(w && riscoClima(w)) alertas.push((riscoClima(w)===2?'⛈':'☔') + ' <b>' + esc(o.ev.nome) + '</b> (' + esc(c) + '): ' + txtClima(w)); });
-  const combos = htmlJuntar(D);
+  const combos = htmlJuntar(D) + htmlCarregarNoDia(somaDiaISO(D, -1), D);
   document.getElementById('am-corpo').innerHTML = !ops.length
     ? '<div class="panel empty"><b>Nada na rua em ' + rotDia(D) + '</b>Nenhuma montagem, desmontagem ou saída de caminhão.</div>'
     : (alertas.length ? '<div class="alert red" style="margin:0 0 12px"><b>Conferir antes de liberar:</b><br>' + alertas.join('<br>') + '</div>' : '<div class="alert green" style="margin:0 0 12px">Tudo certo: ninguém em dois lugares, nenhum caminhão repetido e todos com motorista.</div>') + combos +
@@ -2283,7 +2341,7 @@ function renderAmanha(){
         const eq = o.equipe;
         return '<div class="am-op" onclick="fechar(\'ov-amanha\');verEvento(\''+o.ev.id+'\')">'+
           '<div class="am-cab"><span class="ic '+(o.fase==='desm'?'d':'m')+'">'+(o.fase==='desm'?'📤':'🔨')+'</span>'+
-            '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+
+            '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+esc(rotuloOp(o))+
               (o.ev.cidade && o.ev.cidade!=='—' ? ' · '+esc(o.ev.cidade) : '')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</small></div>'+
             (o.hora ? '<b class="hora">'+o.hora+'</b>' : '')+'</div>'+
           (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomeDo(x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
@@ -2338,7 +2396,7 @@ function imprimirAmanha(){
     '<h1>Operações — '+rotDia(D)+'</h1><p class="sub">'+ops.length+' operação(ões) · '+saidas.length+' saída(s) de caminhão · gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
     ((duplos.length||camDuplo.length) ? '<div class="alerta">'+duplos.map(x=>'⚠ '+esc(x.nome)+' em dois lugares: '+x.onde.map(esc).join(' e ')).concat(camDuplo.map(x=>'⚠ '+esc(x.v.tipo+' '+x.v.placa)+' em dois eventos: '+x.onde.map(esc).join(' e '))).join('<br>')+'</div>' : '')+
     (saidas.length ? '<h2>Saída de caminhões</h2><table><thead><tr><th>Sai</th><th>Caminhão</th><th>Motorista</th><th>Evento</th><th>Destino</th><th>Visto</th></tr></thead><tbody>'+
-      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>carregar '+s.hs.carregar+' · chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
+      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>'+(s.hs.ponte?'🌉 ponte '+s.hs.ponte+' · ':'')+'chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
     '<h2>Equipes</h2>'+ops.map(o=>'<div class="op"><b>'+esc(o.ev.nome)+'</b> — '+(o.fase==='desm'?'desmontagem':'montagem')+(o.tot>1?' (dia '+o.n+' de '+o.tot+')':'')+(o.hora?' · início '+o.hora:'')+
       '<br>👷 <b>'+esc(o.equipe)+'</b>: '+(o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' (produtor)':'')+(pp.mt?' (manutenção)':'')).join(', ')||'—')+
       ((o.ev.respNome||o.ev.respTel)?'<br>📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — ')):'')+
@@ -2558,12 +2616,22 @@ async function coordGalpao(){
   return CONFIG.galpaoCoord;
 }
 async function rotaKm(a, b){
-  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=false');
+  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson');
   if(!r.ok) throw new Error('rota ' + r.status);
   const j = await r.json();
   if(!j.routes || !j.routes[0]) return null;
   /* o OSRM calcula para carro: caminhão leva uns 30% a mais */
-  return {km: j.routes[0].distance / 1000, min: (j.routes[0].duration || 0) / 60 * 1.3};
+  const rt = j.routes[0], min = (rt.duration || 0) / 60 * 1.3;
+  /* passa pela Ponte Rio-Niterói? e em quanto tempo chega nela */
+  const pts = (rt.geometry && rt.geometry.coordinates) || [];
+  let acum = 0, fracPonte = null;
+  for(let i = 0; i < pts.length; i++){
+    if(i) acum += distLinha({lat:pts[i-1][1], lon:pts[i-1][0]}, {lat:pts[i][1], lon:pts[i][0]});
+    const q = {lat:pts[i][1], lon:pts[i][0]};
+    if(PONTE_PTS.some(pp => distLinha(pp, q) < 1.2)){ fracPonte = acum; break; }
+  }
+  const tot = rt.distance / 1000;
+  return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1};
 }
 /* calcula e grava o km do evento; devolve {km, fonte} ou null */
 async function calcularKm(id, silencioso){
@@ -2581,6 +2649,7 @@ async function calcularKm(id, silencioso){
     const rt = await rotaKm(orig, dest);
     if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
     ev.km = Math.round(rt.km); ev.kmFonte = fonte; ev.kmMin = Math.round(rt.min) || null;
+    if(rt.comGeo){ ev.ponteRota = rt.ponte; ev.minPonte = rt.minPonte; }
     ev.geo = {lat:dest.lat, lon:dest.lon};
     salvar(); renderQuadro();
     if(!silencioso){ verEvento(id); toast('📍 ' + ev.km + ' km do galpão até o evento, por estrada' + (fonte==='cidade' ? ' (calculado pelo centro da cidade — confira)' : '') + '.'); }
@@ -2619,12 +2688,32 @@ async function testarGalpao(){
 }
 
 /* ================= HORA DE SAÍDA =================
-   chegada = hora de início da fase; sair = chegada − estrada − margem;
-   carregar = sair − tempo de carga */
+   chegada = hora de início da fase; sair = chegada − estrada − margem.
+   O carregamento é SEMPRE no dia anterior à saída.
+   Ponte Rio-Niterói: caminhão só atravessa até as 06:00 (ajustável) —
+   se a rota passa pela ponte, a saída é antecipada e o caminhão espera no local. */
+const PONTE_PTS = [{lat:-22.8725, lon:-43.1480}, {lat:-22.8665, lon:-43.1790}]; /* vão central, sobre a baía */
 function cfgSaida(){
   const n = (v, pad) => (v === undefined || v === null || v === '' || isNaN(+v)) ? pad : +v;
-  return {carga:n(CONFIG.tempoCarga,60), margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20)};
+  return {margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20),
+    ponteAte: CONFIG.ponteAte || '06:00', ponteDepois: CONFIG.ponteDepois || ''};
 }
+/* passa pela ponte: escolha manual > rota calculada > cidade do Rio com galpão do outro lado */
+function passaPonte(ev){
+  if(ev.ponte === 'sim') return true;
+  if(ev.ponte === 'nao') return false;
+  if(typeof ev.ponteRota === 'boolean') return ev.ponteRota;
+  const cid = semAcentoSimples(ev.cidade||''), gal = semAcentoSimples(CONFIG.galpao||'');
+  if(!gal) return false;
+  const ladoRio = s => /rio de janeiro|\brj - rio\b/.test(s) && !/niteroi|sao goncalo|marica|itaborai|rio bonito/.test(s);
+  return /rio de janeiro/.test(cid) && !ladoRio(gal);
+}
+function minAtePonte(ev){
+  if(+ev.minPonte) return +ev.minPonte;
+  const vi = minViagem(ev) || 0;
+  return Math.max(0, vi - 25);   /* sem rota: a ponte fica perto do fim do caminho */
+}
+const somaDiaISO = (iso, n) => { const d = new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 function minViagem(ev){
   if(+ev.kmMin) return Math.round(+ev.kmMin);
   if(+ev.km) return Math.round(+ev.km / cfgSaida().vel * 60);
@@ -2633,13 +2722,32 @@ function minViagem(ev){
 const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); };
 const minDe = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t||''); return m ? (+m[1])*60 + (+m[2]) : null; };
 const durTxt = m => m >= 60 ? Math.floor(m/60) + 'h' + (m%60 ? String(m%60).padStart(2,'0') : '') : m + ' min';
-function horariosSaida(ev, fase){
-  /* viagem combinada: quem manda é a rota (a saída é uma só) */
+function horariosSaida(ev, fase, D){
+  const base = D || dia(fase==='desm' ? ev.desm : ev.mont);
   const ch = minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
   const vi = minViagem(ev);
-  if(ch == null || vi == null) return null;
-  const c = cfgSaida(), sai = ch - vi - c.margem;
-  return {chegada:hm(ch), saida:hm(sai), carregar:hm(sai - c.carga), viagem:vi, vespera: sai < 0, vesperaCarga: sai - c.carga < 0};
+  if(ch == null || vi == null || !base) return null;
+  const c = cfgSaida();
+  let sai = ch - vi - c.margem, ponte = null, ponteAjustou = false;
+  if(passaPonte(ev)){
+    const mp = minAtePonte(ev);
+    const ate = minDe(c.ponteAte), dep = minDe(c.ponteDepois);
+    const cruza = sai + mp;                       /* minuto do dia (pode ser negativo = véspera) */
+    const cruzaDia = ((cruza % 1440) + 1440) % 1440;
+    const ok = cruzaDia <= ate || (dep != null && cruzaDia >= dep);
+    if(!ok){
+      /* à noite (se liberado) e ainda chegando a tempo; senão antecipa para a manhã (10 min de folga) */
+      const noite = dep != null ? dep + 5 - mp : null;
+      sai = (noite != null && noite + vi <= ch && noite > sai) ? noite : ate - 10 - mp;
+      ponteAjustou = true;
+    }
+    ponte = hm(sai + mp);
+  }
+  const chegaMin = sai + vi;
+  const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
+  return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0,
+    diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou,
+    espera: ch - chegaMin > c.margem + 5 ? ch - chegaMin : 0};
 }
 /* horário de uma operação do dia: numa viagem combinada vale a saída da rota */
 function saidaDaOp(o, D){
@@ -2652,25 +2760,64 @@ function saidaDaOp(o, D){
       return Object.assign({}, rt.h1, {chegada: rt.chegada2 || '?', parada:2, primeira: rt.paradas[0].ev.nome});
     }
   }
-  return horariosSaida(o.ev, o.fase);
+  return horariosSaida(o.ev, o.fase, D);
 }
 function txtSaida(hs){
   if(!hs) return '';
-  if(hs.parada === 2) return '🕐 Caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
-  return '🕐 Carregar ' + hs.carregar + (hs.vesperaCarga ? ' (véspera)' : '') + ' · sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' · chegar ' + hs.chegada;
+  /* desmontagem: o caminhão vai vazio buscar o material — não tem carregamento */
+  const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase();
+  if(hs.parada === 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
+  return car + ' · 🕐 sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') +
+    (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : '') + ' · chegar ' + hs.chegada +
+    (hs.espera ? ' (início ' + hs.inicio + ')' : '');
 }
 function blocoSaida(ev){
   if(minViagem(ev) == null) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância (ou use 📍 Calcular) para a Central dizer a hora de sair.</div>';
   const lin = [];
   const hM = horariosSaida(ev, 'mont');
-  if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM).slice(3));
+  if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM));
   if(ev.desm){
     if(ev.permanece && !temFrotaDesm(ev)) lin.push('<b>📤 Desmontagem</b> — caminhão já está no local');
-    else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD).slice(3)); }
+    else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD)); }
   }
   const c = cfgSaida();
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' +
-    '<div style="font-size:11px;color:var(--muted)">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · ' + c.carga + ' min para carregar — ajuste em Integrações</div>';
+    ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
+      ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (caminhão só atravessa até ' + c.ponteAte + (c.ponteDepois ? ' ou depois das ' + c.ponteDepois : '') + ') — o caminhão chega antes e espera no local.</div>' : '') +
+    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
+      ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
+        '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
+        '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select></div>';
+}
+function passaPonteAuto(ev){ const s = ev.ponte; ev.ponte = null; const r = passaPonte(ev); ev.ponte = s; return r; }
+function setPonte(id, v){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.ponte = v || null;
+  salvar(); renderQuadro(); verEvento(id);
+}
+
+/* o que carrega num dia: viagens cuja saída é no dia seguinte (ou na madrugada do outro) */
+function carregarNoDia(Dc){
+  const out = [];
+  [1, 2].forEach(n=>{
+    const D = somaDiaISO(Dc, n);
+    opsDoDia(D).ops.forEach(o=>{
+      const hs = saidaDaOp(o, D);
+      if(!hs || hs.fase === 'desm' || hs.carregarDia !== Dc) return;
+      o.viagens.filter(x=>!x.jaLocal).forEach(x=>{
+        if(x.junto && hs.parada === 2) return;   /* viagem combinada: carrega uma vez só, na 1ª parada */
+        out.push({o, x, hs, D});
+      });
+    });
+  });
+  return out.sort((a,b)=> (a.hs.diaSaida + a.hs.saida).localeCompare(b.hs.diaSaida + b.hs.saida));
+}
+function htmlCarregarNoDia(Dc){
+  const l = carregarNoDia(Dc);
+  if(!l.length) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + ' (véspera da saída)</b><br>' +
+    l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomeDo(c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
 }
 
 /* ================= FICHA DO LOCAL =================
@@ -2749,7 +2896,7 @@ function rotaJunta(D, aId, bId, fase){
   const ord = [a, b].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)) || ((+x.km||0) - (+y.km||0)));
   const [p1, p2] = ord, trecho = kmEntre(p1, p2);
   const c = cfgSaida();
-  const h1 = horariosSaida(p1, fase);
+  const h1 = horariosSaida(p1, fase, D);
   const minTrecho = trecho != null ? Math.round(trecho / c.vel * 60) : null;
   const cheg2 = (h1 && minTrecho != null) ? minDe(h1.chegada) + c.descarga + minTrecho : null;
   const kmTot = (+p1.km||0) + (trecho||0) + (+p2.km||0);
@@ -3377,7 +3524,7 @@ function verEvento(id){
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
-      blocoJuntarEv(ev)+
+      blocoJuntarEv(ev)+blocoDiasFora(ev)+
     '</div></div>'+
 
     '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
@@ -3553,7 +3700,7 @@ function setRespTel(id, valor){
   salvar(); renderQuadro();
 }
 function setKmEvento(id, valor){
-  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; } }
+  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; e0.minPonte = null; } }
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
   salvar(); renderQuadro(); verEvento(id); /* recalcula frota (regra do agregado usa o km) */
@@ -5252,7 +5399,7 @@ function renderCadastros(){
 
   const ge = document.getElementById('galpao-end');
   if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
-  { const c = cfgSaida(); [['cfg-carga',c.carga],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
+  { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
   const qs = document.getElementById('quem-sou');
@@ -6752,10 +6899,10 @@ function rolarTV(){
 function statusTV(hs, D){
   if(!hs || D !== HOJE) return null;
   const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes();
-  const sai = hs.vespera ? -1 : minDe(hs.saida), car = hs.vesperaCarga ? -1 : minDe(hs.carregar);
-  if(sai >= 0 && m >= sai + 10) return {cls:'saiu', txt:'SAIU'};
-  if(car >= 0 && m >= car - 30) return {cls:'agora', txt: m >= car ? 'CARREGANDO' : 'CARREGAR JÁ'};
+  const sai = hs.vespera ? -1 : minDe(hs.saida);
   if(sai < 0) return {cls:'saiu', txt:'SAIU (VÉSPERA)'};
+  if(m >= sai + 10) return {cls:'saiu', txt:'SAIU'};
+  if(m >= sai - 60) return {cls:'agora', txt: m >= sai ? 'SAINDO' : 'SAI EM ' + (sai - m) + ' MIN'};
   return {cls:'', txt:'AGUARDANDO'};
 }
 function cardTV(o, D){
@@ -6771,15 +6918,23 @@ function cardTV(o, D){
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
     '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
-    '<div class="tv-sub">'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
+    '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
     (hs ? '<div class="tv-hor">'+(hs.parada===2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
-        : '<span>carregar <b>'+hs.carregar+'</b>'+(hs.vesperaCarga?' <small>(véspera)</small>':'')+'</span><span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span><span>chega '+hs.chegada+'</span>')+'</div>'
-       : (o.hora ? '<div class="tv-hor"><span>início <b>'+o.hora+'</b></span></div>' : ''))+
+        : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
+       : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>início <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
   '</div>';
+}
+function carregarTV(){
+  const l = carregarNoDia(HOJE);
+  if(!l.length) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="tv-op" style="border-left-color:#17a05e;background:#15402c"><div class="tv-nome">📦 CARREGAR HOJE</div>'+
+    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomeDo(c.x.junto)):'')+
+      ' — sai <b style="color:#ffb25e">'+(c.hs.diaSaida===HOJE?'hoje':rotDia(c.hs.diaSaida).toLowerCase())+' '+c.hs.saida+'</b>'+(c.hs.ponte?' · 🌉 '+c.hs.ponte:'')+'</div>').join('')+'</div>';
 }
 function listaTV(D){
   const r = opsDoDia(D);
@@ -6803,13 +6958,14 @@ function renderTV(){
   document.getElementById('tv-cols').innerHTML = listas.map(({D, r}, i)=>
     '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
-      '<div class="tv-lista">'+(r.ops.length ? r.ops.map(o=>cardTV(o, D)).join('') : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>').join('');
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length ? r.ops.map(o=>cardTV(o, D)).join('') : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>').join('');
   document.querySelectorAll('#tv .tv-lista').forEach((e2,i)=>{ e2.scrollTop = guarda[i] || 0; });
   /* rodapé: o que precisa de atenção */
   const al = [];
   listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
     r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
     r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
+    r.ops.filter(o=>o.fora).forEach(o=>al.push(q + ': ' + o.ev.nome + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'));
     r.ops.forEach(o=>o.viagens.forEach(x=>{
       if(x.manut) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção');
       else if(!x.motorista && !x.jaLocal) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + o.ev.nome + ')');
