@@ -2514,6 +2514,42 @@ async function geocodCidade(nome){
   const j = await r.json(); const x = j && j.results && j.results[0];
   return x ? {lat:x.latitude, lon:x.longitude} : null;
 }
+/* previsão de UMA cidade (usada ao abrir o evento e pelo lote) */
+const climaPendente = {};
+async function climaCidade(c, forcar){
+  const reg = CLIMA[c] || {};
+  if(!forcar && reg.dias && reg.t && Date.now() - reg.t < 3*3600*1000) return reg;
+  if(reg.lat == null){
+    let g = null;
+    try{ g = await geocodCidade(c); }catch(e){}
+    if(!g){ /* segunda tentativa: pelo mapa (OpenStreetMap) */
+      try{ const x = await geocodEndereco(c.replace(/\s*[-\/]\s*[A-Z]{2}$/,'') + ', Brasil'); if(x) g = {lat:x.lat, lon:x.lon}; }catch(e){}
+    }
+    if(!g){ CLIMA[c] = {semLocal:true, t:Date.now()}; guardarClima(); return CLIMA[c]; }
+    reg.lat = g.lat; reg.lon = g.lon;
+  }
+  const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
+    '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
+  const r = await fetch(u); if(!r.ok) throw new Error('previsão ' + r.status);
+  const j = await r.json(), dd = j.daily || {};
+  reg.dias = {};
+  (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
+    rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
+  reg.t = Date.now(); delete reg.semLocal; delete reg.erro;
+  CLIMA[c] = reg; guardarClima();
+  return reg;
+}
+/* abre o evento sem previsão: busca na hora e redesenha */
+function pedirClima(ev){
+  const c = cidadeClima(ev); if(!c || climaPendente[c]) return;
+  climaPendente[c] = true;
+  climaCidade(c, false).catch(e=>{ CLIMA[c] = Object.assign(CLIMA[c]||{}, {erro: e.message || 'sem conexão', tErro: Date.now()}); })
+    .finally(()=>{ delete climaPendente[c];
+      const m = document.getElementById('ov-ev');
+      const digitando = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName || '') && m && m.contains(document.activeElement);
+      if(m && m.classList.contains('on') && evAberto === ev.id && !digitando) verEvento(ev.id);
+      renderQuadro(); });
+}
 async function atualizarClima(forcar){
   if(climaRodando) return; climaRodando = true;
   try{
@@ -2522,18 +2558,7 @@ async function atualizarClima(forcar){
     const cidades = [...new Set(eventos.filter(ev => !ev.esp && ev.mont && dia(ev.mont) <= limISO && (dia(fimDesm(ev)) || dia(ev.mont)) >= HOJE)
       .map(cidadeClima).filter(Boolean))];
     for(const c of cidades){
-      const reg = CLIMA[c] || {};
-      if(!forcar && reg.t && Date.now() - reg.t < 3*3600*1000) continue;
-      if(reg.lat == null){ const g = await geocodCidade(c); if(!g){ CLIMA[c] = {semLocal:true, t:Date.now()}; continue; } reg.lat = g.lat; reg.lon = g.lon; }
-      const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
-        '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
-      const r = await fetch(u); if(!r.ok) continue;
-      const j = await r.json(), dd = j.daily || {};
-      reg.dias = {};
-      (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
-        rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
-      reg.t = Date.now();
-      CLIMA[c] = reg;
+      try{ await climaCidade(c, forcar); }catch(e){ CLIMA[c] = Object.assign(CLIMA[c]||{}, {erro: e.message || 'sem conexão', tErro: Date.now()}); }
     }
     guardarClima();
     renderQuadro();
@@ -2575,7 +2600,17 @@ function blocoClima(ev){
   const c = cidadeClima(ev);
   if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade em 📍 Local do evento, acima.</div>';
   const reg = CLIMA[c];
-  if(!reg || !reg.dias) return '<div style="font-size:12px;color:var(--muted)">'+(reg&&reg.semLocal?'Não achei "'+c+'" no mapa para a previsão.':'Previsão ainda não carregada (precisa de internet).')+'</div>';
+  /* a previsão cobre só os próximos 16 dias */
+  const lim = somaDiaISO(HOJE, 15);
+  const diasTrab = [...diasEntre(ev.mont, fimMont(ev)), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [])];
+  if(!diasTrab.some(d => d >= HOJE && d <= lim))
+    return '<div style="font-size:12px;color:var(--muted)">'+(diasTrab.every(d=>d < HOJE) ? 'Os dias de trabalho já passaram.' : 'A previsão sai 16 dias antes — aparece aqui a partir de '+fmtD(somaDiaISO(diasTrab.filter(d=>d>=HOJE)[0] || HOJE, -15))+'.')+'</div>';
+  if(!reg || !reg.dias){
+    if(reg && reg.semLocal) return '<div style="font-size:12px;color:var(--muted)">Não achei a cidade "'+c+'" no mapa — confira o nome da cidade em 📍 Local do evento.</div>';
+    if(reg && reg.erro && Date.now() - (reg.tErro||0) < 60000) return '<div style="font-size:12px;color:#b0483c">Não consegui buscar a previsão agora ('+reg.erro+'). <button class="mini" onclick="delete CLIMA[\''+c.replace(/'/g,"\\'")+'\'].erro;pedirClima(eventos.find(e=>e.id===\''+ev.id+'\'))">Tentar de novo</button></div>';
+    pedirClima(ev);
+    return '<div style="font-size:12px;color:var(--muted)">⏳ Buscando a previsão para '+c+'...</div>';
+  }
   const dias = [...diasEntre(ev.mont, fimMont(ev)).map(d=>({d, f:'🔨'})), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)).map(d=>({d, f:'📤'})) : [])]
     .filter(x=>reg.dias[x.d]);
   if(!dias.length) return '<div style="font-size:12px;color:var(--muted)">Os dias de trabalho estão além dos 16 dias de previsão.</div>';
@@ -3300,7 +3335,11 @@ function renderFases(){
     fases.map(f=>'<option '+(f===faseFiltro?'selected':'')+'>'+f+'</option>').join('');
 }
 
+let climaUltimoLote = 0;
 function renderQuadro(){
+  if(typeof window !== 'undefined' && !window.__semClimaAuto && Date.now() - climaUltimoLote > 60000){
+    climaUltimoLote = Date.now(); setTimeout(()=>atualizarClima(false), 800);
+  }
   const secJC = document.getElementById('v-jcamilo');
   if(secJC && !secJC.classList.contains('hide')) renderQuadroJC();
   replanejar(); renderFases();
@@ -3431,7 +3470,9 @@ function cardEvento(ev, soSetorJC, papel){
 /* =========================================================
    MODAL DO EVENTO
    ========================================================= */
+let evAberto = null;
 function verEvento(id){
+  evAberto = id;
   const ev = eventos.find(e=>e.id===id);
   const s = situacao(ev), a = s.a, c = a.carga;
   const eq = ev.equipe || a.equipe;
