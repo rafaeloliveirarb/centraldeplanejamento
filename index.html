@@ -2548,7 +2548,7 @@ function pedirClima(ev){
       const m = document.getElementById('ov-ev');
       const digitando = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName || '') && m && m.contains(document.activeElement);
       if(m && m.classList.contains('on') && evAberto === ev.id && !digitando) verEvento(ev.id);
-      renderQuadro(); });
+      renderQuadro(); if(typeof renderTV === 'function') renderTV(); });
 }
 async function atualizarClima(forcar){
   if(climaRodando) return; climaRodando = true;
@@ -6973,7 +6973,8 @@ function cardTV(o, D){
   const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
   const al = [];
   const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
-  if(w && riscoClima(w)) al.push(txtClima(w));
+  if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
+  const tempo = w ? '<div class="tv-lin" style="'+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>' : '';
   const f = fichaLocal(o.ev); if(f && resumoFicha(f)) al.push('🚧 ' + resumoFicha(f));
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
@@ -6985,8 +6986,25 @@ function cardTV(o, D){
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
+    tempo+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
   '</div>';
+}
+/* previsão resumida para a tela: ícone, máxima, chuva e vento */
+function iconeClima(cod){
+  if([95,96,99].includes(cod)) return '⛈';
+  if(cod >= 80) return '🌦';
+  if(cod >= 51) return '🌧';
+  if(cod === 45 || cod === 48) return '🌫';
+  if(cod >= 2) return '⛅';
+  return '☀';
+}
+function climaCurto(w){
+  const p = [iconeClima(w.cod) + ' ' + Math.round(w.max) + '°'];
+  p.push('chuva ' + (w.chuva >= 1 ? Math.round(w.chuva) + ' mm' : '0 mm') + ' (' + w.prob + '%)');
+  if(w.rajada >= 40) p.push('💨 ' + Math.round(w.rajada) + ' km/h');
+  if([95,96,99].includes(w.cod)) p.push('trovoada');
+  return p.join(' · ');
 }
 function carregarTV(){
   const l = carregarNoDia(HOJE);
