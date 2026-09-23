@@ -2573,7 +2573,7 @@ function chipClima(ev){
 }
 function blocoClima(ev){
   const c = cidadeClima(ev);
-  if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade para ver a previsão.</div>';
+  if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade em 📍 Local do evento, acima.</div>';
   const reg = CLIMA[c];
   if(!reg || !reg.dias) return '<div style="font-size:12px;color:var(--muted)">'+(reg&&reg.semLocal?'Não achei "'+c+'" no mapa para a previsão.':'Previsão ainda não carregada (precisa de internet).')+'</div>';
   const dias = [...diasEntre(ev.mont, fimMont(ev)).map(d=>({d, f:'🔨'})), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)).map(d=>({d, f:'📤'})) : [])]
@@ -2853,7 +2853,7 @@ function eventosNoLocal(ev){
   return eventos.filter(e => e.id !== ev.id && chaveLocal(e) === k).sort((a,b)=>String(b.mont||'').localeCompare(String(a.mont||'')));
 }
 function blocoFicha(ev){
-  if(!chaveLocal(ev)) return '<div style="font-size:12px;color:var(--muted)">Sem local no evento — preencha o local para guardar a ficha dele.</div>';
+  if(!chaveLocal(ev)) return '<div style="font-size:12px;color:var(--muted)">Sem local no evento — preencha em 📍 Local do evento, acima, e a ficha aparece aqui.</div>';
   const f = fichaLocal(ev) || {};
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   const inp = 'border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:12.5px';
@@ -3514,6 +3514,10 @@ function verEvento(id){
           '🧠 Você costuma montar às <b>'+hs.hora+'</b> '+hs.onde+' ('+hs.vezes+'x). '+
           '<button class="mini" onclick="aplicarHora(\''+ev.id+'\',\''+hs.hora+'\')">Usar '+hs.hora+'</button></div></div>';
       })()+
+      '<div style="grid-column:1/-1"><i>📍 Local do evento</i><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<input value="'+String(ev.local && ev.local!=='—' ? ev.local : '').replace(/"/g,'&quot;')+'" placeholder="Local — ex.: Caminho Niemeyer, Marina da Glória" style="flex:2;min-width:220px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'local\',this.value)">'+
+        '<input value="'+String(ev.cidade && ev.cidade!=='—' ? ev.cidade : '').replace(/"/g,'&quot;')+'" placeholder="Cidade" style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'cidade\',this.value)">'+
+      '</div></div>'+
       '<div><i>Distância até a montagem</i><div style="display:flex;align-items:center;gap:7px">'+
         '<input type="number" min="0" step="1" value="'+(+ev.km||0)+'" '+
         'style="width:90px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
@@ -3704,6 +3708,18 @@ function setKmEvento(id, valor){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
   salvar(); renderQuadro(); verEvento(id); /* recalcula frota (regra do agregado usa o km) */
+}
+/* local ou cidade mudou: a rota, o mapa e a previsão passam a valer para o novo endereço */
+function setLocalEvento(id, campo, valor){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev[campo] = String(valor||'').trim() || '—';
+  ev.geo = null; ev.ponteRota = undefined; ev.minPonte = null;
+  salvar(); renderQuadro(); verEvento(id);
+  if(CONFIG.galpao && ((ev.local && ev.local!=='—') || (ev.cidade && ev.cidade!=='—'))){
+    toast('📍 Endereço salvo. Calculando a distância do galpão...');
+    calcularKm(id, false);
+  }
+  if(campo === 'cidade') setTimeout(()=>atualizarClima(false), 500);
 }
 function setCampo(id, campo, valor){
   const ev = eventos.find(e=>e.id===id);
@@ -6896,8 +6912,11 @@ function rolarTV(){
   });
 }
 /* status da saída de hoje: SAIU, CARREGANDO (ou quase), PRÓXIMA */
-function statusTV(hs, D){
-  if(!hs || D !== HOJE) return null;
+function statusTV(hs, D, o){
+  /* a tela do galpão só trabalha com a hora de início da montagem/desmontagem */
+  if(D !== HOJE || !o || o.fora || !o.hora) return null;
+  { const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes(), ini = minDe(o.hora);
+    return m >= ini ? {cls:'', txt:'EM ANDAMENTO'} : (ini - m <= 60 ? {cls:'agora', txt:'COMEÇA EM ' + (ini - m) + ' MIN'} : null); }
   const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes();
   const sai = hs.vespera ? -1 : minDe(hs.saida);
   if(sai < 0) return {cls:'saiu', txt:'SAIU (VÉSPERA)'};
@@ -6908,7 +6927,7 @@ function statusTV(hs, D){
 function cardTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const hs = saidaDaOp(o, D);
-  const st = statusTV(hs, D);
+  const st = statusTV(hs, D, o);
   const semLider = o.pessoas.filter(pp=>!pp.prod);
   const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
   const al = [];
@@ -6919,10 +6938,10 @@ function cardTV(o, D){
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
     '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
     '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
-    (hs ? '<div class="tv-hor">'+(hs.parada===2
+    (false ? '<div class="tv-hor">'+(hs.parada===2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
-       : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>início <b>'+o.hora+'</b></span></div>' : ''))+
+       : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
@@ -6934,12 +6953,12 @@ function carregarTV(){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="tv-op" style="border-left-color:#17a05e;background:#15402c"><div class="tv-nome">📦 CARREGAR HOJE</div>'+
     l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomeDo(c.x.junto)):'')+
-      ' — sai <b style="color:#ffb25e">'+(c.hs.diaSaida===HOJE?'hoje':rotDia(c.hs.diaSaida).toLowerCase())+' '+c.hs.saida+'</b>'+(c.hs.ponte?' · 🌉 '+c.hs.ponte:'')+'</div>').join('')+'</div>';
+      ' — monta <b style="color:#ffb25e">'+(c.D===HOJE?'hoje':rotDia(c.D).toLowerCase())+' às '+(c.o.hora||'—')+'</b></div>').join('')+'</div>';
 }
 function listaTV(D){
   const r = opsDoDia(D);
   /* em ordem de saída do caminhão; sem caminhão, pela hora de início */
-  const chave = o => { const hs = saidaDaOp(o, D); return hs ? (hs.vespera ? '00:00' : hs.saida) : (o.hora || '99:99'); };
+  const chave = o => o.hora || '99:99';
   r.ops.sort((a,b)=> chave(a).localeCompare(chave(b)) || a.ev.nome.localeCompare(b.ev.nome));
   return r;
 }
