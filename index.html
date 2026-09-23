@@ -221,6 +221,16 @@ select.cad{max-width:200px}
 .b-canc{background:#eef1f6;color:#8b95a7}
 .card.encerrado{opacity:.62}
 .card.encerrado:hover{opacity:1}
+.am-op{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:9px;cursor:pointer;background:#fff}
+.am-op:hover{border-color:#9cc0f0;background:#f7faff}
+.am-cab{display:flex;gap:10px;align-items:center}
+.am-cab .ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+.am-cab .ic.m{background:#e7f0fc} .am-cab .ic.d{background:#fdeceb}
+.am-cab small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.am-cab .hora{font-size:15px;color:var(--ink)}
+.am-lin{font-size:12.5px;margin-top:7px;color:var(--ink2);line-height:1.6}
+.am-tag{display:inline-block;background:#eef3fb;border-radius:6px;padding:1px 8px;margin:1px 2px 1px 0;font-size:12px}
+.am-tag.ruim{background:#fdecea;color:#b0483c;font-weight:700}
 .rel-col{display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;white-space:nowrap}
 .rel-col input{width:15px;height:15px;cursor:pointer}
 .rel-dia{font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
@@ -334,6 +344,38 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
   .bar h1{width:100%}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ===== modo TV do galpão ===== */
+#tv{position:fixed;inset:0;z-index:9999;background:#0f1733;color:#fff;display:none;flex-direction:column;font-family:inherit;overflow:hidden}
+#tv.on{display:flex}
+#tv .tv-top{display:flex;align-items:center;gap:22px;padding:18px 30px;background:#16234b;border-bottom:4px solid #f0851e}
+#tv .tv-top img{max-height:52px;background:#fff;border-radius:8px;padding:4px 8px}
+#tv .tv-tit{font-size:30px;font-weight:800;letter-spacing:.5px}
+#tv .tv-tit small{display:block;font-size:17px;font-weight:500;color:#aab4d4;letter-spacing:0}
+#tv .tv-rel{margin-left:auto;font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#tv .tv-cols{flex:1;display:grid;grid-template-columns:1.25fr 1fr;gap:22px;padding:20px 30px;min-height:0}
+#tv .tv-col{display:flex;flex-direction:column;min-height:0}
+#tv .tv-col h2{margin:0 0 12px;font-size:26px;font-weight:800;letter-spacing:1px;display:flex;align-items:center;gap:12px}
+#tv .tv-col h2 span{font-size:17px;font-weight:500;color:#aab4d4;letter-spacing:0}
+#tv .tv-lista{flex:1;overflow:hidden;min-height:0}
+#tv .tv-op{background:#1b2856;border-radius:14px;padding:14px 18px;margin-bottom:12px;border-left:8px solid #f0851e}
+#tv .tv-op.d{border-left-color:#3d7be0}
+#tv .tv-op.saiu{opacity:.45}
+#tv .tv-op.agora{background:#3a2a12;box-shadow:0 0 0 3px #f0851e}
+#tv .tv-nome{font-size:27px;font-weight:800;line-height:1.15}
+#tv .tv-sub{font-size:17px;color:#aab4d4;margin-top:2px}
+#tv .tv-hor{font-size:23px;font-weight:700;margin-top:8px;display:flex;gap:20px;flex-wrap:wrap}
+#tv .tv-hor b{color:#ffb25e;font-size:30px}
+#tv .tv-lin{font-size:18px;margin-top:7px;line-height:1.45}
+#tv .tv-cam{display:inline-block;background:#26356e;border-radius:8px;padding:3px 11px;margin:2px 6px 2px 0;font-weight:700}
+#tv .tv-cam.ruim{background:#7a2a22}
+#tv .tv-st{float:right;font-size:15px;font-weight:800;border-radius:7px;padding:4px 10px;background:#26356e;letter-spacing:.5px}
+#tv .tv-st.agora{background:#f0851e;color:#1b1b1b}
+#tv .tv-alerta{font-size:17px;color:#ffc9c2;margin-top:6px}
+#tv .tv-vazio{font-size:24px;color:#8b95b8;padding:30px 0}
+#tv .tv-rod{padding:12px 30px;background:#7a2a22;font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden}
+#tv .tv-rod.ok{background:#16502f}
+#tv .tv-x{position:absolute;top:8px;right:10px;background:transparent;border:0;color:#44507a;font-size:18px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -372,6 +414,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <input class="search" id="busca" placeholder="Pesquisar evento...">
       <button class="pill" onclick="sincronizarAgenda()" title="A agenda já se atualiza sozinha; use só se quiser forçar agora">📋 Sincronizar agenda</button>
       <button class="pill" onclick="relatorioOps()" title="Imprime as montagens e desmontagens do período, sem os terceirizados">🖨 Relatório de operações</button>
+      <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
+      <button class="pill" onclick="abrirTV()" title="Tela grande para a TV do galpão: o que sai hoje e amanhã, atualiza sozinha">📺 Tela do galpão</button>
+      <button class="pill" onclick="abrirSemana()" title="Resumo da semana para a diretoria: eventos, caminhões, riscos e a semana passada">📊 Semana</button>
+      <button class="pill" onclick="abrirAgenda()" title="O mês de uma pessoa: eventos, dias, folgas e faltas. E quem está livre num dia">👤 Agenda</button>
+      <button class="pill" onclick="abrirDiarias()" title="Dias trabalhados, faltas e manutenção de cada pessoa no mês">🧾 Fechamento de diárias</button>
       <button class="pill" onclick="exportarBackup()" title="Baixa um arquivo com todo o quadro, cadastros e o aprendizado da IA">💾 Backup</button>
       <button class="pill" onclick="redistribuirProdutores()" title="Solta os produtores fixados e deixa a IA sugerir de novo">⚖ Redistribuir produtores</button>
       <button class="pill" onclick="abrirLote()">Importar XML</button>
@@ -502,6 +549,42 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div id="esc-teste" style="margin-top:10px;font-size:13px;color:var(--muted)">Clique em "Testar conexão" para conferir.</div>
     </div>
     <div class="panel" style="margin-bottom:18px">
+      <h2 style="margin:0">📍 Distância automática</h2>
+      <p class="sub" style="margin:4px 0 10px">Com o endereço do galpão, a Central calcula a distância por estrada até cada evento (pelo local; se não achar, pela cidade). Eventos importados com 0 km são calculados sozinhos.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="galpao-end" placeholder="Endereço do galpão — rua, número, cidade" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px"
+          onchange="CONFIG.galpao=this.value.trim();CONFIG.galpaoCoord=null;salvar()">
+        <button class="mini" onclick="testarGalpao()">🔎 Conferir no mapa</button>
+        <button class="mini" onclick="calcularKmEmLote(true)">Calcular os eventos sem km</button>
+      </div>
+      <div id="km-status" style="margin-top:8px;font-size:12.5px;color:var(--muted)"></div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <b>🕐 Hora de saída</b>
+        <label>Tempo para carregar <input id="cfg-carga" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoCarga=+this.value||0;salvar()"> min</label>
+        <label>Margem de trânsito <input id="cfg-margem" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.margemSaida=+this.value||0;salvar()"> min</label>
+        <label>Descarga em cada parada <input id="cfg-desc" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoDescarga=+this.value||0;salvar()"> min</label>
+        <label>Juntar viagens até <input id="cfg-raio" type="number" min="0" step="1" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.raioJuntar=+this.value||0;salvar()"> km entre eventos</label>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">A chegada é a hora de início da montagem (ou da desmontagem). Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2 style="margin:0">🖼 Logo para documentos</h2>
+      <p class="sub" style="margin:4px 0 10px">Vai no topo do cronograma de montagem, sozinha — sem nome, CNPJ ou inscrições. Envie uma vez; fica salva para todos.</p>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div id="logo-prev" style="min-width:160px;min-height:56px;border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;padding:6px">sem logo</div>
+        <input type="file" accept="image/*" onchange="enviarLogo(this)" style="font-size:12.5px">
+        <button class="mini danger" onclick="CONFIG.logo=null;salvar();renderCadastros()">Remover</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
+      <h2 style="margin:0">🕘 Histórico de alterações</h2>
+      <p class="sub" style="margin:4px 0 10px">Toda mudança nos eventos fica registrada com data e o nome de quem mexeu. O nome é guardado em cada aparelho.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px">Neste aparelho: <b id="quem-sou">—</b></span>
+        <button class="mini" onclick="trocarQuemSou()">Trocar nome</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:18px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:220px"><h2 style="margin:0">💾 Backup dos dados</h2>
           <p class="sub" style="margin:4px 0 0">Todo o quadro vive no navegador deste computador. Exporte um arquivo de tempos em tempos: ele guarda eventos, cadastros, frota, materiais e o aprendizado da IA. Restaurar substitui tudo pelo que está no arquivo.</p></div>
@@ -549,6 +632,122 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 
 <!-- ============ MODAL NOVO EVENTO ============ -->
 <button id="sino-hoje" class="sino hide" title="Operações de hoje" onclick="abrirHoje()">🔔<span class="sino-n" id="sino-n"></span></button>
+
+<div class="overlay" id="ov-amanha" onclick="if(event.target===this)fechar('ov-amanha')">
+  <div class="modal" style="max-width:720px">
+    <header>
+      <div><h2>🌙 O que sai amanhã</h2><div class="os" id="am-sub"></div></div>
+      <button class="x" onclick="fechar('ov-amanha')">✕</button>
+    </header>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px">Dia <input type="date" id="am-dia" onchange="renderAmanha()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px"></label>
+        <button class="mini" onclick="document.getElementById('am-dia').value=diaSeguinte();renderAmanha()">Amanhã</button>
+        <button class="mini" onclick="(()=>{const i=document.getElementById('am-dia');const d=new Date((i.value||diaSeguinte())+'T12:00');d.setDate(d.getDate()+1);i.value=d.toISOString().slice(0,10);renderAmanha()})()">Dia seguinte →</button>
+      </div>
+      <div id="am-corpo"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="mini" onclick="copiarAmanha()">⧉ Copiar resumo para o grupo</button>
+      <button class="mini" onclick="imprimirAmanha()">🖨 Imprimir folha do dia</button>
+      <button class="btn-orange" onclick="whatsAmanha()">💬 Mandar para os líderes</button>
+    </footer>
+  </div>
+</div>
+
+<div class="overlay" id="ov-crono" onclick="if(event.target===this)fechar('ov-crono')">
+  <div class="modal" style="max-width:820px">
+    <header>
+      <div><h2>📋 Cronograma de montagem</h2><div class="os" id="crono-ev"></div></div>
+      <button class="x" onclick="fechar('ov-crono')">✕</button>
+    </header>
+    <div class="mbody">
+      <div class="alert" style="margin-top:0">Para cada estrutura, o dia em que começa e o dia da <b>ENTREGA</b>. Os nomes seguem a OS; carpete e saia saem do texto porque o piso já inclui a forração.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+        <button class="mini" onclick="cronoDistribuir()">Distribuir pelos dias de montagem</button>
+        <button class="mini" onclick="cronoTudoJunto()">Tudo do primeiro ao último dia</button>
+        <span style="flex:1"></span>
+        <label style="font-size:12.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="crono-evento" checked style="width:15px;height:15px"> incluir dias do evento</label>
+        <label style="font-size:12.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="crono-desm" style="width:15px;height:15px"> incluir desmontagem</label>
+      </div>
+      <div id="crono-lista"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="mini" onclick="fechar('ov-crono')">Fechar</button>
+      <button class="btn-orange" onclick="imprimirCrono()">🖨 Gerar cronograma</button>
+    </footer>
+  </div>
+</div>
+
+<div class="overlay" id="ov-diarias" onclick="if(event.target===this)fechar('ov-diarias')">
+  <div class="modal" style="max-width:860px">
+    <header>
+      <div><h2>🧾 Fechamento de diárias</h2><div class="os" id="dia-resumo"></div></div>
+      <button class="x" onclick="fechar('ov-diarias')">✕</button>
+    </header>
+    <div class="mbody">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px">Mês <input type="month" id="dia-mes" onchange="renderDiarias()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px"></label>
+        <label style="font-size:13px">Mostrar <select id="dia-quem" onchange="renderDiarias()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px">
+          <option value="todos">todos</option><option value="montadores">só montadores e líderes</option><option value="produtores">só produtores</option></select></label>
+        <span style="flex:1"></span>
+        <button class="mini" onclick="imprimirDiarias()">🖨 Imprimir</button>
+        <button class="mini" onclick="excelDiarias()">⬇ Excel</button>
+      </div>
+      <div class="alert" style="margin-top:0">Conta pelo que está na Central: dias de cada pessoa em cada evento, com folgas, faltas e manutenção. Eventos cancelados e terceirizados ficam de fora; finalizados entram. Pessoa em dois eventos no mesmo dia conta uma diária, com aviso.</div>
+      <div id="dia-corpo" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-semana" onclick="if(event.target===this)fechar('ov-semana')">
+  <div class="modal" style="max-width:860px">
+    <header>
+      <div><h2>📊 Resumo da semana</h2><div class="os" id="sem-sub"></div></div>
+      <button class="x" onclick="fechar('ov-semana')">✕</button>
+    </header>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <button class="mini" onclick="mudarSemana(-7)">← Semana anterior</button>
+        <input type="date" id="sem-dia" onchange="renderSemana()" title="Qualquer dia da semana" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px">
+        <button class="mini" onclick="mudarSemana(7)">Próxima semana →</button>
+        <span style="flex:1"></span>
+        <label style="font-size:12.5px">WhatsApp da diretoria <input id="sem-tel" placeholder="(21) 9...." onchange="CONFIG.telDiretoria=this.value.trim();salvar()" style="width:150px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px"></label>
+      </div>
+      <div id="sem-corpo"></div>
+    </div>
+    <footer style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="mini" onclick="copiarSemana()">⧉ Copiar</button>
+      <button class="mini" onclick="imprimirSemana()">🖨 Imprimir</button>
+      <button class="btn-orange" onclick="whatsSemana()">💬 Mandar para a diretoria</button>
+    </footer>
+  </div>
+</div>
+
+<div class="overlay" id="ov-agenda" onclick="if(event.target===this)fechar('ov-agenda')">
+  <div class="modal" style="max-width:900px">
+    <header>
+      <div><h2>👤 Agenda da pessoa</h2><div class="os" id="ag-resumo"></div></div>
+      <button class="x" onclick="fechar('ov-agenda')">✕</button>
+    </header>
+    <div class="mbody">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px">Pessoa <select id="ag-pessoa" onchange="renderAgenda()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;max-width:280px"></select></label>
+        <button class="mini" onclick="mudarMesAgenda(-1)">←</button>
+        <input type="month" id="ag-mes" onchange="renderAgenda()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px">
+        <button class="mini" onclick="mudarMesAgenda(1)">→</button>
+      </div>
+      <div id="ag-corpo"></div>
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <b style="font-size:14px">Quem está livre no dia</b>
+          <input type="date" id="ag-livre" onchange="renderLivres()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px">
+        </div>
+        <div id="ag-livres"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="overlay" id="ov-remarc" onclick="if(event.target===this)fechar('ov-remarc')">
   <div class="modal" style="max-width:620px">
@@ -635,7 +834,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <button class="x" onclick="fechar('ov-hoje')">✕</button>
     </header>
     <div class="mbody" id="hoje-corpo"></div>
-    <div style="padding:0 22px 18px"><button class="pill" style="width:100%" onclick="whatsDoDia()">💬 Mandar a escala de hoje para os líderes</button></div>
+    <div style="padding:0 22px 18px;display:flex;gap:8px;flex-wrap:wrap"><button class="pill" style="flex:1" onclick="whatsDoDia()">💬 Mandar a escala de hoje para os líderes</button>
+      <button class="pill" onclick="fechar('ov-hoje');abrirAmanha()">🌙 Ver amanhã</button></div>
   </div>
 </div>
 
@@ -820,6 +1020,7 @@ async function nuvemCarregar(){
   if(ev.data) {
     eventos = ev.data.map(r=>r.dados).filter(Boolean);
     idsConhecidos = new Set(eventos.map(e=>e.id));
+    fotografarTudo();
   }
   (cf.data||[]).forEach(r=>{
     const d = r.dados || {};
@@ -875,6 +1076,7 @@ function nuvemEscutar(){
         const d = p.new.dados, i = eventos.findIndex(e=>e.id===d.id);
         if(i>=0) eventos[i] = d; else eventos.push(d);
         idsConhecidos.add(d.id);
+        fotografar(d); /* mudança de outro aparelho: já vem com o histórico de lá */
       }
       renderQuadro();
     })
@@ -1114,7 +1316,8 @@ function editorDiasPessoa(ev, eq){
   if(!pessoaDias) return '';
   const nome = pessoaDias;
   const ehLider = nome===eq;
-  if(!ehLider && !montadoresBase(ev, eq).includes(nome) && !timeDesmBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
+  const ehProd = nome === produtorDo(ev);
+  if(!ehLider && !ehProd && !montadoresBase(ev, eq).includes(nome) && !timeDesmBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
   const reg = (ev.diasPessoa||{})[nome] || {};
   const ini = reg.ini || dia(ev.mont) || '';
   const fim = reg.fim || reg.ini || dia(fimDesm(ev)) || dia(ev.desm) || ini;
@@ -1433,6 +1636,7 @@ function zerarQuadro(){
   salvar(); renderQuadro(); renderCadastros();
   toast('Quadro zerado — ' + JSON.parse(copia).length + ' evento(s) apagados.', 'Desfazer', function(){
     eventos = JSON.parse(copia);
+    fotografarTudo();
     salvar(); renderQuadro(); renderCadastros();
     toast('Pronto, os eventos voltaram.');
   });
@@ -1470,6 +1674,7 @@ function restaurarBackup(file){
     /* guarda o estado atual para poder desfazer */
     const antes = JSON.stringify({eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
     eventos = d.eventos || [];
+    fotografarTudo();
     produtores = d.produtores || produtores;
     equipes = d.equipes || equipes;
     motoristas = d.motoristas || motoristas;
@@ -1480,7 +1685,7 @@ function restaurarBackup(file){
     salvar(); renderQuadro(); renderCadastros(); renderPeriodos();
     toast('Backup restaurado: ' + eventos.length + ' evento(s) no quadro.', 'Desfazer', function(){
       const v = JSON.parse(antes);
-      eventos=v.eventos; produtores=v.produtores; equipes=v.equipes; motoristas=v.motoristas;
+      eventos=v.eventos; fotografarTudo(); produtores=v.produtores; equipes=v.equipes; motoristas=v.motoristas;
       veiculos=v.veiculos; catalogo=v.catalogo; CONFIG=v.CONFIG; APRENDA=v.APRENDA;
       salvar(); renderQuadro(); renderCadastros();
       toast('Restauração desfeita — o quadro voltou como estava.');
@@ -1581,7 +1786,9 @@ function escolherFrota(c, ag, dias, ev, semCarreta){
   /* custo primeiro: o veículo (ou combinação) mais enxuto que fecha a carga.
      A regra de distância (longe puxa agregado) vira só desempate. */
   const foraDaRegra = v => (!!v.agregado === longe) ? 0 : 1;
+  const limC = +((fichaLocal(ev) || {}).maxC) || 0;
   const livres = veiculos.filter(v => !v.manut)
+                         .filter(v => !limC || (+v.c||0) <= limC)
                          .filter(v => !ocupante(ag,'ve',v.id,dias,ev.id))
                          .filter(v => !semCarreta || v.tipo !== 'CARRETA');
 
@@ -1758,6 +1965,14 @@ function analisar(ev, ag){
     r.conflitos.push({msg: emManut.map(v=>v.tipo+' '+v.placa).join(' e ') + ' está em manutenção e segue alocado nesta operação.',
       dica:'Troque por outro veículo no bloco de caminhões, ou tire o veículo da manutenção na aba Veículos.'});
 
+  /* ficha do local: caminhão maior do que o local aceita */
+  { const f = fichaLocal(ev), lim = f ? +f.maxC : 0;
+    if(lim){
+      const grandes = frTodas.map(id=>veiculos.find(v=>v.id===id)).filter(v=>v && (+v.c||0) > lim);
+      if(grandes.length) r.conflitos.push({msg:[...new Set(grandes.map(v=>v.tipo+' '+v.placa))].join(' e ') + ' não entra no local — a ficha do local diz: ' + rotuloAcesso(lim) + '.',
+        dica:'Troque por um veículo menor no bloco de caminhões, ou corrija a ficha do local se o acesso mudou.'});
+    }
+  }
   /* a maior peça precisa caber no comprimento de algum caminhão da operação */
   if(c.maiorPeca && frTodas.length){
     const maxC = Math.max(0, ...frTodas.map(id=>{const v=veiculos.find(x=>x.id===id); return v ? (+v.c||0) : 0;}));
@@ -1929,6 +2144,7 @@ function operacoesDeHoje(){
   };
 }
 function renderAlertaHoje(){
+  if(!lembreteSemana()) lembreteAmanha();
   const sino = document.getElementById('sino-hoje');
   if(!sino) return;
   const {mont, desm} = operacoesDeHoje();
@@ -1943,6 +2159,195 @@ function renderAlertaHoje(){
     }
   }catch(e){}
 }
+/* ================= RESUMO DO DIA SEGUINTE =================
+   O que sai no dia: caminhões (com motorista e hora), equipes e quem
+   trabalha, destino e contato — para conferir no fim da tarde. */
+function diaSeguinte(){ const d = new Date(HOJE+'T12:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+const SEM3 = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+const rotDia = d => { const dt = new Date(d+'T12:00'); return SEM3[dt.getDay()] + ' ' + fmtD(d).slice(0,5); };
+function opsDoDia(D){
+  const ops = [];
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;   /* cancelado, finalizado ou terceirizado não sai */
+    const dM = diasEntre(ev.mont, fimMont(ev)), dD = ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [];
+    const fase = dM.includes(D) ? 'mont' : (dD.includes(D) ? 'desm' : null);
+    /* caminhões que saem neste dia (viagens com dia próprio contam no dia delas) */
+    const viagens = [];
+    const pegar = (fz, padrao, jaLocal) => escalaDo(ev, fz).forEach(x=>{
+      if((x.dia || padrao) !== D) return;
+      const v = veiculos.find(y=>y.id===x.v); if(!v) return;
+      viagens.push({v, i:x.i, motorista:x.motorista, fase: fz, jaLocal, manut: !!v.manut, junto: x.junto || null});
+    });
+    pegar('mont', dia(ev.mont), false);
+    if(ev.desm){
+      if(temFrotaDesm(ev)) pegar('desm', dia(ev.desm), false);
+      else if((dia(ev.desm)) === D) escalaDo(ev, 'mont').forEach(x=>{
+        const v = veiculos.find(y=>y.id===x.v); if(!v) return;
+        viagens.push({v, i:x.i, motorista:x.motorista, fase:'desm', jaLocal: !!ev.permanece, manut: !!v.manut, junto: null});
+      });
+    }
+    /* quem trabalha no dia */
+    const pessoas = pessoasNaEscala(ev).filter(pp => diasDe(ev, pp.nome).includes(D))
+      .map(pp => Object.assign({}, pp, {mt: manutDia(ev, pp.nome, D)}));
+    if(!fase && !viagens.length && !pessoas.length) return;
+    const lista = fase==='desm' ? dD : dM;
+    ops.push({ev, fase: fase || (viagens[0] && viagens[0].fase) || 'mont',
+      n: lista.indexOf(D)+1, tot: lista.length,
+      hora: String(fase==='desm' ? ev.desm : ev.mont || '').slice(11,16),
+      equipe: ev.equipe || plano(ev).equipe, pessoas, viagens});
+  });
+  ops.sort((a,b)=> (a.hora||'99').localeCompare(b.hora||'99') || a.ev.nome.localeCompare(b.ev.nome));
+  /* mesma pessoa em dois lugares no dia */
+  const onde = {};
+  /* produtor acompanhando vários eventos é normal; só a equipe conta aqui */
+  ops.forEach(o=>o.pessoas.filter(pp=>!pp.prod).forEach(pp=>{ (onde[pp.nome] = onde[pp.nome] || []).push(o.ev.nome); }));
+  const duplos = Object.keys(onde).filter(n=>onde[n].length>1).map(n=>({nome:n, onde:onde[n]}));
+  /* mesmo caminhão em dois eventos no dia */
+  const cam = {};
+  const grupo = {};
+  ops.forEach(o=>o.viagens.forEach(x=>{ if(x.jaLocal) return;
+    /* viagem combinada (os dois lados marcados) é uma saída só */
+    const par = x.junto && ops.some(o2=>o2.ev.id===x.junto && o2.viagens.some(y=>y.v.id===x.v.id && y.junto===o.ev.id));
+    const chave = par ? [o.ev.id, x.junto].sort().join('+') : o.ev.id;
+    (cam[x.v.id] = cam[x.v.id] || new Set()).add(chave);
+    (grupo[x.v.id] = grupo[x.v.id] || new Set()).add(o.ev.nome);
+  }));
+  const camDuplo = Object.keys(cam).filter(k=>cam[k].size>1).map(k=>({v:veiculos.find(y=>y.id===k), onde:[...grupo[k]]}));
+  return {ops, duplos, camDuplo};
+}
+/* mensagem do líder só com o que acontece NAQUELE dia */
+function mensagemDia(o, D){
+  const ev = o.ev, L = [];
+  L.push('*' + (D===diaSeguinte() ? 'AMANHÃ' : 'ESCALA') + ' — ' + rotDia(D) + '*');
+  L.push('*' + ev.nome + '*');
+  L.push((o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
+  if(ev.local && ev.local!=='—') L.push('📍 ' + ev.local + (ev.cidade && ev.cidade!=='—' ? ' — ' + ev.cidade : ''));
+  else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
+  if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
+  const equipeTxt = o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome + (pp.mt ? ' (manutenção)' : ''));
+  if(equipeTxt.length) L.push('👷 ' + equipeTxt.join(', '));
+  const prod = o.pessoas.find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome);
+  if(o.viagens.length){
+    L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
+  }
+  { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); }
+  o.viagens.filter(x=>x.junto).forEach(x=>{ const rt = rotaJunta(D, ev.id, x.junto, o.fase);
+    if(rt) L.push('🔗 ' + x.v.tipo + ' ' + x.v.placa + ' leva também ' + nomeDo(x.junto) + ' — ' + (rt.paradas[0].ev.id===ev.id ? '1ª parada' : '2ª parada') + ' (' + rt.paradas.map(pp=>pp.ev.nome).join(' → ') + ')'); });
+  { const f = fichaLocal(ev); if(f && resumoFicha(f)) L.push('🚧 Local: ' + resumoFicha(f)); }
+  if(ev.respNome || ev.respTel) L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
+  const cc = cidadeClima(ev), w = cc && CLIMA[cc] && CLIMA[cc].dias && CLIMA[cc].dias[D];
+  if(w && riscoClima(w)) L.push('🌦 Previsão: ' + txtClima(w));
+  return L.join('\n');
+}
+function dataAmanha(){ const el2 = document.getElementById('am-dia'); return (el2 && el2.value) || diaSeguinte(); }
+function abrirAmanha(D){
+  const el2 = document.getElementById('am-dia');
+  if(el2) el2.value = D || el2.value || diaSeguinte();
+  renderAmanha();
+  document.getElementById('ov-amanha').classList.add('on');
+}
+function renderAmanha(){
+  const D = dataAmanha();
+  const {ops, duplos, camDuplo} = opsDoDia(D);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const nV = ops.reduce((s,o)=>s + o.viagens.filter(x=>!x.jaLocal).length, 0);
+  const nP = new Set(ops.flatMap(o=>o.pessoas.map(pp=>pp.nome))).size;
+  document.getElementById('am-sub').textContent = rotDia(D) + ' · ' + ops.length + ' operação(ões) · ' + nV + ' saída(s) de caminhão · ' + nP + ' pessoa(s) na rua';
+  const alertas = [];
+  duplos.forEach(x=>alertas.push('👷 <b>' + esc(x.nome) + '</b> está em dois lugares: ' + x.onde.map(esc).join(' e ')));
+  camDuplo.forEach(x=>alertas.push('🚚 <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> sai para dois eventos: ' + x.onde.map(esc).join(' e ') + ' — se for a mesma viagem, use "Juntar" abaixo'));
+  ops.forEach(o=>o.viagens.forEach(x=>{
+    if(x.manut) alertas.push('🔧 <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> está em manutenção e segue escalado em ' + esc(o.ev.nome));
+    else if(!x.motorista && !x.jaLocal) alertas.push('🧑‍✈️ <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> sem motorista em ' + esc(o.ev.nome));
+  }));
+  ops.forEach(o=>{ if(!o.pessoas.some(pp=>!pp.prod) && o.fase) alertas.push('👷 <b>' + esc(o.ev.nome) + '</b> sem ninguém escalado para o dia'); });
+  ops.forEach(o=>{ const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
+    if(w && riscoClima(w)) alertas.push((riscoClima(w)===2?'⛈':'☔') + ' <b>' + esc(o.ev.nome) + '</b> (' + esc(c) + '): ' + txtClima(w)); });
+  const combos = htmlJuntar(D);
+  document.getElementById('am-corpo').innerHTML = !ops.length
+    ? '<div class="panel empty"><b>Nada na rua em ' + rotDia(D) + '</b>Nenhuma montagem, desmontagem ou saída de caminhão.</div>'
+    : (alertas.length ? '<div class="alert red" style="margin:0 0 12px"><b>Conferir antes de liberar:</b><br>' + alertas.join('<br>') + '</div>' : '<div class="alert green" style="margin:0 0 12px">Tudo certo: ninguém em dois lugares, nenhum caminhão repetido e todos com motorista.</div>') + combos +
+      ops.map(o=>{
+        const eq = o.equipe;
+        return '<div class="am-op" onclick="fechar(\'ov-amanha\');verEvento(\''+o.ev.id+'\')">'+
+          '<div class="am-cab"><span class="ic '+(o.fase==='desm'?'d':'m')+'">'+(o.fase==='desm'?'📤':'🔨')+'</span>'+
+            '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+
+              (o.ev.cidade && o.ev.cidade!=='—' ? ' · '+esc(o.ev.cidade) : '')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</small></div>'+
+            (o.hora ? '<b class="hora">'+o.hora+'</b>' : '')+'</div>'+
+          (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomeDo(x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
+          (function(){ const hs = saidaDaOp(o, D); return hs ? '<div class="am-lin">'+txtSaida(hs)+(hs.parada===2?'':' <small style="color:var(--muted)">('+durTxt(hs.viagem)+' de estrada)</small>')+'</div>' : ''; })()+
+          (function(){ const f = fichaLocal(o.ev); return (f && resumoFicha(f)) ? '<div class="am-lin">🚧 '+esc(resumoFicha(f))+'</div>' : ''; })()+
+          (o.pessoas.length ? '<div class="am-lin">👷 <b style="color:'+corEquipe(eq)+'">'+esc(eq)+'</b>: '+o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' <small>(produtor)</small>':'')+(pp.mt?' <small style="color:#1c5fb8">(manutenção)</small>':'')).join(', ')+'</div>' : '')+
+          ((o.ev.respNome||o.ev.respTel) ? '<div class="am-lin">📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — '))+'</div>' : '')+
+        '</div>';
+      }).join('');
+}
+function whatsAmanha(){
+  const D = dataAmanha();
+  const {ops} = opsDoDia(D);
+  if(!ops.length) return toast('Nada na rua neste dia.');
+  ops.forEach((o, i)=> setTimeout(()=>{
+    const cad = equipes.find(e=>e.nome===o.equipe);
+    const numero = zap(cad && cad.tel);
+    const texto = mensagemDia(o, D);
+    window.open(numero ? 'https://wa.me/' + numero + '?text=' + encodeURIComponent(texto) : 'https://wa.me/?text=' + encodeURIComponent(texto), '_blank');
+  }, i * 700));
+  toast('Abrindo ' + ops.length + ' conversa(s) no WhatsApp, uma por operação — confirme o envio em cada uma.');
+}
+function textoGeralDia(D){
+  const {ops} = opsDoDia(D);
+  return ['*OPERAÇÕES — ' + rotDia(D) + '*', ''].concat(ops.map(o=>mensagemDia(o, D).split('\n').slice(1).join('\n'))).join('\n\n');
+}
+function copiarAmanha(){
+  const D = dataAmanha();
+  if(!opsDoDia(D).ops.length) return toast('Nada na rua neste dia.');
+  const t = textoGeralDia(D);
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('Resumo do dia copiado — é só colar no grupo.'));
+}
+function imprimirAmanha(){
+  const D = dataAmanha();
+  const {ops, duplos, camDuplo} = opsDoDia(D);
+  if(!ops.length) return toast('Nada na rua neste dia.');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const saidas = [];
+  ops.forEach(o=>o.viagens.filter(x=>!x.jaLocal).forEach(x=>saidas.push({o, x, hs: saidaDaOp(o, D)})));
+  saidas.sort((a,b)=>((a.hs&&!a.hs.vespera)?a.hs.saida:(a.hs?'00':'99')).localeCompare((b.hs&&!b.hs.vespera)?b.hs.saida:(b.hs?'00':'99')));
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Operações '+D+'</title><style>'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#16234b;margin:24px;font-size:12.5px}'+
+    'h1{font-size:19px;margin:0} .sub{color:#777;margin:2px 0 14px}'+
+    'h2{font-size:13px;margin:16px 0 6px;text-transform:uppercase;letter-spacing:.5px;color:#1c4fa0}'+
+    'table{width:100%;border-collapse:collapse} th{font-size:10.5px;text-transform:uppercase;color:#8892a4;text-align:left;padding:5px 7px;border-bottom:1px solid #e3e8f0}'+
+    'td{padding:6px 7px;border-bottom:1px solid #eef1f6;vertical-align:top} small{color:#667}'+
+    '.op{border:1px solid #e3e8f0;border-left:4px solid #f0851e;border-radius:6px;padding:9px 11px;margin-bottom:9px;page-break-inside:avoid}'+
+    '.alerta{background:#fdecea;border:1px solid #f3c6c0;border-radius:6px;padding:8px 10px;margin-bottom:10px}'+
+    '@media print{body{margin:10mm}}'+
+  '</style></head><body>'+
+    '<h1>Operações — '+rotDia(D)+'</h1><p class="sub">'+ops.length+' operação(ões) · '+saidas.length+' saída(s) de caminhão · gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
+    ((duplos.length||camDuplo.length) ? '<div class="alerta">'+duplos.map(x=>'⚠ '+esc(x.nome)+' em dois lugares: '+x.onde.map(esc).join(' e ')).concat(camDuplo.map(x=>'⚠ '+esc(x.v.tipo+' '+x.v.placa)+' em dois eventos: '+x.onde.map(esc).join(' e '))).join('<br>')+'</div>' : '')+
+    (saidas.length ? '<h2>Saída de caminhões</h2><table><thead><tr><th>Sai</th><th>Caminhão</th><th>Motorista</th><th>Evento</th><th>Destino</th><th>Visto</th></tr></thead><tbody>'+
+      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>carregar '+s.hs.carregar+' · chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
+    '<h2>Equipes</h2>'+ops.map(o=>'<div class="op"><b>'+esc(o.ev.nome)+'</b> — '+(o.fase==='desm'?'desmontagem':'montagem')+(o.tot>1?' (dia '+o.n+' de '+o.tot+')':'')+(o.hora?' · início '+o.hora:'')+
+      '<br>👷 <b>'+esc(o.equipe)+'</b>: '+(o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' (produtor)':'')+(pp.mt?' (manutenção)':'')).join(', ')||'—')+
+      ((o.ev.respNome||o.ev.respTel)?'<br>📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — ')):'')+
+      (function(){ const f = fichaLocal(o.ev); return (f && resumoFicha(f)) ? '<br>🚧 '+esc(resumoFicha(f)) : ''; })()+'</div>').join('')+
+  '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+/* lembrete no fim da tarde, uma vez por dia */
+function lembreteAmanha(){
+  try{
+    const agora = new Date();
+    if(agora.getHours() < 15) return;
+    if(localStorage.getItem('cpl:avisoAmanha') === HOJE) return;
+    const {ops, duplos, camDuplo} = opsDoDia(diaSeguinte());
+    if(!ops.length) return;
+    localStorage.setItem('cpl:avisoAmanha', HOJE);
+    const prob = duplos.length + camDuplo.length;
+    toast('🌙 Amanhã: ' + ops.length + ' operação(ões) na rua' + (prob ? ' — ⚠ ' + prob + ' ponto(s) para conferir' : '') + '. Abra "Amanhã" para conferir e mandar aos líderes.', 'Abrir', ()=>abrirAmanha());
+  }catch(e){}
+}
+
 /* abre uma conversa por líder com a escala das operações de hoje */
 function whatsDoDia(){
   const {mont, desm} = operacoesDeHoje();
@@ -2024,6 +2429,593 @@ function seloConfianca(ev, a){
   return '<span class="selo-ia" title="A IA aprendeu isso com as suas confirmações em eventos parecidos">'+
     '🧠 confirmado ' + vezes + 'x em eventos assim</span>';
 }
+/* ================= PREVISÃO DO TEMPO =================
+   Open-Meteo (gratuito, sem chave). Busca a cidade uma vez, guarda a
+   previsão de 16 dias por cidade e reaproveita por 3 horas. Fica só neste
+   aparelho — não vai para a nuvem. */
+let CLIMA = {};          /* cidade -> {lat, lon, t, dias:{iso:{chuva,prob,rajada,cod,max}}} */
+try{ CLIMA = JSON.parse(localStorage.getItem('cpl:clima') || '{}'); }catch(e){ CLIMA = {}; }
+let climaRodando = false;
+const cidadeClima = ev => { const c = String(ev.cidade||'').trim(); return (c && c!=='—') ? c : null; };
+function guardarClima(){ try{ localStorage.setItem('cpl:clima', JSON.stringify(CLIMA)); }catch(e){} }
+async function geocodCidade(nome){
+  const u = 'https://geocoding-api.open-meteo.com/v1/search?count=1&language=pt&countryCode=BR&name=' + encodeURIComponent(nome.replace(/\s*[-\/]\s*[A-Z]{2}$/,''));
+  const r = await fetch(u); if(!r.ok) throw new Error('geocodificação ' + r.status);
+  const j = await r.json(); const x = j && j.results && j.results[0];
+  return x ? {lat:x.latitude, lon:x.longitude} : null;
+}
+async function atualizarClima(forcar){
+  if(climaRodando) return; climaRodando = true;
+  try{
+    const lim = new Date(HOJE+'T12:00'); lim.setDate(lim.getDate()+15);
+    const limISO = lim.toISOString().slice(0,10);
+    const cidades = [...new Set(eventos.filter(ev => !ev.esp && ev.mont && dia(ev.mont) <= limISO && (dia(fimDesm(ev)) || dia(ev.mont)) >= HOJE)
+      .map(cidadeClima).filter(Boolean))];
+    for(const c of cidades){
+      const reg = CLIMA[c] || {};
+      if(!forcar && reg.t && Date.now() - reg.t < 3*3600*1000) continue;
+      if(reg.lat == null){ const g = await geocodCidade(c); if(!g){ CLIMA[c] = {semLocal:true, t:Date.now()}; continue; } reg.lat = g.lat; reg.lon = g.lon; }
+      const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
+        '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
+      const r = await fetch(u); if(!r.ok) continue;
+      const j = await r.json(), dd = j.daily || {};
+      reg.dias = {};
+      (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
+        rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
+      reg.t = Date.now();
+      CLIMA[c] = reg;
+    }
+    guardarClima();
+    renderQuadro();
+  }catch(e){ /* sem internet: fica com o que tinha */ }
+  finally{ climaRodando = false; }
+}
+/* 0 nada · 1 atenção · 2 forte */
+function riscoClima(x){
+  if(!x) return 0;
+  const chuva = (x.chuva >= 20 || (x.prob >= 70 && x.chuva >= 10)) ? 2 : ((x.prob >= 60 && x.chuva >= 3) ? 1 : 0);
+  const vento = x.rajada >= 70 ? 2 : (x.rajada >= 50 ? 1 : 0);
+  const trov = [95,96,99].includes(x.cod) ? 2 : 0;
+  return Math.max(chuva, vento, trov);
+}
+function txtClima(x){
+  const p = [];
+  if([95,96,99].includes(x.cod)) p.push('⛈ trovoada');
+  if(x.chuva >= 1 || x.prob >= 50) p.push('☔ ' + Math.round(x.chuva) + ' mm (' + x.prob + '%)');
+  if(x.rajada >= 40) p.push('💨 rajadas de ' + Math.round(x.rajada) + ' km/h');
+  if(!p.length) p.push('☀ ' + Math.round(x.max) + '°');
+  return p.join(' · ');
+}
+/* dias de trabalho do evento (montagem e desmontagem) com risco de tempo */
+function alertasClima(ev){
+  const c = cidadeClima(ev); const reg = c && CLIMA[c];
+  if(!reg || !reg.dias) return [];
+  const dias = [...diasEntre(ev.mont, fimMont(ev)).map(d=>({d, f:'montagem'})),
+                ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)).map(d=>({d, f:'desmontagem'})) : [])];
+  return dias.filter(x=>x.d >= HOJE && reg.dias[x.d] && riscoClima(reg.dias[x.d]) > 0)
+    .map(x=>({d:x.d, fase:x.f, nivel:riscoClima(reg.dias[x.d]), txt:txtClima(reg.dias[x.d])}));
+}
+function chipClima(ev){
+  const al = alertasClima(ev); if(!al.length) return '';
+  const forte = al.some(a=>a.nivel===2);
+  return '<span class="fase" style="background:'+(forte?'#b0483c':'#b47f08')+'" title="'+al.map(a=>fmtD(a.d).slice(0,5)+' ('+a.fase+'): '+a.txt).join(' | ').replace(/"/g,'&quot;')+'">'+
+    (forte?'⛈':'☔')+' TEMPO '+al.map(a=>fmtD(a.d).slice(0,5)).slice(0,3).join(', ')+(al.length>3?'…':'')+'</span>';
+}
+function blocoClima(ev){
+  const c = cidadeClima(ev);
+  if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade para ver a previsão.</div>';
+  const reg = CLIMA[c];
+  if(!reg || !reg.dias) return '<div style="font-size:12px;color:var(--muted)">'+(reg&&reg.semLocal?'Não achei "'+c+'" no mapa para a previsão.':'Previsão ainda não carregada (precisa de internet).')+'</div>';
+  const dias = [...diasEntre(ev.mont, fimMont(ev)).map(d=>({d, f:'🔨'})), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)).map(d=>({d, f:'📤'})) : [])]
+    .filter(x=>reg.dias[x.d]);
+  if(!dias.length) return '<div style="font-size:12px;color:var(--muted)">Os dias de trabalho estão além dos 16 dias de previsão.</div>';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap">'+dias.map(x=>{
+    const w = reg.dias[x.d], n = riscoClima(w);
+    return '<div style="border:1px solid '+(n===2?'#f3c6c0':n?'#f0dfb5':'var(--line)')+';background:'+(n===2?'#fdecea':n?'#fdf7ee':'#fff')+';border-radius:8px;padding:6px 9px;font-size:11.5px;min-width:112px">'+
+      '<b>'+x.f+' '+rotDia(x.d)+'</b><br>'+txtClima(w)+'</div>';
+  }).join('')+'</div><div style="font-size:11px;color:var(--muted);margin-top:6px">Previsão Open-Meteo para '+c+' · atualizada '+new Date(reg.t).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>';
+}
+
+/* ================= DISTÂNCIA PELO ENDEREÇO =================
+   Endereço → coordenadas pelo OpenStreetMap (Nominatim) e distância por
+   estrada pelo OSRM. Os dois são gratuitos; o Nominatim pede no máximo
+   1 consulta por segundo, então a fila espera entre uma e outra. */
+let GEO = {};
+try{ GEO = JSON.parse(localStorage.getItem('cpl:geo') || '{}'); }catch(e){ GEO = {}; }
+let ultimaGeo = 0;
+async function geocodEndereco(q){
+  const k = semAcentoSimples(q).trim();
+  if(GEO[k] !== undefined) return GEO[k];
+  const espera = 1100 - (Date.now() - ultimaGeo);
+  if(espera > 0) await new Promise(r=>setTimeout(r, espera));
+  ultimaGeo = Date.now();
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&accept-language=pt&q=' + encodeURIComponent(q));
+  if(!r.ok) throw new Error('mapa ' + r.status);
+  const j = await r.json(); const x = j && j[0];
+  GEO[k] = x ? {lat:+x.lat, lon:+x.lon, nome:x.display_name} : null;
+  try{ localStorage.setItem('cpl:geo', JSON.stringify(GEO)); }catch(e){}
+  return GEO[k];
+}
+async function coordGalpao(){
+  if(!CONFIG.galpao) return null;
+  if(CONFIG.galpaoCoord && CONFIG.galpaoCoord.q === CONFIG.galpao) return CONFIG.galpaoCoord;
+  const g = await geocodEndereco(CONFIG.galpao);
+  if(!g) return null;
+  CONFIG.galpaoCoord = {q:CONFIG.galpao, lat:g.lat, lon:g.lon, nome:g.nome};
+  salvar();
+  return CONFIG.galpaoCoord;
+}
+async function rotaKm(a, b){
+  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=false');
+  if(!r.ok) throw new Error('rota ' + r.status);
+  const j = await r.json();
+  if(!j.routes || !j.routes[0]) return null;
+  /* o OSRM calcula para carro: caminhão leva uns 30% a mais */
+  return {km: j.routes[0].distance / 1000, min: (j.routes[0].duration || 0) / 60 * 1.3};
+}
+/* calcula e grava o km do evento; devolve {km, fonte} ou null */
+async function calcularKm(id, silencioso){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return null;
+  try{
+    const orig = await coordGalpao();
+    if(!orig){ if(!silencioso) toast('Cadastre o endereço do galpão em Integrações → 📍 Distância automática.'); return null; }
+    const loc = String(ev.local||'').trim(), cid = String(ev.cidade||'').trim();
+    const temLoc = loc && loc !== '—', temCid = cid && cid !== '—';
+    if(!temLoc && !temCid){ if(!silencioso) toast('O evento não tem local nem cidade para calcular a distância.'); return null; }
+    let dest = null, fonte = 'endereço';
+    if(temLoc) dest = await geocodEndereco(loc + (temCid ? ', ' + cid : '') + ', Brasil');
+    if(!dest && temCid){ dest = await geocodEndereco(cid + ', Brasil'); fonte = 'cidade'; }
+    if(!dest){ if(!silencioso) toast('Não achei "' + (loc || cid) + '" no mapa. Confira o local ou a cidade do evento.'); return null; }
+    const rt = await rotaKm(orig, dest);
+    if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
+    ev.km = Math.round(rt.km); ev.kmFonte = fonte; ev.kmMin = Math.round(rt.min) || null;
+    ev.geo = {lat:dest.lat, lon:dest.lon};
+    salvar(); renderQuadro();
+    if(!silencioso){ verEvento(id); toast('📍 ' + ev.km + ' km do galpão até o evento, por estrada' + (fonte==='cidade' ? ' (calculado pelo centro da cidade — confira)' : '') + '.'); }
+    return {km: ev.km, fonte};
+  }catch(e){
+    if(!silencioso) toast('Não consegui calcular agora (' + e.message + '). Confira a internet e tente de novo.');
+    return null;
+  }
+}
+let kmRodando = false;
+async function calcularKmEmLote(manual){
+  if(kmRodando) return; kmRodando = true;
+  const alvo = eventos.filter(e=>!e.esp && !(+e.km) && ((e.local && e.local!=='—') || (e.cidade && e.cidade!=='—')));
+  const st = document.getElementById('km-status');
+  let ok = 0, falha = 0;
+  try{
+    if(!CONFIG.galpao){ if(manual) toast('Cadastre primeiro o endereço do galpão.'); return; }
+    for(let i=0; i<alvo.length; i++){
+      if(st) st.textContent = 'calculando ' + (i+1) + ' de ' + alvo.length + '...';
+      const r = await calcularKm(alvo[i].id, true);
+      if(r) ok++; else falha++;
+    }
+    const msg = alvo.length ? ('📍 Distância calculada em ' + ok + ' evento(s)' + (falha ? ' · ' + falha + ' sem endereço reconhecido' : '') + '.') : 'Todos os eventos já têm distância.';
+    if(st) st.textContent = msg;
+    if(manual || ok) toast(msg);
+  }finally{ kmRodando = false; }
+}
+async function testarGalpao(){
+  const st = document.getElementById('km-status');
+  CONFIG.galpaoCoord = null;
+  if(st) st.textContent = 'procurando...';
+  try{
+    const g = await coordGalpao();
+    if(st) st.innerHTML = g ? '<b style="color:#0f8a4d">Achei:</b> ' + String(g.nome).replace(/</g,'&lt;') : '<b style="color:#b0483c">Não achei esse endereço no mapa.</b> Tente com rua, número e cidade.';
+  }catch(e){ if(st) st.textContent = 'Sem conexão com o mapa agora.'; }
+}
+
+/* ================= HORA DE SAÍDA =================
+   chegada = hora de início da fase; sair = chegada − estrada − margem;
+   carregar = sair − tempo de carga */
+function cfgSaida(){
+  const n = (v, pad) => (v === undefined || v === null || v === '' || isNaN(+v)) ? pad : +v;
+  return {carga:n(CONFIG.tempoCarga,60), margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20)};
+}
+function minViagem(ev){
+  if(+ev.kmMin) return Math.round(+ev.kmMin);
+  if(+ev.km) return Math.round(+ev.km / cfgSaida().vel * 60);
+  return null;
+}
+const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); };
+const minDe = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t||''); return m ? (+m[1])*60 + (+m[2]) : null; };
+const durTxt = m => m >= 60 ? Math.floor(m/60) + 'h' + (m%60 ? String(m%60).padStart(2,'0') : '') : m + ' min';
+function horariosSaida(ev, fase){
+  /* viagem combinada: quem manda é a rota (a saída é uma só) */
+  const ch = minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
+  const vi = minViagem(ev);
+  if(ch == null || vi == null) return null;
+  const c = cfgSaida(), sai = ch - vi - c.margem;
+  return {chegada:hm(ch), saida:hm(sai), carregar:hm(sai - c.carga), viagem:vi, vespera: sai < 0, vesperaCarga: sai - c.carga < 0};
+}
+/* horário de uma operação do dia: numa viagem combinada vale a saída da rota */
+function saidaDaOp(o, D){
+  if(!o.viagens.some(x=>!x.jaLocal)) return null;
+  const j = o.viagens.find(x=>x.junto);
+  if(j){
+    const rt = rotaJunta(D, o.ev.id, j.junto, o.fase);
+    if(rt && rt.h1){
+      if(rt.paradas[0].ev.id === o.ev.id) return Object.assign({}, rt.h1, {parada:1});
+      return Object.assign({}, rt.h1, {chegada: rt.chegada2 || '?', parada:2, primeira: rt.paradas[0].ev.nome});
+    }
+  }
+  return horariosSaida(o.ev, o.fase);
+}
+function txtSaida(hs){
+  if(!hs) return '';
+  if(hs.parada === 2) return '🕐 Caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
+  return '🕐 Carregar ' + hs.carregar + (hs.vesperaCarga ? ' (véspera)' : '') + ' · sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' · chegar ' + hs.chegada;
+}
+function blocoSaida(ev){
+  if(minViagem(ev) == null) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância (ou use 📍 Calcular) para a Central dizer a hora de sair.</div>';
+  const lin = [];
+  const hM = horariosSaida(ev, 'mont');
+  if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM).slice(3));
+  if(ev.desm){
+    if(ev.permanece && !temFrotaDesm(ev)) lin.push('<b>📤 Desmontagem</b> — caminhão já está no local');
+    else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD).slice(3)); }
+  }
+  const c = cfgSaida();
+  return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' +
+    '<div style="font-size:11px;color:var(--muted)">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · ' + c.carga + ' min para carregar — ajuste em Integrações</div>';
+}
+
+/* ================= FICHA DO LOCAL =================
+   O que já aprendemos em cada local fica guardado e aparece sozinho no próximo evento lá. */
+const ACESSO_OPC = [[0,'qualquer caminhão entra'],[8.6,'até TRUCK (carreta não entra)'],[7,'até TOCO / BAÚ'],[4.5,'só F-4000 ou menor']];
+const rotuloAcesso = m => (ACESSO_OPC.find(x=>x[0]===+m) || [0, 'caminhão de até ' + m + ' m'])[1];
+function chaveLocal(ev){
+  const l = String(ev.local||'').trim(); if(!l || l==='—') return null;
+  const c = String(ev.cidade||'').trim();
+  const n = t => semAcentoSimples(t).replace(/[^a-z0-9]+/g,' ').trim();
+  return n(l) + '|' + n(c==='—' ? '' : c);
+}
+function fichaLocal(ev){ const k = chaveLocal(ev); return (k && CONFIG.locais && CONFIG.locais[k]) || null; }
+function resumoFicha(f){
+  const p = [];
+  if(+f.maxC) p.push(rotuloAcesso(f.maxC));
+  if(f.descarga) p.push('descarga: ' + f.descarga);
+  if(f.portaria) p.push('portaria: ' + f.portaria);
+  if(f.obs) p.push(f.obs);
+  return p.join(' · ');
+}
+function setFicha(id, campo, valor){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const k = chaveLocal(ev); if(!k) return toast('Preencha o local do evento primeiro.');
+  CONFIG.locais = CONFIG.locais || {};
+  const f = CONFIG.locais[k] = CONFIG.locais[k] || {local: ev.local, cidade: ev.cidade};
+  f[campo] = campo === 'maxC' ? (+valor || 0) : String(valor || '').trim();
+  f.atualizado = HOJE;
+  salvar(); replanejar(true); renderQuadro(); verEvento(id);
+}
+function eventosNoLocal(ev){
+  const k = chaveLocal(ev); if(!k) return [];
+  return eventos.filter(e => e.id !== ev.id && chaveLocal(e) === k).sort((a,b)=>String(b.mont||'').localeCompare(String(a.mont||'')));
+}
+function blocoFicha(ev){
+  if(!chaveLocal(ev)) return '<div style="font-size:12px;color:var(--muted)">Sem local no evento — preencha o local para guardar a ficha dele.</div>';
+  const f = fichaLocal(ev) || {};
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const inp = 'border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:12.5px';
+  const ant = eventosNoLocal(ev);
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:4px">'+
+      '<label style="font-size:11.5px;color:var(--muted)">Maior caminhão que entra<select style="'+inp+';width:100%" onchange="setFicha(\''+ev.id+'\',\'maxC\',this.value)">'+
+        ACESSO_OPC.map(o=>'<option value="'+o[0]+'"'+((+f.maxC||0)===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select></label>'+
+      '<label style="font-size:11.5px;color:var(--muted)">Horário de carga e descarga<input style="'+inp+';width:100%" value="'+esc(f.descarga)+'" placeholder="ex.: só das 6h às 10h" onchange="setFicha(\''+ev.id+'\',\'descarga\',this.value)"></label>'+
+      '<label style="font-size:11.5px;color:var(--muted)">Portaria / contato do local<input style="'+inp+';width:100%" value="'+esc(f.portaria)+'" placeholder="ex.: Sr. José (21) 9..." onchange="setFicha(\''+ev.id+'\',\'portaria\',this.value)"></label>'+
+      '<label style="font-size:11.5px;color:var(--muted);grid-column:1/-1">Acesso e observações<input style="'+inp+';width:100%" value="'+esc(f.obs)+'" placeholder="ex.: portão baixo (3,5m), rodízio de caminhão, entrada pela rua de trás" onchange="setFicha(\''+ev.id+'\',\'obs\',this.value)"></label>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(f.atualizado ? 'Ficha atualizada em '+fmtD(f.atualizado)+' · ' : '')+'vale para todo evento em '+esc(ev.local)+
+      (ant.length ? ' · já fizemos aqui: '+ant.slice(0,4).map(e=>esc(e.nome)+(e.mont?' ('+fmtD(dia(e.mont)).slice(3)+')':'')).join(', ')+(ant.length>4?'…':'') : ' · primeiro evento neste local')+'</div>';
+}
+
+/* ================= UM CAMINHÃO, DOIS EVENTOS NA MESMA VIAGEM =================
+   Eventos perto um do outro no mesmo dia: se a carga dos dois cabe no
+   maior caminhão, a Central sugere juntar. A escala marca "junto" nos dois lados. */
+function evGeo(ev){
+  if(ev.geo && ev.geo.lat != null) return ev.geo;
+  const loc = String(ev.local||'').trim(), cid = String(ev.cidade||'').trim();
+  const temL = loc && loc!=='—', temC = cid && cid!=='—';
+  const k1 = temL ? semAcentoSimples(loc + (temC ? ', ' + cid : '') + ', Brasil').trim() : null;
+  const k2 = temC ? semAcentoSimples(cid + ', Brasil').trim() : null;
+  return (k1 && GEO[k1]) || (k2 && GEO[k2]) || null;
+}
+function distLinha(a, b){
+  const R = 6371, rad = x => x*Math.PI/180;
+  const dLa = rad(b.lat-a.lat), dLo = rad(b.lon-a.lon);
+  const s = Math.sin(dLa/2)**2 + Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+/* distância por estrada estimada entre dois eventos (linha reta × 1,3) */
+function kmEntre(a, b){ const ga = evGeo(a), gb = evGeo(b); return (ga && gb) ? Math.round(distLinha(ga, gb) * 1.3) : null; }
+/* ordem das paradas e horários da viagem combinada */
+function rotaJunta(D, aId, bId, fase){
+  const a = eventos.find(e=>e.id===aId), b = eventos.find(e=>e.id===bId);
+  if(!a || !b) return null;
+  const hora = ev => minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
+  const ord = [a, b].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)) || ((+x.km||0) - (+y.km||0)));
+  const [p1, p2] = ord, trecho = kmEntre(p1, p2);
+  const c = cfgSaida();
+  const h1 = horariosSaida(p1, fase);
+  const minTrecho = trecho != null ? Math.round(trecho / c.vel * 60) : null;
+  const cheg2 = (h1 && minTrecho != null) ? minDe(h1.chegada) + c.descarga + minTrecho : null;
+  const kmTot = (+p1.km||0) + (trecho||0) + (+p2.km||0);
+  return {paradas: ord.map(ev=>({ev})), trecho, kmTot, h1, chegada2: cheg2 != null ? hm(cheg2) : null,
+    atraso2: (cheg2 != null && hora(p2) != null) ? cheg2 - hora(p2) : null};
+}
+function sugestoesJuntar(D){
+  const {ops} = opsDoDia(D);
+  const raio = cfgSaida().raio;
+  const out = [];
+  if(!raio) return out;
+  for(let i=0; i<ops.length; i++) for(let j=i+1; j<ops.length; j++){
+    const A = ops[i], B = ops[j];
+    if(A.fase !== B.fase) continue;
+    const vA = A.viagens.filter(x=>!x.jaLocal), vB = B.viagens.filter(x=>!x.jaLocal);
+    if(vA.length !== 1 || vB.length !== 1) continue;           /* só viagem única de cada lado */
+    if(vA[0].junto || vB[0].junto) continue;
+    const km = kmEntre(A.ev, B.ev);
+    if(km == null || km > raio) continue;
+    const cA = carga(A.ev), cB = carga(B.ev);
+    if(!(cA.volF || cA.pesoF) || !(cB.volF || cB.pesoF)) continue;
+    const lim = Math.min(...[A.ev, B.ev].map(e=>+((fichaLocal(e)||{}).maxC) || 999));
+    const pecaMax = Math.max(cA.maiorPeca||0, cB.maiorPeca||0);
+    const cand = [vA[0].v, vB[0].v].filter(v=>!v.manut && (+v.c||0) <= lim && (!pecaMax || (+v.c||0) >= pecaMax))
+      .filter(v => v.vol >= cA.volF + cB.volF && v.peso >= cA.pesoF + cB.pesoF)
+      .sort((x,y)=>x.vol - y.vol);
+    if(!cand.length) continue;
+    const v = cand[0];
+    const dono = (vA[0].v.id === v.id) ? A : B;
+    out.push({D, fase:A.fase, a:A.ev, b:B.ev, v, dono: dono.ev, motorista: (dono===A ? vA[0] : vB[0]).motorista, km,
+      vol: cA.volF + cB.volF, livre: (vA[0].v.id===vB[0].v.id) ? null : (dono===A ? vB[0].v : vA[0].v)});
+  }
+  return out;
+}
+/* coloca a viagem de um evento naquele dia no caminhão V, marcando "junto" */
+function marcarViagemJunto(ev, D, fase, V, motorista, outroId, trocar){
+  let dz = fase === 'desm';
+  if(dz && !temFrotaDesm(ev)){
+    ev.veiculosD = [...frotaDo(ev,'mont')];
+    ev.escalaD = escalaDo(ev,'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:null}));
+  }
+  const padrao = dia(dz ? ev.desm : ev.mont);
+  const frota = [...frotaDo(ev, dz ? 'desm' : 'mont')];
+  const esc = escalaDo(ev, dz ? 'desm' : 'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
+  const alvo = esc.find(x=>(x.dia || padrao) === D);
+  if(!alvo) return false;
+  if(trocar){ frota[alvo.i] = V.id; alvo.v = V.id; alvo.motorista = V.agregado ? V.motoristaFixo : (motorista || alvo.motorista); }
+  alvo.junto = outroId;
+  if(dz){ ev.veiculosD = frota; ev.escalaD = esc; } else { ev.veiculos = frota; ev.escala = esc; }
+  return true;
+}
+function juntarViagem(D, aId, bId, fase){
+  const s = sugestoesJuntar(D).find(x=>x.fase===fase && ((x.a.id===aId && x.b.id===bId) || (x.a.id===bId && x.b.id===aId)));
+  if(!s) return toast('Essa combinação não vale mais — confira os caminhões do dia.');
+  const outro = s.dono.id === s.a.id ? s.b : s.a;
+  marcarViagemJunto(s.dono, D, fase, s.v, s.motorista, outro.id, false);
+  marcarViagemJunto(outro, D, fase, s.v, s.motorista, s.dono.id, true);
+  salvar(); replanejar(true); renderQuadro();
+  if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha();
+  if(document.getElementById('ov-ev').classList.contains('on')) verEvento(outro.id);
+  toast('🔗 ' + s.v.tipo + ' ' + s.v.placa + ' leva ' + s.a.nome + ' e ' + s.b.nome + ' na mesma viagem' + (s.livre ? ' — o ' + s.livre.tipo + ' ' + s.livre.placa + ' ficou livre' : '') + '.');
+}
+function desfazerJunto(aId, bId){
+  [aId, bId].forEach(id=>{
+    const ev = eventos.find(e=>e.id===id); if(!ev) return;
+    ['escala','escalaD'].forEach(k=>{ (ev[k]||[]).forEach(x=>{ if(x.junto === (id===aId ? bId : aId)) x.junto = null; }); });
+  });
+  salvar(); replanejar(true); renderQuadro();
+  if(document.getElementById('ov-ev').classList.contains('on')) verEvento(aId);
+  toast('Viagem separada. Confira o caminhão de cada evento.');
+}
+function htmlRota(D, aId, bId, fase){
+  const rt = rotaJunta(D, aId, bId, fase); if(!rt) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const [p1, p2] = rt.paradas.map(x=>x.ev);
+  return 'Galpão → <b>' + esc(p1.nome) + '</b>' + (+p1.km ? ' (' + p1.km + ' km)' : '') + ' → <b>' + esc(p2.nome) + '</b>' + (rt.trecho!=null ? ' (≈' + rt.trecho + ' km)' : '') + ' → galpão · ≈' + rt.kmTot + ' km no total' +
+    (rt.h1 ? '<br><small>' + txtSaida(rt.h1) + ' na 1ª parada' + (rt.chegada2 ? ' · 2ª parada ≈' + rt.chegada2 + (rt.atraso2 > 15 ? ' <b style="color:#b0483c">(' + durTxt(rt.atraso2) + ' depois do início de ' + esc(p2.nome) + ')</b>' : '') : '') + '</small>' : '') +
+    '<br><small>' + (fase==='desm' ? 'Recolhe primeiro ' + esc(p1.nome) + ', depois ' + esc(p2.nome) + '.' : 'Carregue primeiro o material de ' + esc(p2.nome) + ' (vai no fundo) e por último o de ' + esc(p1.nome) + '.') + '</small>';
+}
+function htmlJuntar(D){
+  const {ops} = opsDoDia(D);
+  const feitos = [], vistos = new Set();
+  ops.forEach(o=>o.viagens.forEach(x=>{
+    if(!x.junto) return;
+    const k = [o.ev.id, x.junto].sort().join('+') + o.fase;
+    if(vistos.has(k)) return; vistos.add(k);
+    feitos.push('🔗 <b>' + x.v.tipo + ' ' + x.v.placa + '</b>' + (x.motorista ? ' (' + x.motorista + ')' : '') + ': ' + htmlRota(D, o.ev.id, x.junto, o.fase));
+  }));
+  const sug = sugestoesJuntar(D).map(s=>'💡 <b>' + s.a.nome + '</b> e <b>' + s.b.nome + '</b> ficam a ≈' + s.km + ' km um do outro e a carga (' + num(s.vol) + ' m³) cabe no <b>' + s.v.tipo + ' ' + s.v.placa + '</b>' + (s.livre ? ' — libera o ' + s.livre.tipo + ' ' + s.livre.placa : '') + '. ' +
+    '<button class="mini" onclick="event.stopPropagation();juntarViagem(\'' + D + '\',\'' + s.a.id + '\',\'' + s.b.id + '\',\'' + s.fase + '\')">🔗 Juntar na mesma viagem</button>');
+  if(!feitos.length && !sug.length) return '';
+  return '<div class="alert" style="margin:0 0 12px;line-height:1.6">' + (feitos.length ? '<b>Viagens combinadas</b><br>' + feitos.join('<br>') : '') + (feitos.length && sug.length ? '<br>' : '') + (sug.length ? '<b>Dá pra juntar</b><br>' + sug.join('<br>') : '') + '</div>';
+}
+/* no evento: viagens combinadas e sugestões dos dias de saída dele */
+function blocoJuntarEv(ev){
+  if(ev.esp || !ev.mont) return '';
+  const dias = new Set();
+  escalaDo(ev,'mont').forEach(x=>dias.add(x.dia || dia(ev.mont)));
+  if(ev.desm) (temFrotaDesm(ev) ? escalaDo(ev,'desm') : [{}]).forEach(x=>dias.add(x.dia || dia(ev.desm)));
+  const partes = [];
+  [...dias].filter(Boolean).sort().forEach(D=>{
+    opsDoDia(D).ops.filter(o=>o.ev.id===ev.id).forEach(o=>o.viagens.filter(x=>x.junto).forEach(x=>{
+      partes.push('🔗 <b>' + rotDia(D) + '</b> — ' + x.v.tipo + ' ' + x.v.placa + ': ' + htmlRota(D, ev.id, x.junto, o.fase) +
+        ' <button class="mini" onclick="desfazerJunto(\'' + ev.id + '\',\'' + x.junto + '\')">Separar</button>');
+    }));
+    sugestoesJuntar(D).filter(s=>s.a.id===ev.id || s.b.id===ev.id).forEach(s=>{
+      const o = s.a.id===ev.id ? s.b : s.a;
+      partes.push('💡 <b>' + rotDia(D) + '</b> — ' + o.nome + ' fica a ≈' + s.km + ' km e as duas cargas cabem no ' + s.v.tipo + ' ' + s.v.placa + '. ' +
+        '<button class="mini" onclick="juntarViagem(\'' + D + '\',\'' + s.a.id + '\',\'' + s.b.id + '\',\'' + s.fase + '\')">🔗 Juntar</button>');
+    });
+  });
+  if(!partes.length) return '';
+  return '<div style="grid-column:1/-1"><i>🔗 Um caminhão, dois eventos</i><div style="font-size:12.5px;line-height:1.7">' + partes.join('<br>') + '</div></div>';
+}
+/* coordenadas dos eventos das próximas semanas (para achar vizinhos), sem mexer no km */
+let geoRodando = false;
+async function localizarEventos(){
+  if(geoRodando) return; geoRodando = true;
+  try{
+    const lim = new Date(HOJE+'T12:00'); lim.setDate(lim.getDate()+21); const L = lim.toISOString().slice(0,10);
+    for(const ev of eventos.filter(e=>!e.esp && e.mont && dia(e.mont) <= L && (dia(fimDesm(e))||dia(e.mont)) >= HOJE && !evGeo(e))){
+      const loc = String(ev.local||'').trim(), cid = String(ev.cidade||'').trim();
+      const temL = loc && loc!=='—', temC = cid && cid!=='—';
+      let g = temL ? await geocodEndereco(loc + (temC ? ', ' + cid : '') + ', Brasil') : null;
+      if(!g && temC) g = await geocodEndereco(cid + ', Brasil');
+    }
+  }catch(e){}
+  finally{ geoRodando = false; }
+}
+
+/* ================= RESUMO DA SEMANA ================= */
+function segundaDe(iso){ const d = new Date(iso+'T12:00'); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d.toISOString().slice(0,10); }
+function somaDias(iso, n){ const d = new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function resumoSemana(seg){
+  const dias = [0,1,2,3,4,5,6].map(n=>somaDias(seg, n));
+  const porDia = dias.map(D=>({D, ...opsDoDia(D)}));
+  let saidas = 0, km = 0, diarias = 0;
+  const evsM = new Set(), evsD = new Set(), atencao = [], sug = [];
+  porDia.forEach(d=>{
+    const combos = new Set();
+    d.ops.forEach(o=>{
+      (o.fase==='desm' ? evsD : evsM).add(o.ev.id);
+      diarias += o.pessoas.filter(pp=>!pp.prod).length;
+      o.viagens.filter(x=>!x.jaLocal).forEach(x=>{
+        if(x.junto){ const k = [o.ev.id, x.junto].sort().join('+'); if(combos.has(k)) return; combos.add(k);
+          const rt = rotaJunta(d.D, o.ev.id, x.junto, o.fase); saidas++; km += rt ? rt.kmTot : 2*(+o.ev.km||0); return; }
+        saidas++; km += 2*(+o.ev.km||0);
+      });
+      const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[d.D];
+      if(w && riscoClima(w)) atencao.push((riscoClima(w)===2?'⛈ ':'☔ ') + rotDia(d.D) + ' — ' + o.ev.nome + ': ' + txtClima(w));
+      o.viagens.forEach(x=>{ if(!x.motorista && !x.jaLocal) atencao.push('🧑‍✈️ ' + rotDia(d.D) + ' — ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista em ' + o.ev.nome); });
+    });
+    d.duplos.forEach(x=>atencao.push('👷 ' + rotDia(d.D) + ' — ' + x.nome + ' em dois lugares: ' + x.onde.join(' e ')));
+    d.camDuplo.forEach(x=>atencao.push('🚚 ' + rotDia(d.D) + ' — ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos: ' + x.onde.join(' e ')));
+    sugestoesJuntar(d.D).forEach(s=>sug.push(rotDia(d.D) + ' — ' + s.a.nome + ' + ' + s.b.nome + ' no ' + s.v.tipo + ' ' + s.v.placa + (s.livre ? ' (libera o ' + s.livre.tipo + ' ' + s.livre.placa + ')' : '')));
+  });
+  [...new Set([...evsM, ...evsD])].forEach(id=>{
+    const ev = eventos.find(e=>e.id===id);
+    plano(ev).conflitos.forEach(c=>atencao.push('⚠ ' + ev.nome + ': ' + c.msg));
+  });
+  /* semana passada */
+  const ant = [0,1,2,3,4,5,6].map(n=>somaDias(seg, n-7));
+  const faltas = {}, manut = {}, final = [];
+  eventos.forEach(ev=>{
+    if(ev.esp === 'cancelado' || ev.esp === 'terceirizado' || !ev.mont) return;
+    pessoasNaEscala(ev).forEach(pp=>diasDe(ev, pp.nome).filter(d=>ant.includes(d)).forEach(d=>{
+      if(faltouDia(ev, pp.nome, d)) (faltas[pp.nome] = faltas[pp.nome] || []).push(ev.nome);
+      else if(manutDia(ev, pp.nome, d)) (manut[pp.nome] = manut[pp.nome] || []).push(ev.nome);
+    }));
+    const fimE = dia(fimDesm(ev)) || dia(ev.desm);
+    if(fimE && ant.includes(fimE)) final.push(ev.nome + (ev.esp==='finalizado' ? '' : ' (ainda não marcado como finalizado)'));
+  });
+  return {seg, fim:dias[6], porDia, num:{mont:evsM.size, desm:evsD.size, saidas, km:Math.round(km), diarias},
+    atencao:[...new Set(atencao)], sug, passada:{faltas, manut, final, ini:ant[0], fim:ant[6]}};
+}
+function textoSemana(r){
+  const L = [];
+  L.push('*RESUMO DA SEMANA — ' + fmtD(r.seg).slice(0,5) + ' a ' + fmtD(r.fim).slice(0,5) + '*');
+  L.push('📊 ' + r.num.mont + ' montagem(ns) · ' + r.num.desm + ' desmontagem(ns) · ' + r.num.saidas + ' saída(s) de caminhão · ≈' + r.num.km + ' km · ' + r.num.diarias + ' diária(s)');
+  r.porDia.filter(d=>d.ops.length).forEach(d=>{
+    L.push('');
+    L.push('*' + rotDia(d.D).toUpperCase() + '*');
+    d.ops.forEach(o=>{
+      const hs = saidaDaOp(o, d.D);
+      L.push((o.fase==='desm' ? '📤 ' : '🔨 ') + o.ev.nome + (o.tot>1 ? ' (' + o.n + '/' + o.tot + ')' : '') +
+        (o.ev.cidade && o.ev.cidade!=='—' ? ' — ' + o.ev.cidade : '') + ' — ' + (o.equipe || '—') +
+        (o.viagens.length ? ' — ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.jaLocal ? ' (no local)' : (x.motorista ? ' (' + x.motorista + ')' : ' (SEM MOTORISTA)')) + (x.junto ? ' 🔗' : '')).join(', ') : '') +
+        (hs ? ' — sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') : ''));
+    });
+  });
+  if(!r.porDia.some(d=>d.ops.length)){ L.push(''); L.push('Nenhuma operação na semana.'); }
+  if(r.atencao.length){ L.push(''); L.push('⚠ *ATENÇÃO*'); r.atencao.forEach(a=>L.push('- ' + a)); }
+  if(r.sug.length){ L.push(''); L.push('💡 *DÁ PRA JUNTAR NA MESMA VIAGEM*'); r.sug.forEach(a=>L.push('- ' + a)); }
+  const pf = r.passada, nf = Object.keys(pf.faltas), nm = Object.keys(pf.manut);
+  L.push(''); L.push('📋 *SEMANA PASSADA (' + fmtD(pf.ini).slice(0,5) + ' a ' + fmtD(pf.fim).slice(0,5) + ')*');
+  L.push('- Faltas: ' + (nf.length ? nf.map(n=>n + ' (' + pf.faltas[n].length + ')').join(', ') : 'nenhuma'));
+  if(nm.length) L.push('- Manutenção: ' + nm.map(n=>n + ' (' + pf.manut[n].length + ')').join(', '));
+  L.push('- Encerrados: ' + (pf.final.length ? pf.final.join(', ') : 'nenhum'));
+  return L.join('\n');
+}
+function semanaAtual(){ const i = document.getElementById('sem-dia'); return segundaDe((i && i.value) || HOJE); }
+function abrirSemana(iso){
+  const i = document.getElementById('sem-dia');
+  i.value = iso || i.value || HOJE;
+  const t = document.getElementById('sem-tel'); if(t) t.value = CONFIG.telDiretoria || '';
+  renderSemana();
+  document.getElementById('ov-semana').classList.add('on');
+}
+function mudarSemana(n){ const i = document.getElementById('sem-dia'); i.value = somaDias(semanaAtual(), n); renderSemana(); }
+function renderSemana(){
+  const r = resumoSemana(semanaAtual());
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  document.getElementById('sem-sub').textContent = fmtD(r.seg) + ' a ' + fmtD(r.fim);
+  const box = (n, t, cor) => '<div style="flex:1;min-width:110px;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:22px;font-weight:800;color:'+cor+'">'+n+'</div><div style="font-size:11.5px;color:var(--muted)">'+t+'</div></div>';
+  const pf = r.passada, nf = Object.keys(pf.faltas), nm = Object.keys(pf.manut);
+  document.getElementById('sem-corpo').innerHTML =
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+
+      box(r.num.mont,'montagens','#f0851e')+box(r.num.desm,'desmontagens','#1c4fa0')+box(r.num.saidas,'saídas de caminhão','var(--ink)')+box('≈'+r.num.km,'km rodados (ida e volta)','var(--ink)')+box(r.num.diarias,'diárias previstas','#0f8a4d')+'</div>'+
+    (r.atencao.length ? '<div class="alert red" style="margin:0 0 12px;line-height:1.6"><b>Atenção</b><br>'+r.atencao.map(esc).join('<br>')+'</div>' : '<div class="alert green" style="margin:0 0 12px">Nenhum ponto de atenção na semana.</div>')+
+    (r.sug.length ? '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>💡 Dá pra juntar na mesma viagem</b><br>'+r.sug.map(esc).join('<br>')+'<br><small>Use o botão "Juntar" no painel Amanhã ou dentro do evento.</small></div>' : '')+
+    r.porDia.map(d=>'<div style="border-top:1px solid var(--line);padding:8px 0"><b style="font-size:13px;color:'+(d.D===HOJE?'#f0851e':'var(--ink)')+'">'+rotDia(d.D)+'</b>'+
+      (d.ops.length ? d.ops.map(o=>{
+        const hs = saidaDaOp(o, d.D);
+        return '<div style="font-size:12.5px;margin:4px 0 0 10px;cursor:pointer" onclick="fechar(\'ov-semana\');verEvento(\''+o.ev.id+'\')">'+(o.fase==='desm'?'📤':'🔨')+' <b>'+esc(o.ev.nome)+'</b>'+(o.tot>1?' <small>('+o.n+'/'+o.tot+')</small>':'')+
+          ' <span style="color:var(--muted)">'+esc(o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : '')+' · '+esc(o.equipe||'—')+
+          (o.viagens.length ? ' · '+o.viagens.map(x=>esc(x.v.tipo+' '+x.v.placa)+(x.jaLocal?' (no local)':(x.motorista?' ('+esc(x.motorista)+')':' <b style="color:#b0483c">(sem motorista)</b>'))+(x.junto?' 🔗':'')).join(', ') : '')+
+          (hs ? ' · sai '+hs.saida+(hs.vespera?' (véspera)':'') : '')+'</span></div>'; }).join('')
+      : '<span style="font-size:12px;color:var(--muted);margin-left:8px">sem operação</span>')+'</div>').join('')+
+    '<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:12.5px;line-height:1.6"><b>📋 Semana passada</b> <small style="color:var(--muted)">('+fmtD(pf.ini).slice(0,5)+' a '+fmtD(pf.fim).slice(0,5)+')</small><br>'+
+      'Faltas: '+(nf.length ? nf.map(n=>esc(n)+' ('+pf.faltas[n].length+')').join(', ') : 'nenhuma')+'<br>'+
+      (nm.length ? 'Manutenção: '+nm.map(n=>esc(n)+' ('+pf.manut[n].length+')').join(', ')+'<br>' : '')+
+      'Encerrados: '+(pf.final.length ? pf.final.map(esc).join(', ') : 'nenhum')+'</div>';
+}
+function copiarSemana(){
+  const t = textoSemana(resumoSemana(semanaAtual()));
+  if(navigator.clipboard) navigator.clipboard.writeText(t).then(()=>toast('Resumo da semana copiado.'));
+}
+function whatsSemana(){
+  const t = textoSemana(resumoSemana(semanaAtual()));
+  const n = zap(CONFIG.telDiretoria);
+  window.open(n ? 'https://wa.me/' + n + '?text=' + encodeURIComponent(t) : 'https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+}
+function imprimirSemana(){
+  renderSemana();
+  const r = resumoSemana(semanaAtual());
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Semana '+r.seg+'</title><style>'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#16234b;margin:24px;font-size:12.5px}'+
+    'h1{font-size:19px;margin:0 0 2px} .sub{color:#777;margin:0 0 14px}'+
+    '.alert{border-radius:6px;padding:8px 10px;margin:0 0 10px;border:1px solid #e3e8f0} .alert.red{background:#fdecea;border-color:#f3c6c0} .alert.green{background:#eaf7ef;border-color:#bfe5cd}'+
+    'button{display:none} :root{--line:#e3e8f0;--muted:#777;--ink:#16234b}'+
+    '@media print{body{margin:10mm}}'+
+  '</style></head><body>'+(CONFIG.logo?'<img src="'+CONFIG.logo+'" style="max-height:46px;float:right">':'')+
+    '<h1>Resumo da semana</h1><p class="sub">'+fmtD(r.seg)+' a '+fmtD(r.fim)+' · gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
+    document.getElementById('sem-corpo').innerHTML+
+  '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+/* segunda-feira de manhã: avisa uma vez que o resumo está pronto */
+function lembreteSemana(){
+  try{
+    const agora = new Date();
+    if(agora.getDay() !== 1 || agora.getHours() < 7) return false;
+    if(localStorage.getItem('cpl:avisoSemana') === HOJE) return false;
+    localStorage.setItem('cpl:avisoSemana', HOJE);
+    const r = resumoSemana(segundaDe(HOJE));
+    toast('📊 Resumo da semana pronto: ' + r.num.mont + ' montagem(ns), ' + r.num.desm + ' desmontagem(ns)' + (r.atencao.length ? ', ⚠ ' + r.atencao.length + ' ponto(s) de atenção' : '') + '.', 'Abrir', ()=>abrirSemana(HOJE));
+    return true;
+  }catch(e){ return false; }
+}
+
+/* previsão: ao abrir (depois que os dados carregaram) e a cada 3 horas */
+if(typeof window !== 'undefined' && !window.__semClimaAuto){
+  setTimeout(()=>atualizarClima(false), 4000);
+  setTimeout(()=>localizarEventos(), 9000);
+  setInterval(()=>atualizarClima(false), 3*3600*1000);
+}
+
 function opChip(ev){
   const op = operacaoHoje(ev);
   if(op==='montagem') return '<span class="fase op-m">🔨 EM MONTAGEM</span>';
@@ -2055,9 +3047,10 @@ function escalaDo(ev, fase){
       if(reg) usadosMan.push(reg);
     }
     const diaProprio = (reg && reg.dia) || null; /* viagem em dia alternado */
-    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, dia:diaProprio, fixo:true};
+    const junto = (reg && reg.junto) || null;  /* mesma viagem de outro evento */
+    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, dia:diaProprio, fixo:true, junto};
     const m = (reg || sug.find(x=>x.v===id) || {}).motorista || null;
-    return {i, v:id, motorista:m, dia:diaProprio, fixo:false};
+    return {i, v:id, motorista:m, dia:diaProprio, fixo:false, junto};
   });
 }
 /* junta repetidos numa linha só, marcando quantas viagens */
@@ -2266,6 +3259,7 @@ function cardEvento(ev, soSetorJC, papel){
       '</div>'+
       '<div class="selo">'+
         (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
+        chipClima(ev)+
         (ev.datasMudaram ? '<span class="fase" style="background:'+(ev.datasMudaram.avisar?'#b0483c':'#b47f08')+'" title="'+String(ev.datasMudaram.o_que.join(' · ')).replace(/"/g,'&quot;')+'">📅 DATAS MUDARAM'+(ev.datasMudaram.avisar?' — AVISAR':'')+'</span>' : '')+
         '<span class="badge '+s.classe+'">'+s.texto+'</span>'+
         opChip(ev)+
@@ -2328,7 +3322,10 @@ function verEvento(id){
           .map(p=>'<option '+(p===ev.produtor?'selected':'')+'>'+p+'</option>').join('')+
         '<option '+(ev.produtor===SEM_PRODUTOR?'selected':'')+'>'+SEM_PRODUTOR+'</option>'+
         '</select>'+
-        (ev.produtor ? '' : '<div style="font-size:12px;color:var(--muted);margin-top:5px">Sugerido pela IA. Aceite a sugestão do evento ou escolha acima para fixar.</div>')+
+        (ev.produtor && ev.produtor!==SEM_PRODUTOR
+          ? '<div style="font-size:12px;margin-top:5px"><button class="mini" onclick="abreDiasPessoa(\''+ev.id+'\',\''+String(produtorDo(ev)).replace(/'/g,"\\'")+'\')">📅 Dias do produtor no evento</button>'+
+            (((ev.diasPessoa||{})[produtorDo(ev)]) ? ' <small style="color:#a86412;font-weight:700">📅 '+resumoDias(diasDe(ev, produtorDo(ev)))+'</small>' : '')+'</div>'
+          : '<div style="font-size:12px;color:var(--muted);margin-top:5px">Sugerido pela IA. Aceite a sugestão do evento ou escolha acima para fixar.</div>')+
         '</div>'+
       '<div><i>Nome do Responsável</i><input value="'+String(ev.respNome||'').replace(/"/g,'&quot;')+'" placeholder="quem responde no local" '+
         'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
@@ -2361,11 +3358,18 @@ function verEvento(id){
       '<div><i>Distância até a montagem</i><div style="display:flex;align-items:center;gap:7px">'+
         '<input type="number" min="0" step="1" value="'+(+ev.km||0)+'" '+
         'style="width:90px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
-        'onchange="setKmEvento(\''+ev.id+'\',this.value)"><b>km</b></div></div>'+
+        'onchange="setKmEvento(\''+ev.id+'\',this.value)"><b>km</b>'+
+        '<button class="mini" onclick="calcularKm(\''+ev.id+'\')" title="Distância por estrada do galpão até o local do evento">📍 Calcular</button></div>'+
+        (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+'</small>' : '')+'</div>'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
+      '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
+      '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
+      '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
+      blocoJuntarEv(ev)+
     '</div></div>'+
 
-    '<div class="sec"><h4>🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span></h4>'+
+    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
+      ((ev.estruturas||[]).length ? '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>' : '')+'</h4>'+
       ((ev.estruturas||[]).length
         ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
             '<button class="mini danger" onclick="removerEstrutura(\''+ev.id+'\','+ix+')">✕</button></div>').join('')
@@ -2390,6 +3394,19 @@ function verEvento(id){
       '</div>'+
     '</div>'+
 
+    '<div class="sec"><details'+((ev.hist||[]).length?'':' open')+'><summary style="cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase">🕘 Histórico de alterações'+
+      ((ev.hist||[]).length ? ' <span style="text-transform:none;letter-spacing:0;font-weight:600">· '+ev.hist.length+' registro(s), último '+
+        new Date(ev.hist[0].q).toLocaleDateString('pt-BR')+' por '+ev.hist[0].quem+'</span>' : '')+'</summary>'+
+      ((ev.hist||[]).length
+        ? '<div style="margin-top:10px;max-height:260px;overflow:auto">'+ev.hist.map(hh=>
+            '<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:12.5px">'+
+              '<div style="min-width:118px;color:var(--muted)">'+new Date(hh.q).toLocaleDateString('pt-BR')+' '+new Date(hh.q).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+
+                '<br><b style="color:var(--ink2)">'+String(hh.quem).replace(/</g,'&lt;')+'</b></div>'+
+              '<div style="flex:1">'+hh.o.map(x=>String(x).replace(/</g,'&lt;')).join('<br>')+'</div>'+
+            '</div>').join('')+'</div>'
+        : '<div style="font-size:12.5px;color:var(--muted);margin-top:8px">Nenhuma alteração registrada ainda. A partir de agora, toda mudança neste evento fica anotada aqui, com data e quem fez.</div>')+
+    '</details></div>'+
+
     '<div class="sec"><h4>ANÁLISE DA IA</h4>'+alertas+
       '<div class="ia">'+
         '<p><b>EQUIPE</b>'+a.just.equipe+'</p>'+
@@ -2411,7 +3428,7 @@ function verEvento(id){
           (eq!==EQUIPE_TERC ? (function(){
             const fo = liderFolga(ev, eq);
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':'background:#fdf1e2;color:#a86412')+'" title="Líder da equipe">'+
-              (fo?'💤 ':'👑 ')+eq+' <small style="opacity:.7">(líder)</small>'+
+              (fo?'💤 ':'👑 ')+'<span style="cursor:pointer;text-decoration:underline dotted" title="Ver a agenda do mês" data-t="mont" data-n="'+eq.replace(/"/g,'&quot;')+'" onclick="abrirAgendaNome(this)">'+eq+'</span> <small style="opacity:.7">(líder)</small>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho do líder neste evento" onclick="abreDiasPessoa(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">📅</button>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga ao líder neste evento')+'" onclick="toggleFolga(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button></span>';
           })() : '')+
@@ -2423,7 +3440,7 @@ function verEvento(id){
             const fo = (ev.folgas||[]).includes(m);
             const dpz = (ev.diasPessoa||{})[m];
             const seloDias = dpz ? ' <small style="color:#a86412;font-weight:700" title="Dias desta pessoa no evento">📅 '+resumoDias(diasDe(ev, m))+'</small>' : '';
-            return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':(fora?'background:#eaf2fd;color:#1c5fb8':''))+'">'+(fo?'💤 ':'')+m+
+            return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':(fora?'background:#eaf2fd;color:#1c5fb8':''))+'">'+(fo?'💤 ':'')+'<span style="cursor:pointer;text-decoration:underline dotted" title="Ver a agenda do mês" data-t="mont" data-n="'+m.replace(/"/g,'&quot;')+'" onclick="abrirAgendaNome(this)">'+m+'</span>'+
               (fora ? ' <small style="opacity:.7">('+rotCasa+')</small>' : '')+seloDias+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho desta pessoa no evento (frentes que começam em dias diferentes)" onclick="abreDiasPessoa(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">📅</button>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga neste evento — sai da escala e dos conflitos, sem sair do time')+'" onclick="toggleFolga(\''+ev.id+'\',\''+m.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button>'+
@@ -2524,6 +3541,7 @@ function setRespTel(id, valor){
   salvar(); renderQuadro();
 }
 function setKmEvento(id, valor){
+  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; } }
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
   salvar(); renderQuadro(); verEvento(id); /* recalcula frota (regra do agregado usa o km) */
@@ -2652,7 +3670,8 @@ function blocoFrota(ev, modo){
       const padraoDia = dia(fase==='desm' ? ev.desm : ev.mont) || '';
       const alternado = x.dia && x.dia !== padraoDia;
       return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+viagem+' <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span>'+
-             (alternado?' <span class="tag" style="color:#a86412">sai '+fmtD(x.dia)+'</span>':'')+'</span>'+
+             (alternado?' <span class="tag" style="color:#a86412">sai '+fmtD(x.dia)+'</span>':'')+
+             ((x.junto && (fase==='mont' || temFrotaDesm(ev))) ? ' <span class="tag" style="color:#1c4fa0" title="Mesmo caminhão, mesma viagem">🔗 junto com '+nomeDo(x.junto)+' <a href="#" onclick="event.preventDefault();desfazerJunto(\''+ev.id+'\',\''+x.junto+'\')" style="color:#b0483c">desfazer</a></span>' : '')+'</span>'+
              '<span style="display:flex;gap:10px;align-items:center">'+
              '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              sel+
@@ -2690,7 +3709,7 @@ function addVeiculo(id, vid, fase){
   if(!vid) return;
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
-  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null}));
+  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
   const frota = [...frotaDo(ev, dz?'desm':'mont')];
   frota.push(vid); /* mesmo veículo pode entrar de novo: é outra viagem */
   const v = veiculos.find(x=>x.id===vid);
@@ -2705,7 +3724,7 @@ function setMotorista(id, vaga, nome, fase){
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
   const nova = escalaDo(ev, dz?'desm':'mont')
-    .map(x=>({i:x.i, v:x.v, dia:x.dia||null, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
+    .map(x=>({i:x.i, v:x.v, dia:x.dia||null, junto:x.junto||null, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
@@ -2716,7 +3735,7 @@ function setDiaViagem(id, vaga, val, fase){
   const dz = fase==='desm' && temFrotaDesm(ev);
   const padrao = dia(fase==='desm' ? ev.desm : ev.mont);
   const nova = escalaDo(ev, dz?'desm':'mont')
-    .map(x=>({i:x.i, v:x.v, motorista:x.motorista,
+    .map(x=>({i:x.i, v:x.v, motorista:x.motorista, junto:x.junto||null,
       dia: x.i===+vaga ? ((val && val!==padrao) ? val : null) : (x.dia||null)}));
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
@@ -2740,7 +3759,7 @@ function removerVeiculo(id, vaga, fase){
   const frota = frotaDo(ev, dz?'desm':'mont').filter((x,i)=>i!==+vaga);
   const nova = escalaDo(ev, dz?'desm':'mont')
     .filter(x=>x.i!==+vaga)
-    .map((x,i)=>({i, v:x.v, motorista:x.motorista, dia:x.dia||null})); /* renumera as vagas */
+    .map((x,i)=>({i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null})); /* renumera as vagas */
   if(dz){ ev.veiculosD = frota; ev.escalaD = nova; }
   else  { ev.veiculos  = frota; ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
@@ -4057,6 +5076,7 @@ function gravarLote(){
   toast((partes.length ? partes.join(' e ') : 'Nada novo para gravar') +
     (semData ? ' · ' + semData + ' sem data na coluna "📅 Sem data"' : '') + '. A IA já montou as sugestões.');
   if(remarcados.length) mostrarRemarcados(remarcados);
+  if(CONFIG.galpao) setTimeout(()=>calcularKmEmLote(false), 1500);
 }
 
 /* mostra o que a planilha mudou de data, separando o que já tinha sido enviado */
@@ -4217,6 +5237,14 @@ function renderCadastros(){
     '<td style="text-align:right"><button class="mini danger" onclick="removerMaterial('+i+')">Excluir</button></td></tr>').join('');
 
   document.getElementById('tb-pipefy').innerHTML = mapaPipefy.map(m=>'<tr><td>'+m[0]+'</td><td><span class="tag">'+m[1]+'</span></td></tr>').join('');
+
+  const ge = document.getElementById('galpao-end');
+  if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
+  { const c = cfgSaida(); [['cfg-carga',c.carga],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
+  const lp = document.getElementById('logo-prev');
+  if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
+  const qs = document.getElementById('quem-sou');
+  if(qs){ let q = ''; try{ q = localStorage.getItem('cpl:quem') || ''; }catch(e){} qs.textContent = q || 'ainda não informado (pergunto na primeira alteração)'; }
 
   /* painel do aprendizado */
   const pa = document.getElementById('painel-aprendizado');
@@ -4644,9 +5672,10 @@ async function testarEscala(){
   const el2 = document.getElementById('esc-teste');
   el2.textContent = 'testando...';
   try{
-    const lista = await escReq('escala_montadores?select=id,nome') || [];
-    const nomes = pessoasDoPlanejamento().map(p=>p.nome);
-    const faltando = nomes.filter(n=>!casaMontadorEscala(n, lista));
+    const lista = await escReq('escala_montadores?select=id,nome,funcao') || [];
+    const pes = pessoasDoPlanejamento();
+    const nomes = pes.map(p=>p.nome);
+    const faltando = pes.filter(p=>!casaPessoaEscala(p.nome, lista, !!p.prod)).map(p=>p.nome + (p.prod?' (produtor)':''));
     if(!lista.length){
       el2.innerHTML = '<b style="color:#b47f08">Conectado, mas a Escala está vazia.</b> Clique em "Cadastrar equipes e montadores" para montar o cadastro a partir do planejamento.';
       return;
@@ -4667,6 +5696,7 @@ function pessoasDoPlanejamento(){
     (e.membros||[]).forEach(m=>p.push({nome:m, equipe:e.nome}));
   });
   if(CONFIG.piloto) p.push({nome:CONFIG.piloto, equipe:null});
+  produtores.forEach(pr => { if(pr.nome) p.push({nome:pr.nome, equipe:null, prod:true}); });
   return p;
 }
 /* monta o cadastro da Escala a partir do planejamento: equipes e pessoas */
@@ -4675,7 +5705,7 @@ async function cadastrarNaEscala(silencioso){
   const diz = t => { if(el2 && !silencioso) el2.innerHTML = t; };
   if(!silencioso && el2) el2.textContent = 'cadastrando...';
   try{
-    const lista = await escReq('escala_montadores?select=id,nome') || [];
+    const lista = await escReq('escala_montadores?select=id,nome,funcao') || [];
     let eqEscala = await escReq('escala_equipes?select=id,nome') || [];
 
     /* 1) equipes que faltam */
@@ -4691,7 +5721,7 @@ async function cadastrarNaEscala(silencioso){
     }
 
     /* 2) pessoas que faltam */
-    const faltando = pessoasDoPlanejamento().filter(p=>!casaMontadorEscala(p.nome, lista));
+    const faltando = pessoasDoPlanejamento().filter(p=>!casaPessoaEscala(p.nome, lista, !!p.prod));
     if(!faltando.length && !eqNovas.length){
       diz('<b style="color:#0f8a4d">Cadastro já está completo.</b>');
       return 0;
@@ -4700,7 +5730,9 @@ async function cadastrarNaEscala(silencioso){
     let n = 0; const proximo = () => { do { n++; } while(usados.has('m'+n)); usados.add('m'+n); return 'm'+n; };
     const linhas = faltando.map((p,i)=>{
       const eqe = p.equipe ? eqEscala.find(x=>semAcento(x.nome).includes(semAcento(p.equipe)) || semAcento(p.equipe).includes(semAcento(x.nome))) : null;
-      return {id:proximo(), nome:p.nome.toUpperCase(), equipe: eqe ? eqe.id : null, ordem: p.lider ? i : 100+i, ativo:true};
+      return {id:proximo(), nome:p.nome.toUpperCase(), equipe: eqe ? eqe.id : null,
+        ordem: p.lider ? i : (p.prod ? 300+i : 100+i), ativo:true,
+        funcao: p.prod ? 'Produtor' : (p.lider ? 'Líder' : null)};
     });
     if(linhas.length) await escReq('escala_montadores?on_conflict=id', 'POST', linhas);
     diz('<b style="color:#0f8a4d">Cadastro atualizado.</b> ' +
@@ -4753,7 +5785,7 @@ async function sincronizarEscala(silencioso){
     const naJanela = eventos.filter(e => e.mont && diasEquipe(e).some(d => d >= HOJE && d <= limite));
     const alvo = naJanela.filter(e => e.equipe && !evSemNossaEquipe(e));
     /* encerrados que ainda têm marcação lá: o envio deles agora só limpa */
-    for(const e of eventos.filter(x => evSemNossaEquipe(x) && x.escalaEnviada)){
+    for(const e of eventos.filter(x => evSemNossaEquipe(x) && x.esp !== 'finalizado' && x.escalaEnviada)){
       await enviarParaEscala(e.id, true);
     }
     if(!alvo.length){
@@ -4776,12 +5808,50 @@ async function sincronizarEscala(silencioso){
   finally{ escalaRodando = false; }
 }
 
+/* casa o nome preferindo a função certa na Escala: "Robson" produtor não pode
+   cair no "Robson" montador quando os dois existem lá */
+function casaPessoaEscala(nomePlan, listaEscala, querProdutor){
+  const ehProd = x => /produtor/i.test(x.funcao || '');
+  const preferidos = (listaEscala || []).filter(x => querProdutor ? ehProd(x) : !ehProd(x));
+  return casaMontadorEscala(nomePlan, preferidos) || casaMontadorEscala(nomePlan, listaEscala || []);
+}
+/* cada marca que a Central grava leva o código do evento na coluna "usuario"
+   (o app da Escala não usa essa coluna). Assim renomear o evento, ou ter dois
+   eventos com o mesmo nome, não confunde a limpeza. Marcas antigas, gravadas
+   só com o nome na observação, continuam reconhecidas. */
+const tagEv = ev => 'central:' + ev.id;
+let escTemUsuario = null;
+async function checarColunaUsuario(){
+  if(escTemUsuario !== null) return escTemUsuario;
+  try{ await escReq('escala_marcas?select=usuario&limit=1'); escTemUsuario = true; }
+  catch(e){ escTemUsuario = false; }
+  return escTemUsuario;
+}
+function marcaEhDoEvento(r, ev){
+  return (r.usuario && r.usuario === tagEv(ev)) || (!r.usuario && r.obs === ev.nome);
+}
+async function marcasDoEvento(ev){
+  const campos = 'chave,dia,montador_id,status,obs' + (escTemUsuario ? ',usuario' : '');
+  const porNome = await escReq('escala_marcas?obs=eq.' + encodeURIComponent(ev.nome) + '&status=in.(T,FA,MT)&select=' + campos) || [];
+  let porTag = [];
+  if(escTemUsuario) porTag = await escReq('escala_marcas?usuario=eq.' + encodeURIComponent(tagEv(ev)) + '&status=in.(T,FA,MT)&select=' + campos) || [];
+  const mapa = {};
+  [...porTag, ...porNome.filter(r => marcaEhDoEvento(r, ev))].forEach(r => { mapa[r.chave] = r; });
+  return Object.values(mapa);
+}
 async function enviarParaEscala(id, silencioso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  await checarColunaUsuario();
+  /* FINALIZADO já aconteceu: as marcações na Escala são o registro de quem
+     trabalhou. Ficam congeladas — nem reenvio, nem limpeza. */
+  if(ev.esp === 'finalizado'){
+    if(!silencioso) toast('Evento finalizado: as marcações dele na Escala ficam como registro e não são mais alteradas.');
+    return;
+  }
   if(evSemNossaEquipe(ev)){
     if(ev.escalaEnviada){
       try{
-        const minhas = await escReq('escala_marcas?obs=eq.' + encodeURIComponent(ev.nome) + '&status=in.(T,FA,MT)&select=chave');
+        const minhas = await marcasDoEvento(ev);
         if((minhas||[]).length) await escReq('escala_marcas?chave=in.(' + minhas.map(m2=>encodeURIComponent(m2.chave)).join(',') + ')', 'DELETE');
         ev.escalaEnviada = null; salvar();
         if(!silencioso) toast('Evento encerrado: ' + (minhas||[]).length + ' marcação(ões) dele removidas da Escala.');
@@ -4799,13 +5869,20 @@ async function enviarParaEscala(id, silencioso){
   if(!nomes.length){ if(!silencioso) toast('Este evento não tem montadores da casa (equipe terceirizada?).'); return; }
   if(!dias.length){ if(!silencioso) toast('Defina as datas do evento antes de mandar para a escala.'); return; }
   try{
-    const listaEscala = await escReq('escala_montadores?select=id,nome');
+    const listaEscala = await escReq('escala_montadores?select=id,nome,funcao');
     const casados = [], semCadastro = [];
     nomes.forEach(nm => {
-      const m = casaMontadorEscala(nm, listaEscala || []);
+      const m = casaPessoaEscala(nm, listaEscala || [], false);
       if(m) casados.push({plan:nm, id:m.id});
       else semCadastro.push(nm);
     });
+    /* o PRODUTOR do evento marca junto, na seção dele da Escala */
+    const nomeProd = produtorDo(ev);
+    if(nomeProd && nomeProd !== SEM_PRODUTOR){
+      const mp = casaPessoaEscala(nomeProd, listaEscala || [], true);
+      if(mp && !casados.some(c=>c.id===mp.id)) casados.push({plan:nomeProd, id:mp.id});
+      else if(!mp) semCadastro.push(nomeProd + ' (produtor)');
+    }
     if(!casados.length){
       if(!silencioso){
         toast(!listaEscala || !listaEscala.length
@@ -4817,12 +5894,15 @@ async function enviarParaEscala(id, silencioso){
     /* não atropela férias, atestado, folga...: só preenche onde está vazio ou já é T */
     const chaves = [];
     casados.forEach(c => diasDe(ev, c.plan).forEach(d => chaves.push(d + '|' + c.id)));
-    const existentes = await escReq('escala_marcas?chave=in.(' + chaves.map(encodeURIComponent).join(',') + ')&select=chave,status,obs');
+    const existentes = await escReq('escala_marcas?chave=in.(' + chaves.map(encodeURIComponent).join(',') + ')&select=chave,status,obs' + (escTemUsuario ? ',usuario' : ''));
     const ocupado = {};
     (existentes||[]).forEach(r=>{
-      /* preserva o que NÃO é deste evento e não é TRABALHOU (férias, atestado...);
-         as marcas do próprio evento podem virar T ou FALTOU à vontade */
-      if(r.status && r.status!=='T' && r.obs !== ev.nome) ocupado[r.chave] = r.status;
+      if(!r.status || r.status === 'T') return;
+      /* férias, atestado, folga e dom/feriado nunca são atropelados — nem
+         quando alguém trocou lá na Escala uma marca que a Central tinha feito */
+      if(!['FA','MT'].includes(r.status)){ ocupado[r.chave] = r.status; return; }
+      /* falta/manutenção de outro lugar fica; as deste evento a Central controla */
+      if(!marcaEhDoEvento(r, ev)) ocupado[r.chave] = r.status;
     });
     const agora = new Date().toISOString();
     const linhas = [];
@@ -4832,13 +5912,14 @@ async function enviarParaEscala(id, silencioso){
       if(ocupado[k]){ pulados++; return; }
       linhas.push({chave:k, dia:d, montador_id:c.id,
         status: faltouDia(ev, c.plan, d) ? 'FA' : (manutDia(ev, c.plan, d) ? 'MT' : 'T'), obs:ev.nome, atualizado_em:agora});
+      if(escTemUsuario) linhas[linhas.length-1].usuario = tagEv(ev);
     }));
     if(linhas.length) await escReq('escala_marcas?on_conflict=chave', 'POST', linhas);
     /* tirou um dia (folga no meio), trocou gente ou remarcou datas?
        Apaga as marcações que ESTE evento tinha feito e que não valem mais. */
     let removidas = 0;
     try{
-      const minhas = await escReq('escala_marcas?obs=eq.' + encodeURIComponent(ev.nome) + '&status=in.(T,FA,MT)&select=chave,dia,montador_id');
+      const minhas = await marcasDoEvento(ev);
       const validas = new Set(chaves);
       const sobrando = (minhas||[]).filter(m2=>!validas.has(m2.dia + '|' + m2.montador_id)).map(m2=>m2.chave);
       if(sobrando.length){
@@ -5285,7 +6366,7 @@ function irPara(v){
   if(v==='carga') renderCarga();
 }
 function fechar(id){ document.getElementById(id).classList.remove('on'); }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ fechar('ov-ev'); fechar('ov-novo'); fechar('ov-lote'); fechar('ov-prodjc'); fechar('ov-hoje'); fechar('ov-rel'); } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && typeof fecharTV==='function') fecharTV(); if(e.key==='Escape'){ fechar('ov-ev'); fechar('ov-novo'); fechar('ov-lote'); fechar('ov-prodjc'); fechar('ov-hoje'); fechar('ov-rel'); fechar('ov-diarias'); fechar('ov-crono'); fechar('ov-amanha'); } });
 
 function renderPeriodos(){
   const comData = !!(dataIni || dataFim);
@@ -5323,8 +6404,639 @@ function toast(msg, rotulo, acao){
   clearTimeout(tid); tid = setTimeout(()=>{ t.classList.remove('on'); acaoToast = null; }, rotulo ? 8000 : 2600);
 }
 let filaSync = null;
+/* ================= CRONOGRAMA DE MONTAGEM =================
+   Linha do tempo no timbrado: data em azul à esquerda, filete laranja,
+   tópicos à direita, com os marcos de ENTREGA de cada estrutura. */
+function enviarLogo(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      /* reduz para não pesar na nuvem */
+      const esc2 = Math.min(1, 480 / img.width);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * esc2); cv.height = Math.round(img.height * esc2);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      CONFIG.logo = cv.toDataURL('image/png');
+      salvar(); renderCadastros();
+      toast('Logo salva — já sai no cronograma.');
+    };
+    img.src = r.result;
+  };
+  r.readAsDataURL(f);
+}
+/* piso já inclui a forração: carpete e saia saem do texto */
+function limpaEstrutura(t){
+  return String(t||'')
+    .replace(/\s*[+,]?\s*CARPETE(?:\s+E\s+SAIA)?(?:\s+EM\s+LYCRA)?/gi, '')
+    .replace(/\s*[+,]?\s*(?:E\s+)?SAIA(?:\s+EM\s+LYCRA)?/gi, '')
+    .replace(/\s*[+,]\s*(?=\(|$)/g, ' ')
+    .replace(/\s+E\s*$/i, '')
+    .replace(/\s{2,}/g, ' ').replace(/\s+([,)])/g, '$1').trim();
+}
+let cronoEvId = null;
+function diasMontagemEv(ev){ return diasEntre(ev.mont, fimMont(ev)); }
+function cronoDe(ev){
+  const dm = diasMontagemEv(ev);
+  const ini0 = dm[0] || dia(ev.mont), fim0 = dm[dm.length-1] || ini0;
+  ev.crono = ev.crono || {};
+  return (ev.estruturas||[]).map(t => {
+    const c = ev.crono[t] || {};
+    return {t, nome: limpaEstrutura(t), ini: c.ini || ini0, ent: c.ent || fim0};
+  });
+}
+function abrirCrono(id){
+  cronoEvId = id;
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(!(ev.estruturas||[]).length) return toast('Lance as estruturas do evento antes (📄 Ler material da OS).');
+  document.getElementById('crono-ev').textContent = ev.nome + ' · montagem ' + fmtD(ev.mont) + (dia(ev.mont)!==dia(fimMont(ev)) ? ' a ' + fmtD(fimMont(ev)) : '');
+  renderCrono();
+  document.getElementById('ov-crono').classList.add('on');
+}
+function renderCrono(){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  document.getElementById('crono-lista').innerHTML = cronoDe(ev).map((c,i)=>
+    '<div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:260px;font-size:13px"><b>'+esc(c.nome)+'</b></div>'+
+      '<label style="font-size:12px;color:var(--muted)">começa <input type="date" value="'+c.ini+'" onchange="setCrono('+i+',\'ini\',this.value)" style="border:1px solid var(--line);border-radius:7px;padding:5px 7px;font-size:12px"></label>'+
+      '<label style="font-size:12px;color:#c0620f;font-weight:700">ENTREGA <input type="date" value="'+c.ent+'" onchange="setCrono('+i+',\'ent\',this.value)" style="border:1px solid #f0c49a;border-radius:7px;padding:5px 7px;font-size:12px"></label>'+
+    '</div>').join('');
+}
+function setCrono(i, campo, val){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev || !val) return;
+  const c = cronoDe(ev)[i]; if(!c) return;
+  const reg = Object.assign({ini:c.ini, ent:c.ent}, ev.crono[c.t] || {});
+  reg[campo] = val;
+  if(reg.ent < reg.ini){ if(campo==='ini') reg.ent = reg.ini; else reg.ini = reg.ent; }
+  ev.crono[c.t] = reg;
+  salvar(); renderCrono();
+}
+function cronoDistribuir(){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
+  const dm = diasMontagemEv(ev), lst = cronoDe(ev);
+  if(!dm.length) return toast('Defina as datas de montagem do evento.');
+  ev.crono = {};
+  lst.forEach((c,i)=>{ const d = dm[Math.min(dm.length-1, Math.floor(i * dm.length / lst.length))]; ev.crono[c.t] = {ini:d, ent:d}; });
+  salvar(); renderCrono();
+  toast('Estruturas distribuídas pelos ' + dm.length + ' dia(s) de montagem, na ordem da OS. Ajuste o que precisar.');
+}
+function cronoTudoJunto(){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
+  ev.crono = {}; salvar(); renderCrono();
+}
+function linhaDoTempo(ev, comEvento, comDesm){
+  const dias = {};  /* iso -> {topicos:[], entregas:[]} */
+  const poe = (d, tipo, txt) => { (dias[d] = dias[d] || {topicos:[], entregas:[]})[tipo].push(txt); };
+  cronoDe(ev).forEach(c=>{
+    diasEntre(c.ini, c.ent).forEach(d=>{
+      if(d < c.ent) poe(d, 'topicos', 'MONTAGEM — ' + c.nome);
+      else{
+        poe(d, 'topicos', (c.ini < c.ent ? 'ACABAMENTO — ' : 'MONTAGEM E ACABAMENTO — ') + c.nome);
+        poe(d, 'entregas', c.nome);
+      }
+    });
+  });
+  if(comEvento && ev.evt) diasEntre(ev.evt, ev.evtFim || ev.evt).forEach(d=>poe(d, 'topicos', 'REALIZAÇÃO DO EVENTO'));
+  if(comDesm && ev.desm) diasEntre(ev.desm, fimDesm(ev)).forEach(d=>poe(d, 'topicos', 'DESMONTAGEM'));
+  return Object.keys(dias).sort().map(d=>({d, ...dias[d]}));
+}
+function imprimirCrono(){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
+  const comEv = (document.getElementById('crono-evento')||{}).checked;
+  const comDs = (document.getElementById('crono-desm')||{}).checked;
+  const lt = linhaDoTempo(ev, comEv, comDs);
+  if(!lt.length) return toast('Nada para montar o cronograma.');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const SEM = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+  const linhas = lt.map(x=>{
+    const dt = new Date(x.d+'T12:00');
+    return '<div class="lin">'+
+      '<div class="dt"><span>'+SEM[dt.getDay()]+'</span><b>'+String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'</b></div>'+
+      '<div class="fil"></div>'+
+      '<div class="tp">'+x.topicos.map(t=>'<div class="t">'+esc(t)+'</div>').join('')+
+        x.entregas.map(t=>'<div class="ent">✓ ENTREGA — '+esc(t)+'</div>').join('')+'</div>'+
+    '</div>';
+  }).join('');
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Cronograma</title><style>'+
+    '@page{size:A4;margin:14mm 14mm 16mm}'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#16234b;margin:0;font-size:12.5px}'+
+    '@media screen{body{margin:28px auto;max-width:780px}}'+
+    '.topo{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:3px solid #f0851e;margin-bottom:18px;min-height:40px}'+
+    '.topo img{max-height:58px;max-width:230px}'+
+    'h1{font-size:20px;color:#1c4fa0;margin:0 0 2px;letter-spacing:.5px} .ev{font-size:14px;font-weight:700;margin:0} .sub{color:#667;font-size:12px;margin:2px 0 18px}'+
+    '.lin{display:flex;align-items:stretch;gap:0;page-break-inside:avoid;margin-bottom:10px}'+
+    '.dt{width:74px;flex:none;background:#1c4fa0;color:#fff;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;align-self:flex-start}'+
+    '.dt span{font-size:10px;letter-spacing:1px;opacity:.85} .dt b{font-size:17px}'+
+    '.fil{width:4px;flex:none;background:#f0851e;border-radius:2px;margin:0 14px}'+
+    '.tp{flex:1;padding:4px 0} .t{padding:4px 0;border-bottom:1px solid #eef1f6;font-size:12.5px}'+
+    '.ent{margin-top:5px;display:inline-block;background:#fdf0e3;color:#c0620f;border:1px solid #f0c49a;border-radius:6px;padding:4px 10px;font-weight:800;font-size:12px;letter-spacing:.3px}'+
+  '</style></head><body>'+
+    '<div class="topo">'+(CONFIG.logo ? '<img src="'+CONFIG.logo+'">' : '<span></span>')+'</div>'+
+    '<h1>CRONOGRAMA DE MONTAGEM</h1>'+
+    '<p class="ev">'+esc(ev.nome)+'</p>'+
+    '<p class="sub">'+[ev.local && ev.local!=='—' ? esc(ev.local) : '', ev.cidade && ev.cidade!=='—' ? esc(ev.cidade) : ''].filter(Boolean).join(' · ')+'</p>'+
+    linhas+
+  '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+
+/* ================= AGENDA DE CADA PESSOA =================
+   tipo 'mont' = montador/líder/piloto · 'prod' = produtor · 'mot' = motorista.
+   Status do dia: T trabalha · FA faltou · MT manutenção · FO folga (está no time, mas não neste dia) */
+const AG_TIPOS = {mont:'Montador', prod:'Produtor', mot:'Motorista'};
+function pessoasAgenda(){
+  const l = [];
+  todosMontadores().forEach(t => l.push({tipo:'mont', nome:t.nome,
+    papel: t.lider ? 'líder ' + t.equipe : (t.equipe==='piloto' ? 'montador piloto' : 'equipe ' + t.equipe)}));
+  const pr = new Set((produtores||[]).map(x=>x.nome));
+  eventos.forEach(ev => { const x = produtorDo(ev); if(x && x !== SEM_PRODUTOR) pr.add(x); });
+  [...pr].forEach(n => l.push({tipo:'prod', nome:n, papel:'produtor'}));
+  (motoristas||[]).filter(m => !m.situacao || /ativ/i.test(m.situacao)).forEach(m => l.push({tipo:'mot', nome:m.nome,
+    papel: m.agregado ? 'motorista agregado' : 'motorista'}));
+  return l;
+}
+/* dias da pessoa: iso -> [{ev, st, papel}] */
+function agendaDe(tipo, nome){
+  const dias = {};
+  const put = (d, ev, st, papel) => {
+    if(!d) return;
+    const l = dias[d] = dias[d] || [];
+    const ja = l.find(x => x.ev.id === ev.id);
+    if(ja){ if(st==='T' && ja.st!=='T') ja.st = 'T'; if(papel && !ja.papel.includes(papel)) ja.papel += ' + ' + papel; return; }
+    l.push({ev, st, papel});
+  };
+  eventos.forEach(ev => {
+    if(ev.esp === 'cancelado' || ev.esp === 'terceirizado' || !ev.mont) return;
+    if(tipo === 'mot'){
+      const viag = (fz, padrao, rot, semDiaProprio) => escalaDo(ev, fz).forEach(x => {
+        if(x.motorista !== nome) return;
+        const v = veiculos.find(y => y.id === x.v);
+        put((!semDiaProprio && x.dia) || padrao, ev, 'T', rot + (v ? ' · ' + (v.placa || v.nome || v.id) : '') + ((!semDiaProprio && x.junto) ? ' · 🔗 junto com ' + nomeDo(x.junto) : ''));
+      });
+      viag('mont', dia(ev.mont), 'leva a montagem');
+      if(ev.desm){
+        if(temFrotaDesm(ev)) viag('desm', dia(ev.desm), 'busca a desmontagem');
+        else viag('mont', dia(ev.desm), ev.permanece ? 'volta com o caminhão' : 'busca a desmontagem', true);
+      }
+      return;
+    }
+    const p = pessoasNaEscala(ev).find(x => x.nome === nome && !!x.prod === (tipo === 'prod'));
+    const eq = ev.equipe || plano(ev).equipe;
+    const noTime = tipo === 'mont' && (nome === eq || montadoresBase(ev, eq).includes(nome) || (ev.timeD||[]).includes(nome));
+    if(!p && !noTime) return;
+    const trab = p ? diasDe(ev, nome) : [];
+    const fM = diasEntre(ev.mont, fimMont(ev)), fD = ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [];
+    const papel = tipo === 'prod' ? 'produtor' : (nome === eq ? 'líder' : 'montador');
+    trab.forEach(d => {
+      const st = faltouDia(ev, nome, d) ? 'FA' : (manutDia(ev, nome, d) ? 'MT' : 'T');
+      put(d, ev, st, papel + (fD.includes(d) && !fM.includes(d) ? ' · desmontagem' : ' · montagem'));
+    });
+    /* está no time, mas não trabalha nesses dias do evento */
+    if(tipo === 'mont') [...fM, ...fD].forEach(d => { if(!trab.includes(d)) put(d, ev, 'FO', papel); });
+  });
+  return dias;
+}
+function mudarMesAgenda(n){
+  const i = document.getElementById('ag-mes');
+  const [a, m] = (i.value || HOJE.slice(0,7)).split('-').map(Number);
+  const d = new Date(a, m - 1 + n, 15);
+  i.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  renderAgenda();
+}
+function abrirAgenda(tipo, nome, mes){
+  const sel = document.getElementById('ag-pessoa');
+  const l = pessoasAgenda();
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  sel.innerHTML = ['mont','prod','mot'].map(t => '<optgroup label="'+AG_TIPOS[t]+'s">'+
+    l.filter(x => x.tipo === t).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'))
+      .map(x => '<option value="'+t+'|'+esc(x.nome)+'">'+esc(x.nome)+' — '+esc(x.papel)+'</option>').join('')+'</optgroup>').join('');
+  if(tipo && nome){
+    const v = tipo + '|' + nome;
+    if(!Array.from(sel.options || []).some(o => o.value === v)) sel.insertAdjacentHTML('afterbegin', '<option value="'+esc(v)+'">'+esc(nome)+'</option>');
+    sel.value = v;
+  }
+  const im = document.getElementById('ag-mes');
+  im.value = mes || im.value || HOJE.slice(0,7);
+  const il = document.getElementById('ag-livre');
+  if(!il.value) il.value = typeof diaSeguinte === 'function' ? diaSeguinte() : HOJE;
+  renderAgenda(); renderLivres();
+  document.getElementById('ov-agenda').classList.add('on');
+}
+const AG_COR = {T:['#e3f5ea','#0f8a4d','trabalha'], FA:['#fdeee0','#c9641d','faltou'], MT:['#e6effb','#1c5fb8','manutenção'], FO:['#f1f1f4','#8a8fa3','folga']};
+function renderAgenda(){
+  const v = document.getElementById('ag-pessoa').value || '';
+  const k = v.indexOf('|'); const tipo = v.slice(0,k), nome = v.slice(k+1);
+  const mes = document.getElementById('ag-mes').value || HOJE.slice(0,7);
+  const corpo = document.getElementById('ag-corpo');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!nome){ corpo.innerHTML = '<div class="panel empty"><b>Escolha uma pessoa</b></div>'; return; }
+  const dias = agendaDe(tipo, nome);
+  const doMes = Object.keys(dias).filter(d => d.slice(0,7) === mes).sort();
+  const cont = {T:0, FA:0, MT:0, FO:0};
+  doMes.forEach(d => { const l = dias[d]; const st = l.some(x=>x.st==='T')?'T':l.some(x=>x.st==='MT')?'MT':l.some(x=>x.st==='FA')?'FA':'FO'; cont[st]++; });
+  const evs = [...new Map(doMes.flatMap(d => dias[d].filter(x=>x.st!=='FO').map(x=>[x.ev.id, x.ev]))).values()];
+  document.getElementById('ag-resumo').textContent = nome + ' (' + AG_TIPOS[tipo].toLowerCase() + ') · ' + nomeMes(mes) + ' · ' +
+    cont.T + ' dia(s) de trabalho' + (cont.MT ? ' · ' + cont.MT + ' manutenção' : '') + (cont.FA ? ' · ' + cont.FA + ' falta(s)' : '') + ' · ' + evs.length + ' evento(s)';
+  const [a, m] = mes.split('-').map(Number);
+  const prim = new Date(a, m-1, 1), nd = new Date(a, m, 0).getDate();
+  let cel = '';
+  for(let i = 0; i < prim.getDay(); i++) cel += '<div></div>';
+  for(let d = 1; d <= nd; d++){
+    const iso = mes + '-' + String(d).padStart(2,'0');
+    const l = dias[iso] || [];
+    const dupl = l.filter(x => (x.st==='T' || x.st==='MT') && !String(x.papel).includes('🔗')).length > 1;
+    const hoje = iso === HOJE;
+    cel += '<div style="min-height:74px;border:1px solid '+(dupl?'#d9534f':(hoje?'#f0851e':'var(--line)'))+';border-radius:8px;padding:4px 5px;background:'+(l.length?'#fff':'#fafafa')+'">'+
+      '<div style="font-size:11px;font-weight:800;color:'+(hoje?'#f0851e':'var(--muted)')+'">'+d+(dupl?' <span style="color:#d9534f" title="Dois eventos no mesmo dia">⚠</span>':'')+'</div>'+
+      l.map(x => { const c = AG_COR[x.st];
+        return '<div onclick="fechar(\'ov-agenda\');verEvento(\''+x.ev.id+'\')" title="'+esc(x.ev.nome)+' — '+esc(x.papel)+' ('+c[2]+')" style="cursor:pointer;margin-top:3px;background:'+c[0]+';color:'+c[1]+';border-radius:5px;padding:2px 5px;font-size:10.5px;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'+(x.st==='FO'?';font-weight:500':'')+'">'+
+          (x.st==='FO'?'💤 ':x.st==='FA'?'✗ ':x.st==='MT'?'🔧 ':'')+esc(x.ev.nome)+'</div>'; }).join('')+
+    '</div>';
+  }
+  const leg = Object.keys(AG_COR).map(s => '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ink2)"><i style="width:12px;height:12px;border-radius:3px;background:'+AG_COR[s][0]+';border:1px solid '+AG_COR[s][1]+'"></i>'+AG_COR[s][2]+'</span>').join('');
+  const lista = doMes.filter(d => dias[d].some(x=>x.st!=='FO')).map(d => {
+    const dt = new Date(d+'T12:00');
+    return '<tr style="border-top:1px solid var(--line)"><td style="padding:6px 7px;white-space:nowrap">'+fmtD(d).slice(0,5)+' '+['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()]+'</td><td style="padding:6px 7px">'+
+      dias[d].filter(x=>x.st!=='FO').map(x => '<b>'+esc(x.ev.nome)+'</b> <small style="color:var(--muted)">'+esc(x.papel)+'</small>'+
+        (x.st!=='T' ? ' <b style="color:'+AG_COR[x.st][1]+'">('+AG_COR[x.st][2].toUpperCase()+')</b>' : '')+
+        (x.ev.cidade && x.ev.cidade!=='—' ? ' <small style="color:var(--muted)">· '+esc(x.ev.cidade)+'</small>' : '')).join('<br>')+'</td></tr>';
+  }).join('');
+  corpo.innerHTML =
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px">'+leg+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:11px;color:var(--muted);font-weight:700;text-align:center;margin-bottom:4px">'+
+      ['dom','seg','ter','qua','qui','sex','sáb'].map(x=>'<div>'+x+'</div>').join('')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px">'+cel+'</div>'+
+    (lista ? '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:14px"><tbody>'+lista+'</tbody></table>'
+           : '<div class="panel empty" style="margin-top:12px"><b>Livre o mês todo</b>Nenhum trabalho lançado para '+esc(nome)+' em '+nomeMes(mes)+'.</div>');
+}
+/* quem não tem trabalho (nem manutenção) naquele dia */
+function livresNoDia(D){
+  const out = {mont:[], mot:[], ocupados:{}};
+  pessoasAgenda().filter(p => p.tipo !== 'prod').forEach(p => {
+    const l = agendaDe(p.tipo, p.nome)[D] || [];
+    const oc = l.filter(x => x.st === 'T' || x.st === 'MT');
+    if(oc.length) out.ocupados[p.tipo+'|'+p.nome] = oc.map(x=>x.ev.nome);
+    else out[p.tipo].push(p);
+  });
+  return out;
+}
+function renderLivres(){
+  const D = document.getElementById('ag-livre').value;
+  const box = document.getElementById('ag-livres');
+  if(!D){ box.innerHTML = ''; return; }
+  const r = livresNoDia(D);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const chip = p => '<span class="mtag" style="cursor:pointer;display:inline-block;margin:0 5px 5px 0" onclick="abrirAgenda(\''+p.tipo+'\',\''+p.nome.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',\''+D.slice(0,7)+'\')">'+esc(p.nome)+' <small style="opacity:.65">'+esc(p.papel)+'</small></span>';
+  const nOc = Object.keys(r.ocupados).length;
+  box.innerHTML =
+    '<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">'+fmtD(D)+' · '+r.mont.length+' montador(es) e '+r.mot.length+' motorista(s) livres · '+nOc+' ocupado(s)</div>'+
+    '<div style="font-size:12px;font-weight:800;color:var(--ink2);margin:6px 0 4px">MONTADORES E LÍDERES</div>'+(r.mont.map(chip).join('') || '<small style="color:var(--muted)">ninguém livre</small>')+
+    '<div style="font-size:12px;font-weight:800;color:var(--ink2);margin:10px 0 4px">MOTORISTAS</div>'+(r.mot.map(chip).join('') || '<small style="color:var(--muted)">ninguém livre</small>');
+}
+function abrirAgendaNome(el){ abrirAgenda(el.dataset.t, el.dataset.n); }
+
+/* ================= TELA DO GALPÃO (MODO TV) =================
+   Sem botões: mostra o que sai hoje e amanhã, com hora de carregar e sair.
+   Atualiza sozinha; se a lista não couber, rola devagar. Abre direto com #tv no endereço. */
+let tvTimer = null, tvRelogio = null, tvRola = null, tvWake = null;
+function abrirTV(){
+  document.getElementById('tv').classList.add('on');
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){}
+  try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ tvWake = w; }).catch(()=>{}); }catch(e){}
+  renderTV();
+  clearInterval(tvTimer); tvTimer = setInterval(renderTV, 60*1000);
+  clearInterval(tvRelogio); tvRelogio = setInterval(relogioTV, 1000); relogioTV();
+  clearInterval(tvRola); tvRola = setInterval(rolarTV, 9000);
+  try{ if(location.hash !== '#tv') history.replaceState(null, '', '#tv'); }catch(e){}
+}
+function fecharTV(){
+  const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
+  t.classList.remove('on');
+  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola);
+  try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
+  try{ if(tvWake) tvWake.release(); }catch(e){}
+  try{ if(location.hash === '#tv') history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+}
+function relogioTV(){
+  const r = document.getElementById('tv-rel'); if(!r) return;
+  const d = new Date();
+  r.textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  /* virou o dia com a tela ligada: recarrega a página para o HOJE andar junto */
+  const iso = d.toISOString().slice(0,10);   /* mesma base do HOJE */
+  if(tvRelogio && iso !== HOJE && !window.__tvRecarregou){ window.__tvRecarregou = true; try{ location.reload(); }catch(e){} }
+}
+function rolarTV(){
+  ['tv-hoje','tv-amanha'].forEach(id=>{
+    const el2 = document.getElementById(id); if(!el2) return;
+    if(el2.scrollHeight <= el2.clientHeight + 4){ el2.scrollTop = 0; return; }
+    const prox = el2.scrollTop + el2.clientHeight * 0.8;
+    const alvo = prox >= el2.scrollHeight - el2.clientHeight + 4 && el2.scrollTop >= el2.scrollHeight - el2.clientHeight - 4 ? 0 : prox;
+    try{ el2.scrollTo({top: alvo, behavior:'smooth'}); }catch(e){ el2.scrollTop = alvo; }
+  });
+}
+/* status da saída de hoje: SAIU, CARREGANDO (ou quase), PRÓXIMA */
+function statusTV(hs, D){
+  if(!hs || D !== HOJE) return null;
+  const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes();
+  const sai = hs.vespera ? -1 : minDe(hs.saida), car = hs.vesperaCarga ? -1 : minDe(hs.carregar);
+  if(sai >= 0 && m >= sai + 10) return {cls:'saiu', txt:'SAIU'};
+  if(car >= 0 && m >= car - 30) return {cls:'agora', txt: m >= car ? 'CARREGANDO' : 'CARREGAR JÁ'};
+  if(sai < 0) return {cls:'saiu', txt:'SAIU (VÉSPERA)'};
+  return {cls:'', txt:'AGUARDANDO'};
+}
+function cardTV(o, D){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const hs = saidaDaOp(o, D);
+  const st = statusTV(hs, D);
+  const semLider = o.pessoas.filter(pp=>!pp.prod);
+  const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
+  const al = [];
+  const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
+  if(w && riscoClima(w)) al.push(txtClima(w));
+  const f = fichaLocal(o.ev); if(f && resumoFicha(f)) al.push('🚧 ' + resumoFicha(f));
+  return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
+    (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
+    '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
+    '<div class="tv-sub">'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
+    (hs ? '<div class="tv-hor">'+(hs.parada===2
+        ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
+        : '<span>carregar <b>'+hs.carregar+'</b>'+(hs.vesperaCarga?' <small>(véspera)</small>':'')+'</span><span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span><span>chega '+hs.chegada+'</span>')+'</div>'
+       : (o.hora ? '<div class="tv-hor"><span>início <b>'+o.hora+'</b></span></div>' : ''))+
+    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
+    (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
+    al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
+  '</div>';
+}
+function listaTV(D){
+  const r = opsDoDia(D);
+  /* em ordem de saída do caminhão; sem caminhão, pela hora de início */
+  const chave = o => { const hs = saidaDaOp(o, D); return hs ? (hs.vespera ? '00:00' : hs.saida) : (o.hora || '99:99'); };
+  r.ops.sort((a,b)=> chave(a).localeCompare(chave(b)) || a.ev.nome.localeCompare(b.ev.nome));
+  return r;
+}
+function renderTV(){
+  const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
+  try{ if(typeof replanejar === 'function') replanejar(); }catch(e){}
+  const AM = diaSeguinte();
+  const H = listaTV(HOJE), A = listaTV(AM);
+  document.getElementById('tv-logo').innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'">' : '';
+  const dt = new Date(HOJE+'T12:00');
+  document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES DO GALPÃO<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+'</small>';
+  const nS = r => r.ops.reduce((s,o)=>s + o.viagens.filter(x=>!x.jaLocal).length, 0);
+  document.getElementById('tv-hoje-sub').textContent = rotDia(HOJE) + ' · ' + H.ops.length + ' operação(ões) · ' + nS(H) + ' caminhão(ões)';
+  document.getElementById('tv-am-sub').textContent = rotDia(AM) + ' · ' + A.ops.length + ' operação(ões) · ' + nS(A) + ' caminhão(ões)';
+  const vazio = txt => '<div class="tv-vazio">'+txt+'</div>';
+  const guardaH = document.getElementById('tv-hoje').scrollTop, guardaA = document.getElementById('tv-amanha').scrollTop;
+  document.getElementById('tv-hoje').innerHTML = H.ops.length ? H.ops.map(o=>cardTV(o, HOJE)).join('') : vazio('Nada na rua hoje.');
+  document.getElementById('tv-amanha').innerHTML = A.ops.length ? A.ops.map(o=>cardTV(o, AM)).join('') : vazio('Nada programado para amanhã.');
+  document.getElementById('tv-hoje').scrollTop = guardaH; document.getElementById('tv-amanha').scrollTop = guardaA;
+  /* rodapé: o que precisa de atenção */
+  const al = [];
+  [[H, 'Hoje'], [A, 'Amanhã']].forEach(([r, q])=>{
+    r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
+    r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
+    r.ops.forEach(o=>o.viagens.forEach(x=>{
+      if(x.manut) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção');
+      else if(!x.motorista && !x.jaLocal) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + o.ev.nome + ')');
+    }));
+  });
+  const rod = document.getElementById('tv-rod');
+  rod.className = 'tv-rod' + (al.length ? '' : ' ok');
+  rod.textContent = al.length ? '⚠ ' + al.join('   •   ') : '✔ Tudo certo: todos os caminhões com motorista, ninguém em dois lugares.   Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+/* abre direto na TV: endereço terminando em #tv */
+if(typeof window !== 'undefined' && typeof location !== 'undefined' && location.hash === '#tv') setTimeout(()=>abrirTV(), 2500);
+
+/* ================= FECHAMENTO DE DIÁRIAS =================
+   Quem vai para a Escala em cada evento (mesma regra do envio):
+   líder (se não folgou), montadores e desmontadores, e o produtor. */
+function pessoasNaEscala(ev){
+  const eq = ev.equipe || plano(ev).equipe;
+  const out = [];
+  if(eq && eq !== EQUIPE_TERC && !liderFolga(ev, eq)) out.push({nome:eq, papel:'Líder ' + eq});
+  pessoasOp(ev, eq).forEach(n => {
+    if(out.some(x=>x.nome===n)) return;
+    const t = todosMontadores().find(x=>x.nome===n) || {};
+    out.push({nome:n, papel: t.lider ? 'Líder ' + t.equipe : (t.equipe==='piloto' ? 'Piloto' : (t.equipe ? 'Equipe ' + t.equipe : 'Montador'))});
+  });
+  /* produtor entra sempre como produtor — mesmo com nome igual ao de um montador */
+  const pr = produtorDo(ev);
+  if(pr && pr !== SEM_PRODUTOR) out.push({nome:pr, papel:'Produtor', prod:true});
+  return out;
+}
+function calcularDiarias(mes){
+  const pess = {};  /* nome -> {papel, prod, dias:{iso:[{ev, st}]}} */
+  eventos.forEach(ev=>{
+    if(ev.esp === 'cancelado' || ev.esp === 'terceirizado') return;
+    if(!ev.mont) return;
+    pessoasNaEscala(ev).forEach(p=>{
+      diasDe(ev, p.nome).filter(d=>d.slice(0,7)===mes).forEach(d=>{
+        const st = faltouDia(ev, p.nome, d) ? 'FA' : (manutDia(ev, p.nome, d) ? 'MT' : 'T');
+        const chave = p.nome + (p.prod ? '#produtor' : '');
+        const reg = pess[chave] = pess[chave] || {nome:p.nome, papel:p.papel, prod:!!p.prod, dias:{}};
+        (reg.dias[d] = reg.dias[d] || []).push({ev:ev.nome, st});
+      });
+    });
+  });
+  return Object.keys(pess).sort((a,b)=>a.localeCompare(b,'pt-BR')).map(chave=>{
+    const r = pess[chave], nome = r.nome;
+    let T=0, FA=0, MT=0; const dupl = [];
+    Object.keys(r.dias).sort().forEach(d=>{
+      const l = r.dias[d];
+      if(l.length > 1) dupl.push(d);
+      /* um dia = uma diária: vale o melhor status do dia */
+      if(l.some(x=>x.st==='T')) T++; else if(l.some(x=>x.st==='MT')) MT++; else FA++;
+    });
+    return {nome, papel:r.papel, prod:r.prod, T, MT, FA, dupl, dias:r.dias,
+      eventos:[...new Set(Object.values(r.dias).flat().map(x=>x.ev))]};
+  });
+}
+function mesDiarias(){ const el2 = document.getElementById('dia-mes'); return (el2 && el2.value) || HOJE.slice(0,7); }
+function filtroDiarias(l){
+  const q = (document.getElementById('dia-quem')||{}).value || 'todos';
+  return l.filter(p => q==='todos' || (q==='produtores' ? p.prod : !p.prod));
+}
+function abrirDiarias(){
+  const el2 = document.getElementById('dia-mes');
+  if(el2 && !el2.value) el2.value = HOJE.slice(0,7);
+  renderDiarias();
+  document.getElementById('ov-diarias').classList.add('on');
+}
+function nomeMes(mes){ const [a,m] = mes.split('-'); return new Date(+a, +m-1, 15).toLocaleDateString('pt-BR',{month:'long', year:'numeric'}); }
+function renderDiarias(){
+  const mes = mesDiarias();
+  const l = filtroDiarias(calcularDiarias(mes));
+  const tot = l.reduce((s,p)=>({T:s.T+p.T, MT:s.MT+p.MT, FA:s.FA+p.FA}), {T:0,MT:0,FA:0});
+  document.getElementById('dia-resumo').textContent = nomeMes(mes) + ' · ' + l.length + ' pessoa(s) · ' + tot.T + ' diária(s) trabalhadas · ' + tot.MT + ' de manutenção · ' + tot.FA + ' falta(s)';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  document.getElementById('dia-corpo').innerHTML = !l.length
+    ? '<div class="panel empty"><b>Nada neste mês</b>Nenhuma pessoa com dia de trabalho lançado em ' + nomeMes(mes) + '.</div>'
+    : '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+      '<thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px">'+
+        '<th style="padding:7px">Pessoa</th><th style="padding:7px;text-align:center">Trabalhou</th><th style="padding:7px;text-align:center">Manutenção</th><th style="padding:7px;text-align:center">Faltou</th><th style="padding:7px">Eventos</th></tr></thead><tbody>'+
+      l.map(p=>'<tr style="border-top:1px solid var(--line)">'+
+        '<td style="padding:8px 7px"><b style="cursor:pointer;text-decoration:underline dotted" title="Ver a agenda do mês" data-t="'+(p.prod?'prod':'mont')+'" data-n="'+esc(p.nome).replace(/"/g,'&quot;')+'" onclick="fechar(\'ov-diarias\');abrirAgendaNome(this)">'+esc(p.nome)+'</b><br><small style="color:var(--muted)">'+esc(p.papel)+'</small>'+
+          (p.dupl.length ? '<br><small style="color:#b0483c">⚠ dois eventos em '+p.dupl.map(d=>fmtD(d).slice(0,5)).join(', ')+'</small>' : '')+'</td>'+
+        '<td style="padding:8px 7px;text-align:center;font-weight:800;color:#0f8a4d;font-size:15px">'+p.T+'</td>'+
+        '<td style="padding:8px 7px;text-align:center;font-weight:700;color:#1c5fb8">'+(p.MT||'—')+'</td>'+
+        '<td style="padding:8px 7px;text-align:center;font-weight:700;color:#e07b2c">'+(p.FA||'—')+'</td>'+
+        '<td style="padding:8px 7px;font-size:12px;color:var(--ink2)">'+p.eventos.map(esc).join('<br>')+'</td>'+
+      '</tr>').join('')+'</tbody></table>';
+}
+function imprimirDiarias(){
+  const mes = mesDiarias();
+  const l = filtroDiarias(calcularDiarias(mes));
+  if(!l.length) return toast('Nada para imprimir neste mês.');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const stRot = {T:'', FA:' <b style="color:#e07b2c">(FALTOU)</b>', MT:' <b style="color:#1c5fb8">(MANUTENÇÃO)</b>'};
+  const corpo = l.map(p=>
+    '<div class="pessoa"><div class="cab"><b>'+esc(p.nome)+'</b> <span>'+esc(p.papel)+'</span>'+
+      '<span class="nums"><b class="t">'+p.T+'</b> trabalhou · <b class="m">'+p.MT+'</b> manutenção · <b class="f">'+p.FA+'</b> faltou</span></div>'+
+    '<table><tbody>'+Object.keys(p.dias).sort().map(d=>{
+      const dt = new Date(d+'T12:00');
+      return '<tr><td style="width:92px">'+fmtD(d).slice(0,5)+' '+['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()]+'</td><td>'+
+        p.dias[d].map(x=>esc(x.ev)+stRot[x.st]).join('<br>')+(p.dias[d].length>1?' <b style="color:#b0483c">⚠ dois eventos</b>':'')+'</td></tr>';
+    }).join('')+'</tbody></table>'+
+    '<div class="ass">Visto: ______________________________</div></div>').join('');
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Diarias '+mes+'</title><style>'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#16234b;margin:26px;font-size:12.5px}'+
+    'h1{font-size:19px;margin:0 0 2px;color:#16234b} .sub{color:#777;margin:0 0 16px;font-size:12px}'+
+    '.pessoa{border:1px solid #e3e8f0;border-left:4px solid #f0851e;border-radius:6px;padding:10px 12px;margin-bottom:12px;page-break-inside:avoid}'+
+    '.cab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px} .cab span{color:#777;font-size:11.5px}'+
+    '.nums{margin-left:auto;font-size:12px} .t{color:#0f8a4d} .m{color:#1c5fb8} .f{color:#e07b2c}'+
+    'table{width:100%;border-collapse:collapse} td{padding:4px 6px;border-top:1px solid #eef1f6;vertical-align:top}'+
+    '.ass{margin-top:10px;color:#777;font-size:11.5px}'+
+    '@media print{body{margin:10mm}}'+
+  '</style></head><body>'+
+    '<h1>Fechamento de diárias — '+nomeMes(mes)+'</h1>'+
+    '<p class="sub">'+l.length+' pessoa(s) · gerado em '+new Date().toLocaleDateString('pt-BR')+' · Central de Planejamento</p>'+
+    corpo+
+  '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+function excelDiarias(){
+  if(!window.XLSX) return toast('A biblioteca de planilha não carregou. Recarregue a página.');
+  const mes = mesDiarias();
+  const l = filtroDiarias(calcularDiarias(mes));
+  if(!l.length) return toast('Nada para exportar neste mês.');
+  const resumo = [['Pessoa','Função','Trabalhou','Manutenção','Faltou','Dias em dois eventos','Eventos']]
+    .concat(l.map(p=>[p.nome, p.papel, p.T, p.MT, p.FA, p.dupl.map(d=>fmtD(d)).join(', '), p.eventos.join(' | ')]));
+  const detalhe = [['Data','Pessoa','Função','Evento','Situação']];
+  l.forEach(p=>Object.keys(p.dias).sort().forEach(d=>p.dias[d].forEach(x=>
+    detalhe.push([fmtD(d), p.nome, p.papel, x.ev, {T:'TRABALHOU', FA:'FALTOU', MT:'MANUTENÇÃO'}[x.st]]))));
+  const wb = XLSX.utils.book_new();
+  const w1 = XLSX.utils.aoa_to_sheet(resumo); w1['!cols'] = [{wch:24},{wch:20},{wch:10},{wch:12},{wch:8},{wch:22},{wch:60}];
+  const w2 = XLSX.utils.aoa_to_sheet(detalhe); w2['!cols'] = [{wch:12},{wch:24},{wch:20},{wch:50},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, w1, 'Resumo');
+  XLSX.utils.book_append_sheet(wb, w2, 'Detalhe por dia');
+  XLSX.writeFile(wb, 'diarias_' + mes + '.xlsx');
+  toast('Planilha de diárias de ' + nomeMes(mes) + ' baixada.');
+}
+
+/* ================= HISTÓRICO DE ALTERAÇÕES =================
+   A cada gravação, compara cada evento com a última "foto" e anota em
+   português o que mudou, quando e quem mudou (nome guardado neste aparelho). */
+let FOTO = {};
+function quemSou(){
+  let q = null;
+  try{ q = localStorage.getItem('cpl:quem'); }catch(e){}
+  if(!q && typeof prompt === 'function'){
+    q = (prompt('Para o histórico de alterações: qual o seu nome? (fica guardado neste aparelho)') || '').trim();
+    if(q){ try{ localStorage.setItem('cpl:quem', q); }catch(e){} }
+  }
+  return q || 'sem nome';
+}
+function trocarQuemSou(){
+  const atual = (()=>{ try{ return localStorage.getItem('cpl:quem') || ''; }catch(e){ return ''; } })();
+  const q = (prompt('Seu nome neste aparelho (aparece no histórico):', atual) || '').trim();
+  if(!q) return;
+  try{ localStorage.setItem('cpl:quem', q); }catch(e){}
+  toast('Pronto — as alterações deste aparelho ficam registradas como ' + q + '.');
+  renderCadastros();
+}
+function resumoEv(ev){
+  const eq = ev.equipe || null;
+  return {
+    nome: ev.nome || '', equipe: eq, produtor: ev.produtor || null,
+    mont: ev.mont || null, montFim: ev.montFim || null, evt: ev.evt || null, evtFim: ev.evtFim || null,
+    desm: ev.desm || null, desmFim: ev.desmFim || null,
+    esp: ev.esp || null, fase: ev.fase || null, km: +ev.km || 0,
+    local: ev.local || '', cidade: ev.cidade || '', respNome: ev.respNome || '', respTel: ev.respTel || '',
+    veiculos: (ev.veiculos || []).slice(), veiculosD: Array.isArray(ev.veiculosD) ? ev.veiculosD.slice() : null,
+    montOp: Array.isArray(ev.montOp) ? ev.montOp.slice() : null, timeD: Array.isArray(ev.timeD) ? ev.timeD.slice() : null,
+    folgas: (ev.folgas || []).slice(),
+    faltas: JSON.stringify(ev.faltas || {}), manuts: JSON.stringify(ev.manuts || {}), diasPessoa: JSON.stringify(ev.diasPessoa || {}),
+    itens: (ev.itens || []).map(i => i.nome + '=' + (+i.qtd || 0)),
+    estruturas: (ev.estruturas || []).length
+  };
+}
+function fotografarTudo(){ FOTO = {}; eventos.forEach(e => { FOTO[e.id] = resumoEv(e); }); }
+function fotografar(ev){ if(ev && ev.id) FOTO[ev.id] = resumoEv(ev); }
+const _dh = s => { if(!s) return '—'; const d = dia(s); const hh = String(s).slice(11,16); return fmtD(d).slice(0,5) + (hh ? ' ' + hh : ''); };
+const _lst = a => (a && a.length) ? a.join(', ') : '—';
+function _difLista(a, b){ const A = new Set(a||[]), B = new Set(b||[]);
+  const mais = [...B].filter(x=>!A.has(x)), menos = [...A].filter(x=>!B.has(x));
+  return [mais.length ? '+' + mais.join(', +') : '', menos.length ? '−' + menos.join(', −') : ''].filter(Boolean).join(' '); }
+function _marcasTxt(json){ const o = JSON.parse(json||'{}'), out = [];
+  Object.keys(o).forEach(n => (o[n]||[]).forEach(d => out.push(n + ' ' + fmtD(d).slice(0,5)))); return out; }
+function descreverMudancas(a, b, ev){
+  const m = [];
+  const rotData = {mont:'Montagem', montFim:'Fim da montagem', evt:'Evento', evtFim:'Fim do evento', desm:'Desmontagem', desmFim:'Fim da desmontagem'};
+  if(a.nome !== b.nome) m.push('Nome: ' + a.nome + ' → ' + b.nome);
+  Object.keys(rotData).forEach(k => { if((a[k]||'') !== (b[k]||'')) m.push(rotData[k] + ': ' + _dh(a[k]) + ' → ' + _dh(b[k])); });
+  if(a.equipe !== b.equipe) m.push('Equipe: ' + (a.equipe || 'sugestão da IA') + ' → ' + (b.equipe || 'sugestão da IA'));
+  if(a.produtor !== b.produtor) m.push('Produtor: ' + (a.produtor || 'sugestão da IA') + ' → ' + (b.produtor || 'sugestão da IA'));
+  if(a.esp !== b.esp) m.push(b.esp ? 'Situação: ' + ({cancelado:'🚫 CANCELADO', finalizado:'✅ FINALIZADO', terceirizado:'🤝 TERCEIRIZADO'}[b.esp] || b.esp) : 'Evento reaberto (era ' + a.esp + ')');
+  if(a.fase !== b.fase) m.push('Fase: ' + (a.fase || '—') + ' → ' + (b.fase || '—'));
+  if(a.km !== b.km) m.push('Distância: ' + a.km + ' → ' + b.km + ' km');
+  if(a.local !== b.local || a.cidade !== b.cidade) m.push('Local: ' + (b.local || '—') + (b.cidade ? ' · ' + b.cidade : ''));
+  if(a.respNome !== b.respNome || a.respTel !== b.respTel) m.push('Responsável no local: ' + (b.respNome || '—') + (b.respTel ? ' — ' + b.respTel : ''));
+  if(JSON.stringify(a.veiculos) !== JSON.stringify(b.veiculos)) m.push('Caminhões da montagem: ' + _lst(descViagens(b.veiculos)));
+  if(JSON.stringify(a.veiculosD) !== JSON.stringify(b.veiculosD))
+    m.push(b.veiculosD ? 'Caminhões da desmontagem: ' + _lst(descViagens(b.veiculosD)) : 'Desmontagem volta com os caminhões da montagem');
+  if(a.equipe === b.equipe && JSON.stringify(a.montOp) !== JSON.stringify(b.montOp))
+    m.push(b.montOp ? 'Time da montagem: ' + (_difLista(a.montOp || membrosDe(a.equipe), b.montOp) || 'reordenado') : 'Time da montagem voltou ao padrão da equipe');
+  if(JSON.stringify(a.timeD) !== JSON.stringify(b.timeD))
+    m.push(b.timeD ? (a.timeD ? 'Equipe da desmontagem: ' + (_difLista(a.timeD, b.timeD) || 'reordenada') : 'Desmontagem com equipe própria') : 'Desmonta com a equipe da montagem');
+  if(JSON.stringify(a.folgas) !== JSON.stringify(b.folgas)){ const d2 = _difLista(a.folgas, b.folgas); if(d2) m.push('💤 Folga no evento: ' + d2); }
+  if(a.faltas !== b.faltas){ const d2 = _difLista(_marcasTxt(a.faltas), _marcasTxt(b.faltas)); if(d2) m.push('✖ Falta: ' + d2); }
+  if(a.manuts !== b.manuts){ const d2 = _difLista(_marcasTxt(a.manuts), _marcasTxt(b.manuts)); if(d2) m.push('🔧 Manutenção: ' + d2); }
+  if(a.diasPessoa !== b.diasPessoa){
+    const A = JSON.parse(a.diasPessoa), B = JSON.parse(b.diasPessoa);
+    const quem = [...new Set([...Object.keys(A), ...Object.keys(B)])].filter(n => JSON.stringify(A[n]||null) !== JSON.stringify(B[n]||null));
+    if(quem.length) m.push('📅 Dias de trabalho alterados: ' + quem.join(', '));
+  }
+  if(JSON.stringify(a.itens) !== JSON.stringify(b.itens)){
+    const mapa = l => { const o = {}; l.forEach(x => { const i = x.lastIndexOf('='); o[x.slice(0,i)] = +x.slice(i+1); }); return o; };
+    const A = mapa(a.itens), B = mapa(b.itens), partes = [];
+    Object.keys(B).forEach(n => { if(!(n in A)) partes.push('+' + n + ' (' + num(B[n]) + ')'); else if(A[n] !== B[n]) partes.push(n + ' ' + num(A[n]) + '→' + num(B[n])); });
+    Object.keys(A).forEach(n => { if(!(n in B)) partes.push('−' + n); });
+    if(partes.length) m.push('Materiais: ' + partes.slice(0,6).join(', ') + (partes.length > 6 ? ' e mais ' + (partes.length-6) : ''));
+  }
+  if(a.estruturas !== b.estruturas) m.push('🏗 Estruturas da OS: ' + a.estruturas + ' → ' + b.estruturas);
+  return m;
+}
+function registrarHistorico(){
+  let quem = null;
+  const agora = new Date().toISOString();
+  eventos.forEach(ev => {
+    const novo = resumoEv(ev);
+    const velho = FOTO[ev.id];
+    let mud = velho ? descreverMudancas(velho, novo, ev) : ['Evento criado'];
+    FOTO[ev.id] = novo;
+    if(!mud.length) return;
+    if(!quem) quem = quemSou();
+    ev.hist = [{q: agora, quem, o: mud}, ...(ev.hist || [])].slice(0, 80);
+  });
+}
+
 async function salvar(){
   marcarPlanoSujo();
+  try{ registrarHistorico(); }catch(e){ /* histórico nunca pode travar a gravação */ }
   await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
   if(sb && nuvemOk){
     clearTimeout(filaSync);
@@ -5337,7 +7049,8 @@ async function salvar(){
 (async function boot(){
   /* 1) cache local primeiro, para a tela abrir na hora */
   const d = await Store.get('cpl:dados');
-  if(d && d.eventos && d.CONFIG){ eventos=d.eventos; produtores=d.produtores; equipes=d.equipes; motoristas=d.motoristas; veiculos=d.veiculos; catalogo=d.catalogo; CONFIG=d.CONFIG; if(d.APRENDA) APRENDA=d.APRENDA; }
+  fotografarTudo();
+  if(d && d.eventos && d.CONFIG){ eventos=d.eventos; fotografarTudo(); produtores=d.produtores; equipes=d.equipes; motoristas=d.motoristas; veiculos=d.veiculos; catalogo=d.catalogo; CONFIG=d.CONFIG; if(d.APRENDA) APRENDA=d.APRENDA; }
   /* 2) nuvem manda: quadro compartilhado entre todos */
   try{
     if(window.supabase && NUVEM.url){
@@ -5347,6 +7060,7 @@ async function salvar(){
       /* primeira vez com a nuvem vazia: sobe o que já existe neste aparelho */
       if(!eventos.length && locais.length){
         eventos = locais;
+        fotografarTudo();
         marcarSync(true);
         await nuvemGravar();
         setTimeout(()=>toast('Quadro deste aparelho enviado para a nuvem — agora é compartilhado.'), 800);
@@ -5354,6 +7068,7 @@ async function salvar(){
       marcarSync(true);
       nuvemEscutar();
       sincronizarAgenda(true);                          /* agenda em dia ao abrir */
+
       setInterval(()=>sincronizarAgenda(true), 300000); /* e de 5 em 5 minutos */
       setTimeout(async ()=>{ await cadastrarNaEscala(true); sincronizarEscala(true); }, 4000); /* cadastro e escala em dia ao abrir */
       setInterval(()=>sincronizarEscala(true), 600000);    /* e de 10 em 10 minutos */
@@ -5424,5 +7139,14 @@ async function salvar(){
   document.getElementById('cfg-km').value = CONFIG.kmAgregado;
 })();
 </script>
+<div id="tv" ondblclick="fecharTV()">
+  <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
+  <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-rel" id="tv-rel"></div></div>
+  <div class="tv-cols">
+    <div class="tv-col"><h2>HOJE <span id="tv-hoje-sub"></span></h2><div class="tv-lista" id="tv-hoje"></div></div>
+    <div class="tv-col"><h2>AMANHÃ <span id="tv-am-sub"></span></h2><div class="tv-lista" id="tv-amanha"></div></div>
+  </div>
+  <div class="tv-rod" id="tv-rod"></div>
+</div>
 </body>
 </html>
