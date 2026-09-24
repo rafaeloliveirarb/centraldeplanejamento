@@ -424,9 +424,12 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button id="f-data-limpar" onclick="limparDatas()" title="Limpar filtro de data">✕</button>
       </div>
       <input class="search" id="busca" placeholder="Pesquisar evento...">
+      <input class="search" id="pergunta-in" placeholder="💬 Pergunte: o que sai sábado?" title="Perguntas em português sobre a agenda, pessoas, estruturas, km e custos" onkeydown="if(event.key==='Enter')perguntar()" style="min-width:230px">
       <button class="pill" onclick="sincronizarAgenda()" title="A agenda já se atualiza sozinha; use só se quiser forçar agora">📋 Sincronizar agenda</button>
       <button class="pill" onclick="relatorioOps()" title="Imprime as montagens e desmontagens do período, sem os terceirizados">🖨 Relatório de operações</button>
       <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
+      <button class="pill" onclick="abrirPico()" title="Previsão das próximas semanas pelo histórico: onde vai faltar equipe ou caminhão">📈 Previsão de pico</button>
+      <button class="pill" onclick="abrirBuscaEstr()" title="Em quais eventos está uma estrutura (palco 12x10, grid...) e se está livre numa data">🔎 Estruturas</button>
       <button class="pill" onclick="abrirTV()" title="Tela grande para a TV do galpão: o que sai hoje e amanhã, atualiza sozinha">📺 Tela do galpão</button>
       <button class="pill" onclick="abrirSemana()" title="Resumo da semana para a diretoria: eventos, caminhões, riscos e a semana passada">📊 Semana</button>
       <button class="pill" onclick="abrirAgenda()" title="O mês de uma pessoa: eventos, dias, folgas e faltas. E quem está livre num dia">👤 Agenda</button>
@@ -565,7 +568,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <p class="sub" style="margin:4px 0 10px">Com o endereço do galpão, a Central calcula a distância por estrada até cada evento (pelo local; se não achar, pela cidade). Eventos importados com 0 km são calculados sozinhos.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input id="galpao-end" placeholder="Endereço do galpão — rua, número, cidade" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px"
-          onchange="CONFIG.galpao=this.value.trim();CONFIG.galpaoCoord=null;salvar()">
+          onchange="setGalpao(this.value)">
         <button class="mini" onclick="testarGalpao()">🔎 Conferir no mapa</button>
         <button class="mini" onclick="calcularKmEmLote(true)">Calcular os eventos sem km</button>
       </div>
@@ -574,6 +577,32 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <b>🚦 Trânsito ao vivo</b>
         <input id="cfg-tomtom" placeholder="Chave TomTom (grátis em developer.tomtom.com)" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.tomtomKey=this.value.trim();salvar();TRANSITO={};conferirTransitoProximas(true)">
         <button class="mini" onclick="testarTransito()">Testar</button>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>⛽ Custo da viagem</b>
+          <label>Diesel R$ <input id="cfg-diesel" type="number" step="0.01" style="width:80px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.precoDiesel=+this.value||0;salvar();renderCadastros()"> o litro</label>
+          <small style="color:var(--muted)">consumo e eixos de cada caminhão ficam em Veículos</small></div>
+        <div id="cfg-pracas" style="margin-top:8px"></div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <b>⛔ Restrição de caminhão na cidade</b>
+        <div id="cfg-restr" style="margin-top:6px"></div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <b>📅 Feriados e grandes eventos</b> <small style="color:var(--muted)">(jogo no Maracanã, show grande, maratona, rua fechada...)</small>
+        <div id="cfg-datas" style="margin-top:6px"></div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b>🔄 Pipefy automático</b>
+          <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
+          <input id="cfg-pf-pipe" placeholder="Nº do pipe (ou vários, separados por vírgula)" style="width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar()">
+          <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button></div>
+        <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central busca no Pipefy os cards novos e alterados e atualiza o quadro, com o mesmo aviso de data mudada da importação. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <b>📲 Link do motorista</b>
+        <input id="cfg-url" placeholder="Endereço da Central na internet (ex.: https://…/central-planejamento.html)" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.urlCentral=this.value.trim();salvar()">
+        <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a Tela do galpão mostra onde está o caminhão e quando chega. Precisa ser o endereço onde a Central fica publicada (um arquivo aberto só no computador não abre no celular).</small>
       </div>
       <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com a chave, a Central confere engarrafamento, acidente e interdição na rota de cada caminhão nas 3 horas antes da saída, e avisa quanto tempo antecipar. Sem a chave, cada operação tem os botões para abrir a rota no Waze ou no Google Maps.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
@@ -715,6 +744,50 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <div class="alert" style="margin-top:0">Conta pelo que está na Central: dias de cada pessoa em cada evento, com folgas, faltas e manutenção. Eventos cancelados e terceirizados ficam de fora; finalizados entram. Pessoa em dois eventos no mesmo dia conta uma diária, com aviso.</div>
       <div id="dia-corpo" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-pico" onclick="if(event.target===this)fechar('ov-pico')">
+  <div class="modal" style="max-width:940px">
+    <header><div><h2>📈 Previsão de pico</h2><div class="os" id="pico-sub"></div></div><button class="x" onclick="fechar('ov-pico')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:13px">
+        <label>Semanas à frente <select id="pico-sem" onchange="renderPico()" style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit"><option>8</option><option selected>16</option><option>26</option></select></label>
+        <label>Crescimento sobre o ano passado <input id="pico-cresc" type="number" step="5" style="width:64px;border:1px solid var(--line);border-radius:8px;padding:6px 8px" onchange="CONFIG.picoCrescimento=+this.value||0;salvar();renderPico()"> %</label>
+      </div>
+      <div id="pico-corpo"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-pergunta" onclick="if(event.target===this)fechar('ov-pergunta')">
+  <div class="modal" style="max-width:680px">
+    <header><div><h2>💬 Pergunte à Central</h2><div class="os">responde com os dados do quadro, na hora</div></div><button class="x" onclick="fechar('ov-pergunta')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input id="pergunta-in2" placeholder="Faça outra pergunta..." onkeydown="if(event.key==='Enter'){perguntar(this.value);this.value=''}" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px">
+      </div>
+      <div id="pg-resp"></div>
+      <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="mini" onclick="perguntar('o que sai amanhã?')">o que sai amanhã?</button>
+        <button class="mini" onclick="perguntar('quem está livre sábado?')">quem está livre sábado?</button>
+        <button class="mini" onclick="perguntar('quantos km rodamos este mês?')">km deste mês</button>
+        <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-busca-estr" onclick="if(event.target===this)fechar('ov-busca-estr')">
+  <div class="modal" style="max-width:720px">
+    <header><div><h2>🔎 Onde está a estrutura</h2><div class="os">procura nas estruturas da OS e nos materiais de cada evento</div></div><button class="x" onclick="fechar('ov-busca-estr')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <input id="be-q" placeholder="ex.: palco 12x10, grid, piramidal 5x5" oninput="renderBuscaEstr()" style="flex:1;min-width:240px;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px">Livre em <input type="date" id="be-dia" onchange="renderBuscaEstr()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px"></label>
+      </div>
+      <div id="be-res"></div>
     </div>
   </div>
 </div>
@@ -1014,6 +1087,8 @@ const Store = (() => {
    eventos diferentes não se atropelam)
    plan_config : cadastros, frota, materiais e aprendizado da IA
    ========================================================= */
+/* link do motorista: a mesma Central abre só a tela de compartilhar a localização */
+if(typeof location !== 'undefined' && /^#motorista=/.test(location.hash || '')) window.__modoMotorista = true;
 const NUVEM = {
   url: 'https://vybxkraqydsjrdvyxknp.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5YnhrcmFxeWRzanJkdnl4a25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjM0MzgsImV4cCI6MjEwNDQzOTQzOH0.QszdsS6tiYcqssMxKwQjfzlIDhqc5emzXKmw8vyZCxw'
@@ -1034,7 +1109,7 @@ async function nuvemCarregar(){
   if(!sb) return false;
   const [ev, cf] = await Promise.all([
     sb.from('plan_eventos').select('id,dados'),
-    sb.from('plan_config').select('chave,dados')
+    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%')
   ]);
   if(ev.error || cf.error) throw (ev.error || cf.error);
   if(ev.data) {
@@ -1044,6 +1119,7 @@ async function nuvemCarregar(){
   }
   (cf.data||[]).forEach(r=>{
     const d = r.dados || {};
+    if(String(r.chave||'').startsWith('loc:')){ LOCS[r.chave.slice(4)] = d; return; }
     if(r.chave==='cadastros'){
       if(d.produtores) produtores = d.produtores;
       if(d.equipes) equipes = d.equipes;
@@ -1102,6 +1178,7 @@ function nuvemEscutar(){
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'plan_config'}, p=>{
       if(Date.now() - ignorarRealtime < 2500) return;
+      if(p.new && String(p.new.chave||'').startsWith('loc:')){ LOCS[p.new.chave.slice(4)] = p.new.dados; try{ renderTV(); }catch(e){} return; }
       const d = p.new && p.new.dados; if(!d) return;
       if(d.produtores) produtores = d.produtores;
       if(d.equipes) equipes = d.equipes;
@@ -1467,6 +1544,15 @@ function padroesConfig(c){
   c = c || {};
   if(!c.galpao) c.galpao = 'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000';
   if(!c.tomtomKey) c.tomtomKey = 'rTwbfh57XpUld6HQuakwAXLAnUiU63ov';
+  if(!c.precoDiesel) c.precoDiesel = 6.2;
+  if(!Array.isArray(c.restricoes)) c.restricoes = [
+    {nome:'Centro Expandido do Rio', cidade:'Rio de Janeiro', bairros:'Centro, Saúde, Gamboa, Lapa, Praça Mauá, Castelo', dias:'uteis', faixas:'06:00-21:00', vucLivre:true, ativo:false},
+    {nome:'Zona de restrição do Rio (Zona Sul, Tijuca, Centro)', cidade:'Rio de Janeiro', bairros:'Copacabana, Ipanema, Leblon, Leme, Botafogo, Flamengo, Glória, Catete, Laranjeiras, Cosme Velho, Humaitá, Urca, Lagoa, Gávea, Jardim Botânico, Tijuca, Maracanã, Vila Isabel, Grajaú, Andaraí, Rio Comprido, Santa Teresa, São Cristóvão', dias:'uteis', faixas:'06:00-10:00, 17:00-21:00', vucLivre:true, ativo:false}];
+  if(!Array.isArray(c.datasEspeciais)) c.datasEspeciais = [];
+  if(!Array.isArray(c.pracas)) c.pracas = [{nome:'Ponte Rio-Niterói', valorEixo:0, ponte:true, vezes:1}];
+  /* ponto do galpão na Av. Antônio Carlos Guadelupe (o mapa não acha o lote); ajustável em Integrações */
+  if(!c.galpaoCoord && /Guadalupe|Guadelupe/i.test(c.galpao) && /Rio Bonito/i.test(c.galpao))
+    c.galpaoCoord = {q:c.galpao, lat:-22.7057, lon:-42.6573, nome:'Av. Antônio Carlos Guadelupe — Rio Bonito (ponto aproximado)', manual:true};
   return c;
 }
 let CONFIG = padroesConfig({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'});
@@ -2253,8 +2339,10 @@ function opsDoDia(D){
   const grupo = {};
   ops.forEach(o=>o.viagens.forEach(x=>{ if(x.jaLocal) return;
     /* viagem combinada (os dois lados marcados) é uma saída só */
-    const par = x.junto && ops.some(o2=>o2.ev.id===x.junto && o2.viagens.some(y=>y.v.id===x.v.id && y.junto===o.ev.id));
-    const chave = par ? [o.ev.id, x.junto].sort().join('+') : o.ev.id;
+    /* grupo combinado: vale se os outros do grupo também estão marcados neste caminhão */
+    const membros = x.junto ? membrosJunto(o.ev.id, x.junto) : [o.ev.id];
+    const ok = membros.length > 1 && membros.every(id=>id===o.ev.id || ops.some(o2=>o2.ev.id===id && o2.viagens.some(y=>y.v.id===x.v.id && y.junto && membrosJunto(id, y.junto).includes(o.ev.id))));
+    const chave = ok ? membros.join('+') : o.ev.id;
     (cam[x.v.id] = cam[x.v.id] || new Set()).add(chave);
     (grupo[x.v.id] = grupo[x.v.id] || new Set()).add(o.ev.nome);
   }));
@@ -2313,15 +2401,18 @@ function mensagemDia(o, D){
   if(o.viagens.length){
     L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
   }
-  { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); }
+  { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt); }
+  datasEspeciais(D, ev.cidade).forEach(x=>L.push((x.tipo==='feriado'?'📅 ':'🏟 ') + x.nome));
   o.viagens.filter(x=>x.junto).forEach(x=>{ const rt = rotaJunta(D, ev.id, x.junto, o.fase);
-    if(rt) L.push('🔗 ' + x.v.tipo + ' ' + x.v.placa + ' leva também ' + nomeDo(x.junto) + ' — ' + (rt.paradas[0].ev.id===ev.id ? '1ª parada' : '2ª parada') + ' (' + rt.paradas.map(pp=>pp.ev.nome).join(' → ') + ')'); });
+    if(rt) L.push('🔗 ' + x.v.tipo + ' ' + x.v.placa + ' leva também ' + nomesJunto(ev.id, x.junto) + ' — ' + (rt.paradas.findIndex(p=>p.ev.id===ev.id)+1) + 'ª parada' + ' (' + rt.paradas.map(pp=>pp.ev.nome).join(' → ') + ')'); });
   { const f = fichaLocal(ev); if(f && resumoFicha(f)) L.push('🚧 Local: ' + resumoFicha(f)); }
   { const t = resumoTransito(ev, o.fase, D); if(t && t.nivel) L.push(t.txt); }
+  { const b = resumoBloqueio(ev, o.fase, D); if(b) L.push(b); }
   if(o.viagens.some(x=>!x.jaLocal) && destinoTexto(ev)) L.push('🗺 Rota: ' + linkWaze(ev));
   if(ev.respNome || ev.respTel) L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   const cc = cidadeClima(ev), w = cc && CLIMA[cc] && CLIMA[cc].dias && CLIMA[cc].dias[D];
   if(w && riscoClima(w)) L.push('🌦 Previsão: ' + txtClima(w));
+  { const ch = chuvaNoHorario(ev, D, o.fase); if(ch && ch.faixas.length) L.push(ch.txt + ' — ' + ch.dica); }
   return L.join('\n');
 }
 function dataAmanha(){ const el2 = document.getElementById('am-dia'); return (el2 && el2.value) || diaSeguinte(); }
@@ -2349,6 +2440,11 @@ function renderAmanha(){
   ops.forEach(o=>{ if(!o.pessoas.some(pp=>!pp.prod) && o.fase) alertas.push('👷 <b>' + esc(o.ev.nome) + '</b> sem ninguém escalado para o dia'); });
   ops.forEach(o=>{ const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
     if(w && riscoClima(w)) alertas.push((riscoClima(w)===2?'⛈':'☔') + ' <b>' + esc(o.ev.nome) + '</b> (' + esc(c) + '): ' + txtClima(w)); });
+  ops.forEach(o=>{ const ar = alertaRestricao(o.ev, o.fase, D, saidaDaOp(o, D)); if(ar) alertas.push('<b>' + esc(o.ev.nome) + '</b>: ' + esc(ar.txt)); });
+  { const vistas = new Set(); ops.forEach(o=>datasEspeciais(D, o.ev.cidade).forEach(x=>{ const k = x.nome; if(vistas.has(k)) return; vistas.add(k); alertas.push((x.tipo==='feriado'?'📅':'🏟') + ' ' + esc(x.nome) + ' — ' + esc(o.ev.cidade||'')); })); }
+  ops.forEach(o=>{ const b = resumoBloqueio(o.ev, o.fase, D); if(b) alertas.push('<b>' + esc(o.ev.nome) + '</b>: ' + esc(b)); });
+  ops.forEach(o=>{ const ch = chuvaNoHorario(o.ev, D, o.fase); if(ch && ch.faixas.length) alertas.push('<b>' + esc(o.ev.nome) + '</b>: ' + esc(ch.txt) + ' → ' + esc(ch.dica)); });
+  ops.forEach(o=>{ const ad = alertaDescarga(o.ev, saidaDaOp(o, D)); if(ad) alertas.push('<b>' + esc(o.ev.nome) + '</b>: ' + esc(ad.txt)); });
   ops.forEach(o=>{ const r = resumoTransito(o.ev, o.fase, D); if(r && r.nivel) alertas.push((r.nivel===2?'🚨':'🚦')+' <b>'+esc(o.ev.nome)+'</b>: '+esc(r.txt)); });
   const combos = htmlJuntar(D) + htmlCarregarNoDia(somaDiaISO(D, -1), D);
   document.getElementById('am-corpo').innerHTML = !ops.length
@@ -2361,14 +2457,16 @@ function renderAmanha(){
             '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+esc(rotuloOp(o))+
               (o.ev.cidade && o.ev.cidade!=='—' ? ' · '+esc(o.ev.cidade) : '')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</small></div>'+
             (o.hora ? '<b class="hora">'+o.hora+'</b>' : '')+'</div>'+
-          (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomeDo(x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
-          (function(){ const hs = saidaDaOp(o, D); return hs ? '<div class="am-lin">'+txtSaida(hs)+(hs.parada===2?'':' <small style="color:var(--muted)">('+durTxt(hs.viagem)+' de estrada)</small>')+'</div>' : ''; })()+
+          (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomesJunto(o.ev.id, x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
+          (function(){ const hs = saidaDaOp(o, D); return hs ? '<div class="am-lin">'+txtSaida(hs)+(hs.parada>=2?'':' <small style="color:var(--muted)">('+durTxt(hs.viagem)+' de estrada)</small>')+'</div>' : ''; })()+
           (function(){ const f = fichaLocal(o.ev); return (f && resumoFicha(f)) ? '<div class="am-lin">🚧 '+esc(resumoFicha(f))+'</div>' : ''; })()+
           (function(){ if(!o.viagens.some(x=>!x.jaLocal)) return '';
             const r = resumoTransito(o.ev, o.fase, D);
             return '<div class="am-lin">'+(r ? '<b style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+'">'+esc(r.txt)+'</b> ' : '')+
               '<button class="mini" onclick="event.stopPropagation();conferirTransitoEv(\''+o.ev.id+'\',\''+o.fase+'\',\''+D+'\')">🚦 '+(CONFIG.tomtomKey?'Conferir trânsito':'Ver trânsito')+'</button> '+
-              '<a class="mini" style="text-decoration:none" target="_blank" onclick="event.stopPropagation()" href="'+linkWaze(o.ev)+'">Waze</a></div>'; })()+
+              '<a class="mini" style="text-decoration:none" target="_blank" onclick="event.stopPropagation()" href="'+linkWaze(o.ev)+'">Waze</a> '+
+              o.viagens.filter(x=>!x.jaLocal).map(x=>'<button class="mini" title="Manda pelo WhatsApp o link para o motorista compartilhar a localização" onclick="event.stopPropagation();enviarLinkMotorista(\''+o.ev.id+'\',\''+o.fase+'\',\''+D+'\','+x.i+')">📲 '+esc(x.motorista||x.v.placa)+'</button>').join(' ')+
+              situacaoCaminhao(o, D).map(s=>' <b style="color:'+(s.local?'#0f8a4d':'#1c4fa0')+'">'+esc(s.x.v.placa)+': '+esc(s.txt)+'</b>').join('')+'</div>'; })()+
           (o.pessoas.length ? '<div class="am-lin">👷 <b style="color:'+corEquipe(eq)+'">'+esc(eq)+'</b>: '+o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' <small>(produtor)</small>':'')+(pp.mt?' <small style="color:#1c5fb8">(manutenção)</small>':'')).join(', ')+'</div>' : '')+
           ((o.ev.respNome||o.ev.respTel) ? '<div class="am-lin">📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — '))+'</div>' : '')+
         '</div>';
@@ -2418,7 +2516,7 @@ function imprimirAmanha(){
     '<h1>Operações — '+rotDia(D)+'</h1><p class="sub">'+ops.length+' operação(ões) · '+saidas.length+' saída(s) de caminhão · gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
     ((duplos.length||camDuplo.length) ? '<div class="alerta">'+duplos.map(x=>'⚠ '+esc(x.nome)+' em dois lugares: '+x.onde.map(esc).join(' e ')).concat(camDuplo.map(x=>'⚠ '+esc(x.v.tipo+' '+x.v.placa)+' em dois eventos: '+x.onde.map(esc).join(' e '))).join('<br>')+'</div>' : '')+
     (saidas.length ? '<h2>Saída de caminhões</h2><table><thead><tr><th>Sai</th><th>Caminhão</th><th>Motorista</th><th>Evento</th><th>Destino</th><th>Visto</th></tr></thead><tbody>'+
-      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>'+(s.hs.ponte?'🌉 ponte '+s.hs.ponte+' · ':'')+'chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
+      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>'+(s.hs.ponte?'🌉 ponte '+s.hs.ponte+' · ':'')+'chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomesJunto(s.o.ev.id, s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
     '<h2>Equipes</h2>'+ops.map(o=>'<div class="op"><b>'+esc(o.ev.nome)+'</b> — '+(o.fase==='desm'?'desmontagem':'montagem')+(o.tot>1?' (dia '+o.n+' de '+o.tot+')':'')+(o.hora?' · início '+o.hora:'')+
       '<br>👷 <b>'+esc(o.equipe)+'</b>: '+(o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' (produtor)':'')+(pp.mt?' (manutenção)':'')).join(', ')||'—')+
       ((o.ev.respNome||o.ev.respTel)?'<br>📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — ')):'')+
@@ -2551,12 +2649,18 @@ async function climaCidade(c, forcar){
     reg.lat = g.lat; reg.lon = g.lon;
   }
   const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
-    '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
+    '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max' +
+    '&hourly=precipitation,precipitation_probability,weather_code,wind_gusts_10m&timezone=America%2FSao_Paulo&forecast_days=16';
   const r = await fetch(u); if(!r.ok) throw new Error('previsão ' + r.status);
   const j = await r.json(), dd = j.daily || {};
   reg.dias = {};
   (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
     rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
+  /* hora a hora: {dia: [[mm, %, código, rajada] x 24]} — compacto para caber no aparelho */
+  const hh = j.hourly || {};
+  reg.horas = {};
+  (hh.time||[]).forEach((t,i)=>{ const d = t.slice(0,10), hr = +t.slice(11,13);
+    (reg.horas[d] = reg.horas[d] || [])[hr] = [+(hh.precipitation||[])[i]||0, +(hh.precipitation_probability||[])[i]||0, +(hh.weather_code||[])[i]||0, +(hh.wind_gusts_10m||[])[i]||0]; });
   reg.t = Date.now(); delete reg.semLocal; delete reg.erro;
   CLIMA[c] = reg; guardarClima();
   return reg;
@@ -2586,6 +2690,27 @@ async function atualizarClima(forcar){
     renderQuadro();
   }catch(e){ /* sem internet: fica com o que tinha */ }
   finally{ climaRodando = false; }
+}
+/* faixas de chuva no horário de trabalho: "chuva das 14h às 17h (até 6 mm/h)" */
+function chuvaNoHorario(ev, D, fase){
+  const c = cidadeClima(ev), reg = c && CLIMA[c];
+  const hs = reg && reg.horas && reg.horas[D];
+  if(!hs) return null;
+  const ini = Math.max(5, +(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,13)) || 7), fim = 19;
+  const faixas = [];
+  for(let hr = ini; hr <= fim; hr++){
+    const x = hs[hr]; if(!x) continue;
+    const chove = x[0] >= 0.5 || (x[1] >= 60 && x[0] >= 0.2) || [95,96,99].includes(x[2]);
+    if(!chove) continue;
+    const u = faixas[faixas.length-1];
+    if(u && u.ate === hr) { u.ate = hr + 1; u.max = Math.max(u.max, x[0]); u.trov = u.trov || [95,96,99].includes(x[2]); u.raj = Math.max(u.raj, x[3]); }
+    else faixas.push({de:hr, ate:hr+1, max:x[0], trov:[95,96,99].includes(x[2]), raj:x[3]});
+  }
+  if(!faixas.length) return {faixas, txt:'sem chuva no horário de trabalho', nivel:0};
+  const forte = faixas.some(f=>f.max >= 5 || f.trov);
+  const txt = (forte ? '⛈ ' : '🌧 ') + 'chuva ' + faixas.map(f=>'das ' + f.de + 'h às ' + f.ate + 'h').join(' e ') +
+    ' (até ' + Math.round(Math.max(...faixas.map(f=>f.max))*10)/10 + ' mm/h' + (faixas.some(f=>f.trov) ? ', com trovoada' : '') + ')';
+  return {faixas, forte, nivel: forte ? 2 : 1, txt, dica: forte ? 'cobrir o material e montar a cobertura primeiro' : 'deixar lona à mão para cobrir o material'};
 }
 /* 0 nada · 1 atenção · 2 forte */
 function riscoClima(x){
@@ -2638,8 +2763,10 @@ function blocoClima(ev){
   if(!dias.length) return '<div style="font-size:12px;color:var(--muted)">Os dias de trabalho estão além dos 16 dias de previsão.</div>';
   return '<div style="display:flex;gap:6px;flex-wrap:wrap">'+dias.map(x=>{
     const w = reg.dias[x.d], n = riscoClima(w);
-    return '<div style="border:1px solid '+(n===2?'#f3c6c0':n?'#f0dfb5':'var(--line)')+';background:'+(n===2?'#fdecea':n?'#fdf7ee':'#fff')+';border-radius:8px;padding:6px 9px;font-size:11.5px;min-width:112px">'+
-      '<b>'+x.f+' '+rotDia(x.d)+'</b><br>'+txtClima(w)+'</div>';
+    const ch = chuvaNoHorario(ev, x.d, x.f==='📤'?'desm':'mont');
+    return '<div style="border:1px solid '+(n===2?'#f3c6c0':n?'#f0dfb5':'var(--line)')+';background:'+(n===2?'#fdecea':n?'#fdf7ee':'#fff')+';border-radius:8px;padding:6px 9px;font-size:11.5px;min-width:112px;max-width:260px">'+
+      '<b>'+x.f+' '+rotDia(x.d)+'</b><br>'+txtClima(w)+
+      (ch && ch.faixas.length ? '<br><b style="color:'+(ch.forte?'#b0483c':'#a86412')+'">'+ch.txt+'</b><br><small>→ '+ch.dica+'</small>' : (ch ? '<br><small style="color:#0f8a4d">sem chuva no horário de trabalho</small>' : ''))+'</div>';
   }).join('')+'</div><div style="font-size:11px;color:var(--muted);margin-top:6px">Previsão Open-Meteo para '+c+' · atualizada '+new Date(reg.t).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>';
 }
 
@@ -2650,9 +2777,34 @@ function blocoClima(ev){
 let GEO = {};
 try{ GEO = JSON.parse(localStorage.getItem('cpl:geo') || '{}'); }catch(e){ GEO = {}; }
 let ultimaGeo = 0;
+async function geocodTomTom(q){
+  const u = 'https://api.tomtom.com/search/2/search/' + encodeURIComponent(q.replace(/[\/?#]/g,' ')) + '.json?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&countrySet=BR&limit=6&language=pt-BR&typeahead=false';
+  const r = await fetch(u); if(!r.ok) return null;
+  const j = await r.json();
+  const qn = semAcentoSimples(q);
+  /* só vale resultado na cidade que está no texto; com local + cidade, não aceita só o "centro da cidade" */
+  const cands = (j.results||[]).map(x=>{
+    const ad = x.address || {};
+    const mun = semAcentoSimples(ad.municipality || ad.municipalitySubdivision || ad.countrySecondarySubdivision || '').split(',')[0].trim();
+    return {x, ok: !!mun && qn.includes(mun)};
+  }).filter(c=>c.ok);
+  const partes = q.split(',').map(s=>s.trim()).filter(s=>s && !/^brasil$/i.test(s)).length;
+  const best = partes >= 2 ? cands.find(c=>c.x.type !== 'Geography') : cands[0];
+  if(!best) return null;
+  const x = best.x;
+  return {lat:x.position.lat, lon:x.position.lon, nome:(x.poi && x.poi.name ? x.poi.name + ' — ' : '') + ((x.address && x.address.freeformAddress) || ''), fonte:'tomtom', bairro:(x.address && x.address.municipalitySubdivision) || null};
+}
+const TT_TENTOU = {};
 async function geocodEndereco(q){
   const k = semAcentoSimples(q).trim();
-  if(GEO[k] !== undefined) return GEO[k];
+  const c0 = GEO[k];
+  if(c0 && c0.fonte === 'tomtom') return c0;
+  /* com a chave TomTom, tenta primeiro por ele (acha melhor número, condomínio e ponto de referência) */
+  if(CONFIG.tomtomKey && !TT_TENTOU[k]){
+    TT_TENTOU[k] = 1;
+    try{ const t = await geocodTomTom(q); if(t){ GEO[k] = t; try{ localStorage.setItem('cpl:geo', JSON.stringify(GEO)); }catch(e){} return t; } }catch(e){}
+  }
+  if(c0 !== undefined) return c0;
   const espera = 1100 - (Date.now() - ultimaGeo);
   if(espera > 0) await new Promise(r=>setTimeout(r, espera));
   ultimaGeo = Date.now();
@@ -2663,9 +2815,28 @@ async function geocodEndereco(q){
   try{ localStorage.setItem('cpl:geo', JSON.stringify(GEO)); }catch(e){}
   return GEO[k];
 }
+/* aceita endereço, coordenada ("-22.70, -42.65") ou link do Google Maps (com @lat,lon) */
+function coordDoTexto(t){
+  const s = String(t||'');
+  let m = s.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) || s.match(/[?&](?:q|ll|query|destination)=(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) || s.match(/^\s*(-?\d{1,2}\.\d+)\s*[,;]\s*(-?\d{1,3}\.\d+)\s*$/);
+  if(!m) m = s.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+  return m ? {lat:+m[1], lon:+m[2]} : null;
+}
+function setGalpao(v){
+  v = String(v||'').trim();
+  const c = coordDoTexto(v);
+  if(c){
+    CONFIG.galpaoCoord = {q: CONFIG.galpao, lat:c.lat, lon:c.lon, nome:'ponto marcado (' + c.lat.toFixed(5) + ', ' + c.lon.toFixed(5) + ')', manual:true};
+    salvar(); renderCadastros();
+    const st = document.getElementById('km-status');
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">Ponto do galpão gravado:</b> ' + c.lat.toFixed(5) + ', ' + c.lon.toFixed(5) + ' — o endereço continua o mesmo. <a target="_blank" href="https://www.google.com/maps?q=' + c.lat + ',' + c.lon + '">ver no mapa</a>';
+    return;
+  }
+  CONFIG.galpao = v; CONFIG.galpaoCoord = null; salvar();
+}
 async function coordGalpao(){
   if(!CONFIG.galpao) return null;
-  if(CONFIG.galpaoCoord && CONFIG.galpaoCoord.q === CONFIG.galpao) return CONFIG.galpaoCoord;
+  if(CONFIG.galpaoCoord && (CONFIG.galpaoCoord.manual || CONFIG.galpaoCoord.q === CONFIG.galpao)) return CONFIG.galpaoCoord;
   /* endereço completo; se o mapa não achar, sem lote/quadra; por último, rua + cidade */
   const cand = [CONFIG.galpao];
   const semLote = CONFIG.galpao.replace(/,?\s*(s\/n|lt\.?\s*\d+|lote\s*\d+|qd\.?\s*\d+|quadra\s*\d+)/gi,'').replace(/\s*-\s*Condom[ií]nio [^,]*/i,'').replace(/,\s*\d{5}-?\d{3}/,'');
@@ -2679,7 +2850,50 @@ async function coordGalpao(){
   salvar();
   return CONFIG.galpaoCoord;
 }
-async function rotaKm(a, b){
+/* medidas do caminhão na rua (altura total, comprimento total, peso bruto) — cadastro ou estimativa pelo tipo */
+const TARA = {'TOCO':6500, 'TRUCK':8500, 'CARRETA':16000, 'BAÚ':6000, 'F-4000':3200};
+function dimsCaminhao(v){
+  if(!v) return null;
+  const tipo = String(v.tipo||'').toUpperCase();
+  return {
+    altura: +v.alturaTotal || Math.min(4.4, (+v.a||2.5) + (tipo==='CARRETA' ? 1.5 : 1.3)),
+    comprimento: +v.compTotal || (+v.c||7) + (tipo==='CARRETA' ? 4.5 : 2.2),
+    largura: Math.max(2.5, +v.l || 2.5),
+    peso: +v.pbt || Math.round((+v.peso||8000) + (TARA[tipo] || 7000)),
+    estimado: !(+v.alturaTotal && +v.pbt)
+  };
+}
+/* o maior caminhão da operação é quem manda na rota */
+function maiorCaminhao(ev, fase){
+  const vs = escalaDo(ev, fase || 'mont').map(x=>veiculos.find(y=>y.id===x.v)).filter(Boolean);
+  if(!vs.length) return null;
+  return vs.sort((a,b)=>(dimsCaminhao(b).comprimento - dimsCaminhao(a).comprimento) || (dimsCaminhao(b).peso - dimsCaminhao(a).peso))[0];
+}
+function paramsCaminhao(v){
+  const d = dimsCaminhao(v); if(!d) return '';
+  return '&vehicleCommercial=true&vehicleHeight=' + d.altura.toFixed(2) + '&vehicleLength=' + d.comprimento.toFixed(2) + '&vehicleWidth=' + d.largura.toFixed(2) + '&vehicleWeight=' + d.peso +
+    (String(v.tipo).toUpperCase()==='CARRETA' ? '&vehicleAxleWeight=10000' : '');
+}
+/* rota de caminhão pelo TomTom (com medidas); devolve km, tempo, pontos e a ponte */
+const ROTAS = {};   /* ev.id -> pontos [[lat,lon],...] (só na memória, para o mapa) */
+async function rotaTomTom(a, b, v, extra){
+  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + a.lat + ',' + a.lon + ':' + b.lat + ',' + b.lon + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) +
+    '&travelMode=truck&routeType=fastest&sectionType=tollRoad' + paramsCaminhao(v) + (extra || '');
+  const r = await fetch(u);
+  if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'rota ' + r.status);
+  const j = await r.json(), rt = j.routes && j.routes[0];
+  if(!rt) return null;
+  const pts = (rt.legs||[]).flatMap(l=>l.points||[]).map(p=>[p.latitude, p.longitude]);
+  let acum = 0, fracPonte = null;
+  for(let i = 0; i < pts.length; i++){
+    if(i) acum += distLinha({lat:pts[i-1][0], lon:pts[i-1][1]}, {lat:pts[i][0], lon:pts[i][1]});
+    if(fracPonte == null && PONTE_PTS.some(pp => distLinha(pp, {lat:pts[i][0], lon:pts[i][1]}) < 1.2)) fracPonte = acum;
+  }
+  const s = rt.summary || {}, tot = (s.lengthInMeters||0)/1000, min = (s.travelTimeInSeconds||0)/60;
+  return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1, pts, rt};
+}
+async function rotaKm(a, b, v){
+  if(CONFIG.tomtomKey){ try{ const t = await rotaTomTom(a, b, v); if(t) return t; }catch(e){} }
   const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson');
   if(!r.ok) throw new Error('rota ' + r.status);
   const j = await r.json();
@@ -2710,13 +2924,17 @@ async function calcularKm(id, silencioso){
     if(temLoc) dest = await geocodEndereco(loc + (temCid ? ', ' + cid : '') + ', Brasil');
     if(!dest && temCid){ dest = await geocodEndereco(cid + ', Brasil'); fonte = 'cidade'; }
     if(!dest){ if(!silencioso) toast('Não achei "' + (loc || cid) + '" no mapa. Confira o local ou a cidade do evento.'); return null; }
-    const rt = await rotaKm(orig, dest);
+    const cam = maiorCaminhao(ev, 'mont');
+    const rt = await rotaKm(orig, dest, cam);
     if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
+    if(rt.pts){ ROTAS[ev.id] = rt.pts; ev.pracas = pracasNaRota(rt.pts); }
+    ev.rotaCaminhao = cam && rt.pts ? cam.tipo + ' ' + cam.placa : null;
     ev.km = Math.round(rt.km); ev.kmFonte = fonte; ev.kmMin = Math.round(rt.min) || null;
     if(rt.comGeo){ ev.ponteRota = rt.ponte; ev.minPonte = rt.minPonte; }
     ev.geo = {lat:dest.lat, lon:dest.lon};
+    if(dest.bairro) ev.bairro = dest.bairro;
     salvar(); renderQuadro();
-    if(!silencioso){ verEvento(id); toast('📍 ' + ev.km + ' km do galpão até o evento, por estrada' + (fonte==='cidade' ? ' (calculado pelo centro da cidade — confira)' : '') + '.'); }
+    if(!silencioso){ verEvento(id); toast('📍 ' + ev.km + ' km do galpão até o evento' + (ev.rotaCaminhao ? ', rota de caminhão para o ' + ev.rotaCaminhao : ', por estrada') + (fonte==='cidade' ? ' (calculado pelo centro da cidade — confira)' : '') + '.'); }
     return {km: ev.km, fonte};
   }catch(e){
     if(!silencioso) toast('Não consegui calcular agora (' + e.message + '). Confira a internet e tente de novo.');
@@ -2743,11 +2961,12 @@ async function calcularKmEmLote(manual){
 }
 async function testarGalpao(){
   const st = document.getElementById('km-status');
-  CONFIG.galpaoCoord = null;
+  if(CONFIG.galpaoCoord && !CONFIG.galpaoCoord.manual) CONFIG.galpaoCoord = null;
   if(st) st.textContent = 'procurando...';
   try{
     const g = await coordGalpao();
-    if(st) st.innerHTML = g ? '<b style="color:#0f8a4d">Achei:</b> ' + String(g.nome).replace(/</g,'&lt;') : '<b style="color:#b0483c">Não achei esse endereço no mapa.</b> Tente com rua, número e cidade.';
+    if(st) st.innerHTML = g ? '<b style="color:#0f8a4d">Galpão:</b> ' + String(g.nome).replace(/</g,'&lt;') + ' — <a target="_blank" href="https://www.google.com/maps?q=' + g.lat + ',' + g.lon + '">conferir no Google Maps</a>. Se o ponto estiver errado, abra o galpão no Google Maps, copie o link (ou as coordenadas) e cole no campo do endereço.'
+      : '<b style="color:#b0483c">Não achei esse endereço no mapa.</b> Cole o link do Google Maps do galpão (ou as coordenadas) no campo do endereço.';
   }catch(e){ if(st) st.textContent = 'Sem conexão com o mapa agora.'; }
 }
 
@@ -2820,8 +3039,9 @@ function saidaDaOp(o, D){
   if(j){
     const rt = rotaJunta(D, o.ev.id, j.junto, o.fase);
     if(rt && rt.h1){
-      if(rt.paradas[0].ev.id === o.ev.id) return Object.assign({}, rt.h1, {parada:1});
-      return Object.assign({}, rt.h1, {chegada: rt.chegada2 || '?', parada:2, primeira: rt.paradas[0].ev.nome});
+      const idx = rt.paradas.findIndex(p=>p.ev.id === o.ev.id);
+      if(idx <= 0) return Object.assign({}, rt.h1, {parada:1});
+      return Object.assign({}, rt.h1, {chegada: rt.paradas[idx].chegada || '?', parada: idx+1, primeira: rt.paradas.slice(0, idx).map(p=>p.ev.nome).join(' e ')});
     }
   }
   return horariosSaida(o.ev, o.fase, D);
@@ -2830,7 +3050,7 @@ function txtSaida(hs){
   if(!hs) return '';
   /* desmontagem: o caminhão vai vazio buscar o material — não tem carregamento */
   const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase();
-  if(hs.parada === 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
+  if(hs.parada >= 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
   return car + ' · 🕐 sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') +
     (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : '') + ' · chegar ' + hs.chegada +
     (hs.espera ? ' (início ' + hs.inicio + ')' : '');
@@ -2840,6 +3060,8 @@ function blocoSaida(ev){
   const lin = [];
   const hM = horariosSaida(ev, 'mont');
   if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM));
+  { const ad = alertaDescarga(ev, hM); if(ad) lin.push('<b style="color:#b0483c">' + ad.txt + '</b>'); }
+  { const ar = alertaRestricao(ev, 'mont', dia(ev.mont), hM); if(ar) lin.push('<b style="color:#b0483c">' + ar.txt + '</b>'); }
   if(ev.desm){
     if(ev.permanece && !temFrotaDesm(ev)) lin.push('<b>📤 Desmontagem</b> — caminhão já está no local');
     else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD)); }
@@ -2869,7 +3091,7 @@ function carregarNoDia(Dc){
       const hs = saidaDaOp(o, D);
       if(!hs || hs.fase === 'desm' || hs.carregarDia !== Dc) return;
       o.viagens.filter(x=>!x.jaLocal).forEach(x=>{
-        if(x.junto && hs.parada === 2) return;   /* viagem combinada: carrega uma vez só, na 1ª parada */
+        if(x.junto && hs.parada >= 2) return;   /* viagem combinada: carrega uma vez só, na 1ª parada */
         out.push({o, x, hs, D});
       });
     });
@@ -2881,7 +3103,7 @@ function htmlCarregarNoDia(Dc){
   if(!l.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + ' (véspera da saída)</b><br>' +
-    l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomeDo(c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
+    l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomesJunto(c.o.ev.id, c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
 }
 
 /* ================= TRÂNSITO NA ROTA =================
@@ -2924,12 +3146,13 @@ async function consultarTransito(ev, fase, D, forcar){
     if(sai - Date.now() > 20*60*1000) dep = sai.toISOString().replace(/\.\d+Z$/,'Z');
   }
   const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':' + dst.lat + ',' + dst.lon + '/json' +
-    '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep);
+    '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep) + paramsCaminhao(maiorCaminhao(ev, fase));
   try{
     const r = await fetch(u);
     if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
     const j = await r.json(), rt = j.routes && j.routes[0];
     if(!rt) throw new Error('sem rota');
+    ROTAS[ev.id] = (rt.legs||[]).flatMap(l=>l.points||[]).map(p=>[p.latitude, p.longitude]);
     const s = rt.summary || {};
     const evs = (rt.sections || []).filter(x=>x.sectionType === 'TRAFFIC').map(x=>{
       const causa = (x.tec && x.tec.causes && x.tec.causes[0] && TEC[x.tec.causes[0].mainCauseCode]) ||
@@ -3035,6 +3258,7 @@ function blocoTransito(ev){
   [['mont', ev.mont], ['desm', ev.desm]].forEach(([fase, dt])=>{
     if(!dt || (fase==='desm' && ev.permanece && !temFrotaDesm(ev))) return;
     const D = dia(dt), r = resumoTransito(ev, fase, D), raw = TRANSITO[ev.id+'|'+fase+'|'+D];
+    { const b = resumoBloqueio(ev, fase, D); if(b) lin.push('<b style="color:#b0483c">'+b.replace(/</g,'&lt;')+'</b> <a class="mini" style="text-decoration:none" target="_blank" href="'+linkGoogleRota(ev)+'">ver desvio</a>'); }
     lin.push('<b>'+(fase==='desm'?'📤':'🔨')+' '+rotDia(D)+'</b> — '+
       (r ? '<span style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+';font-weight:600">'+r.txt+'</span> <small style="color:var(--muted)">('+r.quando+', '+new Date(raw.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+')</small> '
          : (raw && raw.erro ? '<small style="color:#b0483c">'+raw.erro+'</small> ' : ''))+
@@ -3048,6 +3272,767 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto){
   setTimeout(()=>{ try{ conferirTransitoProximas(false); }catch(e){} }, 12000);
 }
 
+/* ================= CUSTO DA VIAGEM: diesel + pedágio ================= */
+const CONSUMO_TIPO = {'TOCO':5, 'TRUCK':4, 'CARRETA':2.5, 'BAÚ':5.5, 'F-4000':7}, EIXOS_TIPO = {'TOCO':2, 'TRUCK':3, 'CARRETA':5, 'BAÚ':2, 'F-4000':2};
+const consumoDe = v => +v.consumo || CONSUMO_TIPO[String(v.tipo||'').toUpperCase()] || 4;
+const eixosDe = v => +v.eixos || EIXOS_TIPO[String(v.tipo||'').toUpperCase()] || 2;
+const reais = n => 'R$ ' + (Math.round(n)).toLocaleString('pt-BR');
+/* praças cadastradas por onde a rota passa (a 400 m do ponto) */
+function pracasNaRota(pts){
+  return (CONFIG.pracas||[]).filter(p=>!p.ponte && p.lat != null && pts.some((q,i)=> i % 2 === 0 && distLinha({lat:q[0], lon:q[1]}, p) < 0.4)).map(p=>p.nome);
+}
+function pedagiosDe(ev){
+  return (CONFIG.pracas||[]).filter(p=> p.ponte ? passaPonte(ev) : (ev.pracas||[]).includes(p.nome));
+}
+/* custo de uma fase (todas as viagens); viagem combinada divide pelo número de eventos */
+function custoFase(ev, fase, D){
+  const jaLocal = fase==='desm' && ev.permanece && !temFrotaDesm(ev);
+  let litros = 0, diesel = 0, pedagio = 0, km = 0; const itens = [];
+  escalaDo(ev, fase).forEach(x=>{
+    const v = veiculos.find(y=>y.id===x.v); if(!v) return;
+    let k = (+ev.km||0) * (jaLocal ? 1 : 2), div = 1;
+    if(x.junto && (fase==='mont' || temFrotaDesm(ev))){
+      const dd = D || x.dia || dia(fase==='desm' ? ev.desm : ev.mont);
+      const rt = rotaJunta(dd, ev.id, x.junto, fase); div = membrosJunto(ev.id, x.junto).length;
+      if(rt) k = rt.kmTot;
+    }
+    const l = k / consumoDe(v) / div;
+    litros += l; diesel += l * (+CONFIG.precoDiesel || 0); km += k / div;
+    pedagiosDe(ev).forEach(pr=>{ const val = (+pr.valorEixo||0) * eixosDe(v) * (+pr.vezes || 1) / div; pedagio += val; itens.push(pr.nome + (val ? ' ' + reais(val) : ' (sem valor)')); });
+  });
+  return {litros: Math.round(litros), diesel, pedagio, total: diesel + pedagio, km: Math.round(km), itens:[...new Set(itens)]};
+}
+function custoEvento(ev){
+  const m = custoFase(ev, 'mont'), d = ev.desm ? custoFase(ev, 'desm') : {litros:0, diesel:0, pedagio:0, total:0, km:0, itens:[]};
+  return {m, d, total: m.total + d.total, litros: m.litros + d.litros, km: m.km + d.km};
+}
+function blocoCusto(ev){
+  if(!(+ev.km)) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância para a Central calcular o custo da viagem.</div>';
+  const c = custoEvento(ev);
+  const lin = (rot, x) => x.km ? '<div><b>'+rot+'</b> — ≈'+x.km+' km · '+x.litros+' L de diesel · <b>'+reais(x.diesel)+'</b>'+(x.pedagio || x.itens.length ? ' + pedágio <b>'+reais(x.pedagio)+'</b> <small style="color:var(--muted)">('+x.itens.join(', ')+')</small>' : '')+'</div>' : '';
+  const semValor = pedagiosDe(ev).some(p=>!+p.valorEixo);
+  return '<div style="font-size:13px;line-height:1.8">'+lin('🔨 Montagem', c.m)+lin('📤 Desmontagem', c.d)+
+    '<div style="font-size:14px"><b>Total de frota ≈ '+reais(c.total)+'</b></div></div>'+
+    '<div style="font-size:11px;color:var(--muted)">diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' o litro'+(semValor ? ' · <b style="color:#a86412">tem pedágio sem valor — preencha em Integrações</b>' : '')+(ev.kmPedagio ? '' : '')+'</div>';
+}
+function htmlPracas(){
+  const P = CONFIG.pracas || [];
+  const inp = 'border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit;font-size:12px';
+  return '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:4px">Praça de pedágio</th><th>R$ por eixo</th><th>Cobra</th><th>Ponto no mapa</th><th></th></tr></thead><tbody>'+
+    P.map((p,i)=>'<tr><td style="padding:3px 4px"><input style="'+inp+';width:170px" value="'+String(p.nome||'').replace(/"/g,'&quot;')+'" onchange="CONFIG.pracas['+i+'].nome=this.value.trim();salvar()"></td>'+
+      '<td><input style="'+inp+';width:70px" type="number" step="0.1" value="'+(p.valorEixo||'')+'" placeholder="0,00" onchange="CONFIG.pracas['+i+'].valorEixo=+this.value||0;salvar()"></td>'+
+      '<td><select style="'+inp+'" onchange="CONFIG.pracas['+i+'].vezes=+this.value;salvar()"><option value="1"'+((+p.vezes||1)===1?' selected':'')+'>só num sentido</option><option value="2"'+(+p.vezes===2?' selected':'')+'>ida e volta</option></select></td>'+
+      '<td>'+(p.ponte ? '<small>detectada pela rota</small>' : '<input style="'+inp+';width:170px" value="'+(p.lat!=null?p.lat+', '+p.lon:'')+'" placeholder="cole o link do Google Maps" onchange="setPracaPonto('+i+',this.value)">')+'</td>'+
+      '<td>'+(p.ponte?'':'<button class="mini danger" onclick="CONFIG.pracas.splice('+i+',1);salvar();renderCadastros()">✕</button>')+'</td></tr>').join('')+
+    '</tbody></table><button class="mini" style="margin-top:6px" onclick="CONFIG.pracas.push({nome:\'Nova praça\', valorEixo:0, vezes:1});salvar();renderCadastros()">+ Praça de pedágio</button>'+
+    ' <small style="color:var(--muted)">depois de cadastrar, use "Calcular os eventos sem km" ou 📍 Calcular no evento para a Central ver por quais praças a rota passa</small>';
+}
+function setPracaPonto(i, v){
+  const c = coordDoTexto(v);
+  if(!c) return toast('Não entendi o ponto — cole o link do Google Maps da praça ou as coordenadas (-22.70, -42.65).');
+  CONFIG.pracas[i].lat = c.lat; CONFIG.pracas[i].lon = c.lon; salvar(); renderCadastros();
+}
+
+/* ================= TEMPO DE MONTAGEM APRENDIDO =================
+   Dos eventos que já aconteceram: quantos dias levou a montagem de cada tipo de estrutura,
+   de preferência com a mesma equipe. Não grava nada — conta na hora. */
+const TIPOS_ESTR = ['palco','tenda','piramidal','galpao','trelica','grid','box truss','box','camarote','arquibancada','portico','testeira','cobertura','stand','praticavel','tablado','piso','fechamento','torre','house mix','backdrop','painel','lona','cenario'];
+function chaveEstrutura(t){
+  let s = semAcentoSimples(t).replace(/^\s*\d+\s*(un\.?|und\.?|x)?\s+/,'');
+  const tipo = TIPOS_ESTR.find(k=>new RegExp('\\b' + k + '\\b').test(s)) || (s.match(/[a-z]{3,}/) || [''])[0];
+  const m = s.match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)/);
+  const n = x => String(+String(x).replace(',','.'));
+  return tipo ? (tipo + (m ? ' ' + n(m[1]) + 'x' + n(m[2]) : '')) : null;
+}
+function historicoTempos(exceto){
+  const out = {};
+  eventos.forEach(e=>{
+    if(e.id === exceto || e.esp === 'cancelado' || e.esp === 'terceirizado' || !e.mont) return;
+    const fim = dia(fimDesm(e)) || dia(e.desm) || dia(e.mont);
+    if(!(e.esp === 'finalizado' || (fim && fim < HOJE))) return;
+    const dias = diasEntre(e.mont, fimMont(e)).length;
+    if(!dias) return;
+    const eq = e.equipe || plano(e).equipe;
+    [...new Set((e.estruturas||[]).map(chaveEstrutura).filter(Boolean))].forEach(k=>(out[k] = out[k] || []).push({dias, eq, nome:e.nome}));
+  });
+  return out;
+}
+const mediana = a => { const s = [...a].sort((x,y)=>x-y); return s.length ? s[Math.floor((s.length-1)/2)] : 0; };
+function tempoAprendido(ev){
+  const ks = [...new Set((ev.estruturas||[]).map(chaveEstrutura).filter(Boolean))];
+  if(!ks.length) return null;
+  const H = historicoTempos(ev.id), eq = ev.equipe || plano(ev).equipe;
+  let melhor = null;
+  ks.forEach(k=>{
+    const l = H[k]; if(!l || !l.length) return;
+    const mesma = l.filter(x=>x.eq === eq);
+    const base = mesma.length ? mesma : l;
+    const d = mediana(base.map(x=>x.dias));
+    if(!melhor || d > melhor.dias) melhor = {estr:k, dias:d, n:base.length, mesmaEquipe:!!mesma.length, eq, eventos:base.map(x=>x.nome)};
+  });
+  if(!melhor) return null;
+  melhor.planejado = diasEntre(ev.mont, fimMont(ev)).length;
+  melhor.curto = melhor.planejado < melhor.dias;
+  return melhor;
+}
+function blocoTempoAprendido(ev){
+  const t = tempoAprendido(ev); if(!t) return '';
+  return '<div style="grid-column:1/-1"><div class="alert '+(t.curto?'amber':'green')+'" style="margin:0">🧠 <b>Tempo aprendido:</b> '+t.estr.toUpperCase()+
+    (t.mesmaEquipe ? ' com a equipe '+t.eq : '')+' costuma levar <b>'+t.dias+' dia'+(t.dias>1?'s':'')+'</b> de montagem ('+t.n+' evento'+(t.n>1?'s':'')+': '+t.eventos.slice(0,3).join(', ')+(t.n>3?'…':'')+')'+
+    (t.curto ? ' — <b>você colocou '+t.planejado+'</b>. Confira se dá tempo ou estenda o "até" da montagem.' : ' — o planejado ('+t.planejado+') está de acordo.')+'</div></div>';
+}
+
+/* ================= BUSCA RÁPIDA DE ESTRUTURA ================= */
+function abrirBuscaEstr(){
+  const d = document.getElementById('be-dia'); if(d && !d.value) d.value = HOJE;
+  renderBuscaEstr();
+  document.getElementById('ov-busca-estr').classList.add('on');
+  setTimeout(()=>{ const q = document.getElementById('be-q'); if(q) q.focus(); }, 50);
+}
+function renderBuscaEstr(){
+  const q = semAcentoSimples((document.getElementById('be-q')||{}).value || '').trim();
+  const D = (document.getElementById('be-dia')||{}).value || '';
+  const box = document.getElementById('be-res');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!q){ box.innerHTML = '<div class="panel empty"><b>Digite o que procura</b>ex.: palco 12x10, grid, tenda 10x10, piramidal</div>'; return; }
+  const toks = q.split(/\s+/).map(t=>t.replace(/,/g,'.'));
+  const bate = t => { const s = semAcentoSimples(t).replace(/,/g,'.').replace(/\s*x\s*/g,'x'); return toks.every(k=>s.includes(k.replace(/\s*x\s*/g,'x'))); };
+  const res = [];
+  eventos.forEach(ev=>{
+    if(ev.esp === 'cancelado' || !ev.mont) return;
+    const achou = [...(ev.estruturas||[]).filter(bate), ...(ev.itens||[]).filter(i=>+i.qtd && bate(i.nome)).map(i=>i.nome + ' — ' + num(i.qtd) + ' ' + (i.un||''))];
+    if(!achou.length) return;
+    const ini = dia(ev.mont), fim = dia(fimDesm(ev)) || dia(ev.desm) || ini;
+    if(fim < somaDiaISO(HOJE, -7)) return;   /* só do passado recente para frente */
+    res.push({ev, achou, ini, fim, noDia: D && D >= ini && D <= fim});
+  });
+  res.sort((a,b)=>a.ini.localeCompare(b.ini));
+  const noDia = res.filter(r=>r.noDia);
+  box.innerHTML = (D ? '<div class="alert '+(noDia.length?'amber':'green')+'" style="margin:0 0 12px">'+(noDia.length
+      ? 'Em <b>'+fmtD(D)+'</b> essa estrutura está fora do galpão em <b>'+noDia.length+' evento(s)</b>: '+noDia.map(r=>esc(r.ev.nome)).join(', ')+'. Confira no estoque se sobra para mais um.'
+      : 'Em <b>'+fmtD(D)+'</b> nenhum evento está usando essa estrutura.')+'</div>' : '')+
+    (res.length ? res.map(r=>'<div class="row" style="cursor:pointer;'+(r.noDia?'background:#fdf7ee;':'')+'" onclick="fechar(\'ov-busca-estr\');verEvento(\''+r.ev.id+'\')">'+
+      '<span style="flex:1;min-width:0"><b>'+esc(r.ev.nome)+'</b> <small style="color:var(--muted)">'+(r.ev.cidade&&r.ev.cidade!=='—'?esc(r.ev.cidade)+' · ':'')+'fora do galpão de '+fmtD(r.ini).slice(0,5)+' a '+fmtD(r.fim).slice(0,5)+'</small><br>'+
+      '<small>'+r.achou.slice(0,4).map(esc).join('<br>')+'</small></span>'+(r.noDia?'<span class="tag" style="color:#a86412">no dia</span>':'')+'</div>').join('')
+      : '<div class="panel empty"><b>Nada encontrado</b>Nenhum evento com "'+esc(q)+'" nas estruturas ou nos materiais.</div>');
+}
+
+/* ================= MOTORISTA NO MAPA =================
+   O motorista abre o link no celular, toca em "Iniciar viagem" e a posição vai para a nuvem
+   (plan_config, chave loc:<evento>|<fase>|<dia>|<vaga>). A Tela do galpão mostra onde está e quando chega. */
+let LOCS = {}, ETA = {};
+function baseCentral(){
+  if(CONFIG.urlCentral) return CONFIG.urlCentral.replace(/#.*$/,'');
+  if(typeof location !== 'undefined' && /^https?:/.test(location.protocol)) return location.origin + location.pathname;
+  return null;
+}
+function linkMotorista(ev, fase, D, i){
+  const b = baseCentral(); if(!b) return null;
+  return b + '#motorista=' + encodeURIComponent([ev.id, fase, D, i].join('|'));
+}
+function enviarLinkMotorista(evId, fase, D, i){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const x = escalaDo(ev, fase).find(y=>y.i===+i) || {};
+  const u = linkMotorista(ev, fase, D, i);
+  if(!u) return toast('Coloque o endereço da Central na internet em Integrações → 📲 Link do motorista.');
+  const m = motoristas.find(y=>y.nome===x.motorista) || {};
+  const txt = '*' + ev.nome + '* — ' + (fase==='desm'?'desmontagem':'montagem') + ' ' + rotDia(D) + '\nAntes de sair, abra o link e toque em ▶ INICIAR VIAGEM (deixe o celular com a tela ligada ou o link aberto):\n' + u;
+  const n = zap(m.tel);
+  window.open(n ? 'https://wa.me/' + n + '?text=' + encodeURIComponent(txt) : 'https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+}
+/* posição de uma viagem (vale por 8 horas) */
+function locViagem(evId, fase, D, i){
+  const l = LOCS[[evId, fase, D, i].join('|')];
+  return (l && Date.now() - (l.t||0) < 8*3600*1000) ? l : null;
+}
+async function carregarLocs(){
+  if(!sb) return;
+  try{
+    const r = await sb.from('plan_config').select('chave,dados').like('chave', 'loc:%');
+    (r.data||[]).forEach(x=>{ LOCS[x.chave.slice(4)] = x.dados; });
+  }catch(e){}
+}
+/* previsão de chegada: TomTom com trânsito (a cada 2 min) ou linha reta a 45 km/h */
+async function atualizarETA(chave, l, dest){
+  const e0 = ETA[chave];
+  if(e0 && Date.now() - e0.t < 2*60*1000 && e0.lt === l.t) return e0;
+  let min = null;
+  if(CONFIG.tomtomKey){
+    try{
+      const r = await fetch('https://api.tomtom.com/routing/1/calculateRoute/' + l.lat + ',' + l.lon + ':' + dest.lat + ',' + dest.lon + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck');
+      if(r.ok){ const j = await r.json(); min = Math.round(j.routes[0].summary.travelTimeInSeconds / 60); }
+    }catch(e){}
+  }
+  if(min == null) min = Math.round(distLinha(l, dest) * 1.3 / cfgSaida().vel * 60);
+  return (ETA[chave] = {t: Date.now(), lt: l.t, min, hora: hm(new Date().getHours()*60 + new Date().getMinutes() + min)});
+}
+/* situação do caminhão de uma operação: a caminho / no local */
+function situacaoCaminhao(o, D){
+  const out = [];
+  o.viagens.forEach(x=>{
+    if(x.jaLocal) return;
+    const l = locViagem(o.ev.id, o.fase, D, x.i); if(!l) return;
+    const chave = [o.ev.id, o.fase, D, x.i].join('|');
+    const dest = evGeo(o.ev);
+    const perto = dest && distLinha(l, dest) < 0.4;
+    if(l.status === 'local' || perto) out.push({x, l, txt:'✅ NO LOCAL' + (l.chegou ? ' desde ' + l.chegou : ''), local:true});
+    else {
+      const e = ETA[chave];
+      if(dest) atualizarETA(chave, l, dest).then(()=>{}).catch(()=>{});
+      out.push({x, l, txt:'🚚 A CAMINHO' + (e ? ' · chega ≈' + e.hora + ' (' + durTxt(e.min) + ')' : ''), local:false});
+    }
+  });
+  return out;
+}
+/* ---- página do celular do motorista ---- */
+let motWatch = null, motUltimoEnvio = 0, motWake = null;
+function paginaMotorista(){
+  const [evId, fase, D, i] = decodeURIComponent(location.hash.replace(/^#motorista=/,'')).split('|');
+  const ev = eventos.find(e=>e.id===evId);
+  const x = ev ? (escalaDo(ev, fase).find(y=>y.i===+i) || {}) : {};
+  const v = veiculos.find(y=>y.id===x.v);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const div = document.createElement('div');
+  div.id = 'mot-page';
+  div.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0f1733;color:#fff;font-family:Segoe UI,Arial,sans-serif;overflow:auto;padding:22px 18px';
+  const hs = ev ? horariosSaida(ev, fase, D) : null;
+  div.innerHTML = !ev ? '<h2>Viagem não encontrada</h2><p>Peça um link novo para a logística.</p>' :
+    '<div style="font-size:14px;color:#aab4d4">'+(fase==='desm'?'📤 DESMONTAGEM':'🔨 MONTAGEM')+' · '+rotDia(D)+'</div>'+
+    '<h1 style="font-size:26px;margin:6px 0 4px">'+esc(ev.nome)+'</h1>'+
+    '<div style="font-size:16px;color:#dfe6ff">📍 '+esc(destinoTexto(ev) || '—')+'</div>'+
+    '<div style="font-size:16px;margin-top:8px">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+(x.motorista ? ' · '+esc(x.motorista) : '')+'</div>'+
+    (hs ? '<div style="font-size:18px;margin-top:10px;color:#ffb25e;font-weight:700">Sair '+hs.saida+(hs.ponte?' · ponte até '+hs.ponte:'')+' · chegar '+hs.chegada+'</div>' : '')+
+    '<button id="mot-ini" style="display:block;width:100%;margin-top:22px;padding:20px;font-size:21px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">▶ INICIAR VIAGEM</button>'+
+    '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
+    '<a href="'+linkWaze(ev)+'" style="display:block;text-align:center;margin-top:12px;padding:14px;font-size:17px;border-radius:14px;background:#26356e;color:#fff;text-decoration:none">🚗 Abrir rota no Waze</a>'+
+    '<div id="mot-st" style="margin-top:18px;font-size:15px;color:#aab4d4;line-height:1.5">Toque em INICIAR VIAGEM na hora de sair. A localização vai para a logística enquanto este link estiver aberto.</div>';
+  document.body.appendChild(div);
+  if(!ev) return;
+  const chave = [evId, fase, D, i].join('|');
+  const st = t => { const e2 = document.getElementById('mot-st'); if(e2) e2.innerHTML = t; };
+  const enviar = async (pos, status) => {
+    const agora = Date.now();
+    if(status !== 'local' && agora - motUltimoEnvio < 20000) return;
+    motUltimoEnvio = agora;
+    const hhmm = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const dados = {lat: pos ? pos.coords.latitude : null, lon: pos ? pos.coords.longitude : null, vel: pos && pos.coords.speed != null ? Math.round(pos.coords.speed*3.6) : null,
+      t: agora, ev: evId, fase, D, i:+i, mot: x.motorista || null, status: status || 'caminho', chegou: status === 'local' ? hhmm : null};
+    if(dados.lat == null && LOCS[chave]){ dados.lat = LOCS[chave].lat; dados.lon = LOCS[chave].lon; }
+    LOCS[chave] = dados;
+    try{ const r = await sb.from('plan_config').upsert({chave:'loc:' + chave, dados, atualizado_em: new Date().toISOString()}); if(r.error) throw r.error;
+      st((status==='local' ? '✅ Chegada avisada às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + '. Mantenha este link aberto.'); }
+    catch(e){ st('⚠ Sem internet agora — tento de novo sozinho.'); }
+    /* chegou perto do local: avisa sozinho */
+    const dest = evGeo(ev);
+    if(status !== 'local' && dest && dados.lat != null && distLinha(dados, dest) < 0.3){ enviar(pos, 'local'); }
+  };
+  document.getElementById('mot-ini').onclick = ()=>{
+    if(!navigator.geolocation) return st('⚠ Este celular não compartilha localização pelo navegador.');
+    try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ motWake = w; }).catch(()=>{}); }catch(e){}
+    st('Procurando o GPS...');
+    if(motWatch != null) navigator.geolocation.clearWatch(motWatch);
+    motWatch = navigator.geolocation.watchPosition(pos=>enviar(pos), err=>st('⚠ Libere a localização para este site nas configurações do celular (' + err.message + ').'), {enableHighAccuracy:true, maximumAge:15000, timeout:30000});
+    document.getElementById('mot-ini').textContent = '📡 VIAGEM EM ANDAMENTO';
+    document.getElementById('mot-ini').style.background = '#26356e';
+  };
+  document.getElementById('mot-cheguei').onclick = ()=>{
+    if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'local'), ()=>enviar(null, 'local'), {timeout:10000});
+    else enviar(null, 'local');
+  };
+}
+
+/* ================= ROTA BLOQUEADA NOS PRÓXIMOS DIAS =================
+   Interdição, alagamento ou acidente grave na rota de uma operação dos próximos 3 dias:
+   avisa antes e mostra o desvio que o TomTom faz com o trânsito. */
+let BLOQ = {}, bloqRodando = false;
+async function checarBloqueios(forcar){
+  if(bloqRodando || !CONFIG.tomtomKey) return; bloqRodando = true;
+  const novos = [];
+  try{
+    const g0 = await coordGalpao(); if(!g0) return;
+    for(let n = 0; n <= 3; n++){
+      const D = somaDiaISO(HOJE, n);
+      for(const o of opsDoDia(D).ops){
+        if(!o.viagens.some(x=>!x.jaLocal)) continue;
+        const dst = evGeo(o.ev); if(!dst) continue;
+        const k = o.ev.id + '|' + o.fase + '|' + D;
+        if(!forcar && BLOQ[k] && Date.now() - BLOQ[k].t < 60*60*1000) continue;
+        const cam = maiorCaminhao(o.ev, o.fase);
+        let pts = ROTAS[o.ev.id], semTr = null;
+        try{ semTr = await rotaTomTom(g0, dst, cam, '&traffic=false'); if(semTr && semTr.pts) pts = ROTAS[o.ev.id] = semTr.pts; }catch(e){}
+        if(!pts || !pts.length) continue;
+        const la = pts.map(p=>p[0]), lo = pts.map(p=>p[1]);
+        const bb = [Math.min(...lo)-0.02, Math.min(...la)-0.02, Math.max(...lo)+0.02, Math.max(...la)+0.02].map(x=>x.toFixed(4)).join(',');
+        let itens = [];
+        try{
+          const r = await fetch('https://api.tomtom.com/traffic/services/5/incidentDetails?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&bbox=' + bb +
+            '&language=pt-PT&timeValidityFilter=present,future&fields=' + encodeURIComponent('{incidents{geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,from,to,roadNumbers,startTime,endTime,events{description}}}}'));
+          if(r.ok){
+            const j = await r.json(), passo = Math.max(1, Math.floor(pts.length / 400));
+            const perto = c => pts.some((p,i)=> i % passo === 0 && distLinha({lat:p[0], lon:p[1]}, {lat:c[1], lon:c[0]}) < 0.3);
+            itens = (j.incidents||[]).filter(x=>{ const pr = x.properties||{}, g = x.geometry||{};
+              const grave = [8, 11].includes(pr.iconCategory) || (pr.iconCategory === 1 && pr.magnitudeOfDelay >= 3) || (pr.iconCategory === 9 && pr.magnitudeOfDelay >= 4);
+              const cs = g.type === 'Point' ? [g.coordinates] : (g.coordinates||[]);
+              /* só vale se estiver valendo no dia da viagem */
+              const iniD = new Date(D + 'T00:00:00-03:00'), fimD = new Date(D + 'T23:59:00-03:00');
+              if(pr.endTime && new Date(pr.endTime) < iniD) return false;
+              if(pr.startTime && new Date(pr.startTime) > fimD) return false;
+              return grave && cs.length && (perto(cs[0]) || perto(cs[cs.length-1]));
+            }).map(x=>{ const pr = x.properties||{};
+              return {tipo: ICON_TT[pr.iconCategory] || 'ocorrência', txt: [(pr.events && pr.events[0] && pr.events[0].description) || '', (pr.roadNumbers||[]).join('/'), pr.from ? 'em ' + pr.from : '',
+                pr.endTime ? 'até ' + new Date(pr.endTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''].filter(Boolean).join(' · ')}; }).slice(0, 4);
+          }
+        }catch(e){}
+        let desvio = null;
+        if(itens.length){
+          try{ const comTr = await rotaTomTom(g0, dst, cam, '&traffic=true');
+            if(comTr && semTr) desvio = {km: Math.round(comTr.km - semTr.km), min: Math.round(comTr.min - semTr.min)};
+            if(comTr && comTr.pts) ROTAS[o.ev.id + ':desvio'] = comTr.pts; }catch(e){}
+        }
+        const antes = BLOQ[k];
+        BLOQ[k] = {t: Date.now(), itens, desvio};
+        if(itens.length && !(antes && antes.itens.length)) novos.push(o.ev.nome + ' (' + rotDia(D) + '): ' + itens[0].tipo + (itens[0].txt ? ' — ' + itens[0].txt : ''));
+      }
+    }
+    if(novos.length) toast('🚧 Rota bloqueada: ' + novos.join(' | ') + '. Veja o desvio no evento.');
+  }finally{ bloqRodando = false; }
+}
+function resumoBloqueio(ev, fase, D){
+  const b = BLOQ[ev.id + '|' + fase + '|' + D];
+  if(!b || !b.itens.length) return null;
+  return '🚧 ' + b.itens.map(x=>x.tipo + (x.txt ? ' (' + x.txt + ')' : '')).join('; ') +
+    (b.desvio ? ' → desvio: ' + (b.desvio.km >= 0 ? '+' : '') + b.desvio.km + ' km, ' + (b.desvio.min >= 0 ? '+' : '') + b.desvio.min + ' min' : '');
+}
+if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMotorista){
+  setTimeout(()=>{ try{ checarBloqueios(false); }catch(e){} }, 20000);
+  setInterval(()=>{ try{ checarBloqueios(false); }catch(e){} }, 60*60*1000);
+}
+
+/* ================= FERIADOS E GRANDES EVENTOS ================= */
+function pascoa(ano){
+  const a = ano % 19, b = Math.floor(ano/100), c = ano % 100, d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25), g = Math.floor((b-f+1)/3),
+    hh = (19*a + b - d - g + 15) % 30, i = Math.floor(c/4), k = c % 4, l = (32 + 2*e + 2*i - hh - k) % 7, m = Math.floor((a + 11*hh + 22*l)/451),
+    mes = Math.floor((hh + l - 7*m + 114)/31), dd = ((hh + l - 7*m + 114) % 31) + 1;
+  return ano + '-' + String(mes).padStart(2,'0') + '-' + String(dd).padStart(2,'0');
+}
+const FERIADOS_FIXOS = [['01-01','Confraternização Universal'],['04-21','Tiradentes'],['05-01','Dia do Trabalho'],['09-07','Independência'],['10-12','Nossa Senhora Aparecida'],
+  ['11-02','Finados'],['11-15','Proclamação da República'],['11-20','Consciência Negra'],['12-25','Natal']];
+const FERIADOS_LOCAIS = [
+  {md:'04-23', nome:'São Jorge (feriado estadual RJ)', cidade:null},
+  {md:'01-20', nome:'São Sebastião (feriado no Rio)', cidade:'rio de janeiro'},
+  {md:'06-24', nome:'São João Batista (feriado em Niterói)', cidade:'niteroi'},
+  {md:'05-07', nome:'Feriado municipal de Rio Bonito', cidade:'rio bonito'},
+  {md:'12-08', nome:'Feriado municipal de Rio Bonito', cidade:'rio bonito'}];
+const _ferCache = {};
+function feriadosDoAno(ano){
+  if(_ferCache[ano]) return _ferCache[ano];
+  const out = {}, add = (iso, nome, cidade, tipo) => (out[iso] = out[iso] || []).push({nome, cidade, tipo: tipo || 'feriado'});
+  FERIADOS_FIXOS.forEach(([md, n])=>add(ano + '-' + md, n + ' (feriado nacional)', null));
+  const P = pascoa(ano);
+  add(somaDiaISO(P, -48), 'Carnaval (segunda)', null, 'feriado'); add(somaDiaISO(P, -47), 'Carnaval (terça)', null, 'feriado');
+  add(somaDiaISO(P, -2), 'Sexta-feira Santa (feriado nacional)', null); add(somaDiaISO(P, 60), 'Corpus Christi', null);
+  FERIADOS_LOCAIS.forEach(f=>add(ano + '-' + f.md, f.nome, f.cidade));
+  return (_ferCache[ano] = out);
+}
+/* datas especiais do dia para a cidade: feriados + as que vocês cadastram (feriado ou grande evento) */
+function datasEspeciais(iso, cidade){
+  if(!iso) return [];
+  const cid = semAcentoSimples(cidade || '');
+  const l = (feriadosDoAno(+iso.slice(0,4))[iso] || []).filter(f=>!f.cidade || (cid && cid.includes(f.cidade)));
+  (CONFIG.datasEspeciais || []).forEach(x=>{ if(x.data === iso && (!x.cidade || !cid || cid.includes(semAcentoSimples(x.cidade)))) l.push({nome:x.nome, tipo:x.tipo || 'grande', cidade:x.cidade}); });
+  return l;
+}
+const ehFeriado = (iso, cidade) => datasEspeciais(iso, cidade).some(x=>x.tipo === 'feriado');
+function blocoDatasEspeciais(ev){
+  const dias = [...new Set([...diasEntre(ev.mont, fimMont(ev)), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [])])];
+  const l = [];
+  dias.forEach(d=>datasEspeciais(d, ev.cidade).forEach(x=>l.push('<b>' + rotDia(d) + '</b> ' + (x.tipo==='feriado' ? '📅 ' : '🏟 ') + String(x.nome).replace(/</g,'&lt;'))));
+  return l.length ? '<div style="grid-column:1/-1"><div class="alert amber" style="margin:0">Datas especiais nos dias de trabalho: ' + l.join(' · ') + ' — trânsito pesado, rua fechada ou diária de feriado.</div></div>' : '';
+}
+function htmlDatasEspeciais(){
+  const prox = [];
+  for(let n=0; n<90; n++){ const d = somaDiaISO(HOJE, n); (feriadosDoAno(+d.slice(0,4))[d] || []).forEach(f=>prox.push(fmtD(d).slice(0,5) + ' ' + f.nome)); }
+  const inp = 'border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit;font-size:12px';
+  const L = CONFIG.datasEspeciais || [];
+  return '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Próximos feriados (automáticos): ' + (prox.slice(0,8).join(' · ') || 'nenhum nos próximos 90 dias') + '</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:4px">Data</th><th>O que é</th><th>Cidade</th><th>Tipo</th><th></th></tr></thead><tbody>' +
+    L.map((x,i)=>'<tr><td style="padding:3px 4px"><input type="date" style="'+inp+'" value="'+(x.data||'')+'" onchange="CONFIG.datasEspeciais['+i+'].data=this.value;salvar()"></td>'+
+      '<td><input style="'+inp+';width:220px" value="'+String(x.nome||'').replace(/"/g,'&quot;')+'" placeholder="ex.: Flamengo x Vasco no Maracanã" onchange="CONFIG.datasEspeciais['+i+'].nome=this.value.trim();salvar()"></td>'+
+      '<td><input style="'+inp+';width:130px" value="'+String(x.cidade||'').replace(/"/g,'&quot;')+'" placeholder="todas" onchange="CONFIG.datasEspeciais['+i+'].cidade=this.value.trim();salvar()"></td>'+
+      '<td><select style="'+inp+'" onchange="CONFIG.datasEspeciais['+i+'].tipo=this.value;salvar()"><option value="grande"'+(x.tipo!=='feriado'?' selected':'')+'>grande evento</option><option value="feriado"'+(x.tipo==='feriado'?' selected':'')+'>feriado / ponto facultativo</option></select></td>'+
+      '<td><button class="mini danger" onclick="CONFIG.datasEspeciais.splice('+i+',1);salvar();renderCadastros()">✕</button></td></tr>').join('') +
+    '</tbody></table><button class="mini" style="margin-top:6px" onclick="CONFIG.datasEspeciais.push({data:HOJE, nome:\'\', cidade:\'Rio de Janeiro\', tipo:\'grande\'});salvar();renderCadastros()">+ Data especial</button>';
+}
+
+/* ================= RESTRIÇÃO DE CAMINHÃO NA CIDADE ================= */
+function faixasDe(t){ return String(t||'').split(/[,;]/).map(s=>s.trim().match(/(\d{1,2}):?(\d{2})?\s*[-–a]+\s*(\d{1,2}):?(\d{2})?/)).filter(Boolean).map(m=>({ini:(+m[1])*60+(+(m[2]||0)), fim:(+m[3])*60+(+(m[4]||0))})); }
+function restricoesDoEvento(ev){
+  const cid = semAcentoSimples(ev.cidade||''), txt = semAcentoSimples((ev.bairro||'') + ' ' + (ev.local||''));
+  return (CONFIG.restricoes||[]).filter(r=>{
+    if(!r.ativo) return false;
+    if(r.cidade && !cid.includes(semAcentoSimples(r.cidade))) return false;
+    const bs = String(r.bairros||'').split(',').map(s=>semAcentoSimples(s).trim()).filter(Boolean);
+    return !bs.length || bs.some(b=>new RegExp('(^|[^a-z])' + b.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '([^a-z]|$)').test(txt));
+  });
+}
+/* o caminhão chega/descarrega dentro do horário proibido? */
+function alertaRestricao(ev, fase, D, hs){
+  if(!hs || !D) return null;
+  const rs = restricoesDoEvento(ev); if(!rs.length) return null;
+  const dow = new Date(D + 'T12:00').getDay();
+  const util = dow >= 1 && dow <= 5 && !ehFeriado(D, ev.cidade);
+  const ch = minDe(hs.chegada); if(ch == null) return null;
+  const fimDesc = ch + cfgSaida().descarga;
+  const cam = maiorCaminhao(ev, fase), comp = cam ? dimsCaminhao(cam).comprimento : 9;
+  for(const r of rs){
+    if(r.dias === 'uteis' && !util) continue;
+    if(r.vucLivre && comp <= 6.3) continue;
+    const f = faixasDe(r.faixas).find(x=>ch < x.fim && fimDesc > x.ini);
+    if(f) return {txt: '⛔ Restrição de caminhão (' + r.nome + ', ' + hm(f.ini) + '–' + hm(f.fim) + (r.dias==='uteis'?' em dia útil':'') + '): chega ' + hs.chegada + ' — ' +
+      (f.ini >= 5*60 ? 'descarregar antes das ' + hm(f.ini) + ' ou chegar depois das ' + hm(f.fim) : 'chegar depois das ' + hm(f.fim)), faixa:f};
+  }
+  return null;
+}
+function htmlRestricoes(){
+  const R = CONFIG.restricoes || [];
+  const inp = 'border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit;font-size:12px';
+  return '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:4px">Valendo</th><th>Nome</th><th>Cidade</th><th>Bairros</th><th>Dias</th><th>Horário proibido</th><th>VUC livre</th><th></th></tr></thead><tbody>'+
+    R.map((r,i)=>'<tr style="vertical-align:top"><td style="padding:3px 4px"><input type="checkbox" '+(r.ativo?'checked':'')+' onchange="CONFIG.restricoes['+i+'].ativo=this.checked;salvar();renderQuadro()"></td>'+
+      '<td><input style="'+inp+';width:150px" value="'+String(r.nome||'').replace(/"/g,'&quot;')+'" onchange="CONFIG.restricoes['+i+'].nome=this.value;salvar()"></td>'+
+      '<td><input style="'+inp+';width:110px" value="'+String(r.cidade||'').replace(/"/g,'&quot;')+'" onchange="CONFIG.restricoes['+i+'].cidade=this.value;salvar()"></td>'+
+      '<td><textarea style="'+inp+';width:220px;height:46px" onchange="CONFIG.restricoes['+i+'].bairros=this.value;salvar()">'+String(r.bairros||'').replace(/</g,'&lt;')+'</textarea></td>'+
+      '<td><select style="'+inp+'" onchange="CONFIG.restricoes['+i+'].dias=this.value;salvar()"><option value="uteis"'+(r.dias==='uteis'?' selected':'')+'>dias úteis</option><option value="todos"'+(r.dias!=='uteis'?' selected':'')+'>todos</option></select></td>'+
+      '<td><input style="'+inp+';width:120px" value="'+String(r.faixas||'').replace(/"/g,'&quot;')+'" placeholder="06:00-10:00, 17:00-21:00" onchange="CONFIG.restricoes['+i+'].faixas=this.value;salvar()"></td>'+
+      '<td><input type="checkbox" '+(r.vucLivre?'checked':'')+' title="VUC (até 6,3 m) pode circular" onchange="CONFIG.restricoes['+i+'].vucLivre=this.checked;salvar()"></td>'+
+      '<td><button class="mini danger" onclick="CONFIG.restricoes.splice('+i+',1);salvar();renderCadastros()">✕</button></td></tr>').join('')+
+    '</tbody></table><button class="mini" style="margin-top:6px" onclick="CONFIG.restricoes.push({nome:\'Nova restrição\', cidade:\'\', bairros:\'\', dias:\'uteis\', faixas:\'06:00-10:00\', vucLivre:true, ativo:true});salvar();renderCadastros()">+ Restrição</button>'+
+    ' <small style="color:var(--muted)">As duas do Rio vêm do decreto municipal, mas a prefeitura suspendeu a fiscalização em 2020 — por isso vêm desligadas. Marque "Valendo" se estiverem cobrando. O bairro vem do endereço (📍 Calcular) ou do texto do local.</small>';
+}
+
+/* ================= PIPEFY AUTOMÁTICO ================= */
+let pipefyRodando = false;
+async function pipefyGQL(query, variables){
+  const r = await fetch('https://api.pipefy.com/graphql', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + CONFIG.pipefyToken}, body: JSON.stringify({query, variables})});
+  if(r.status === 401 || r.status === 403) throw new Error('token inválido ou sem acesso ao pipe');
+  if(!r.ok) throw new Error('Pipefy respondeu ' + r.status);
+  const j = await r.json();
+  if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
+  return j.data;
+}
+/* card do Pipefy vira a mesma "linha" da planilha: os nomes dos campos passam pelos mesmos sinônimos */
+function cardParaLote(card, pendentes){
+  const o = {'Título do card': card.title, 'Fase atual': card.current_phase && card.current_phase.name};
+  (card.fields||[]).forEach(f=>{ if(f && f.name) o[f.name] = f.value; });
+  if(!acha(o,'nome')) o['Evento'] = card.title;
+  const cM = colunasData(o,'mont'), cE = colunasData(o,'evt'), cD = colunasData(o,'desm');
+  const limpa = v => { if(v == null) return v; const s = String(v).trim(); return /^\[.*\]$/.test(s) ? s.replace(/^\[|\]$/g,'').replace(/"/g,'') : s; };
+  const mont = dataBR(limpa(cM.ini)) || dataBR(limpa(acha(o,'mont')));
+  const evt  = dataBR(limpa(cE.ini)) || dataBR(limpa(acha(o,'evt')));
+  const desm = dataBR(limpa(cD.ini)) || dataBR(limpa(acha(o,'desm')));
+  const montFim = dataBR(limpa(cM.fim)), evtFim = dataBR(limpa(cE.fim)), desmFim = dataBR(limpa(cD.fim));
+  const itens = [];
+  const kMat = Object.keys(o).find(k => /material|pedido|itens/.test(semAcentoSimples(k)));
+  if(kMat && o[kMat]) interpretarPedido(String(o[kMat])).itens.forEach(mm=>{
+    const c = casarMaterial(mm.nome);
+    if(c){ const ja = itens.find(x=>x.nome===c.nome); if(ja) ja.qtd += mm.qtd; else itens.push({nome:c.nome, qtd:mm.qtd, peso:c.peso, vol:c.vol, un:c.un}); }
+    else { pendentes.add(mm.nome); itens.push({nome:mm.nome, qtd:mm.qtd, peso:0, vol:0, un:'un', pendente:true}); }
+  });
+  const prod = limpa(acha(o,'produtor'));
+  return {marcado:true, arquivo:'Pipefy', pipefyId: card.id,
+    nome: String(acha(o,'nome') || card.title || 'Evento sem nome').trim(),
+    os: (function(){ const o1 = String(acha(o,'os')||'').trim(); if(/\d{5,}/.test(o1)) return o1; const m = String(card.title||'').match(/\d{5,}/); return m ? m[0] : (o1 || String(card.id)); })(),
+    produtor: produtores.find(p => semAcento(p.nome) === semAcento(prod)) ? String(prod).trim() : null,
+    cidade: String(limpa(acha(o,'cidade')) || '—').trim(), local: String(limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
+    mont: comHora(mont,'08:00'), montFim: (montFim||'').slice(0,10) || null,
+    evt: (evt||mont||'').slice(0,10), evtFim: (evtFim||'').slice(0,10) || null,
+    desm: comHora(desm,'08:00'), desmFim: (desmFim||'').slice(0,10) || null,
+    permanece: /sim|true|1|x/i.test(String(acha(o,'permanece')||'')),
+    fase: normalizaFase(achaFase(o)), respNome: achaRespNome(o), respTel: achaRespTel(o), itens, atualizado: card.updated_at};
+}
+async function puxarPipefy(manual){
+  const st = document.getElementById('pf-status');
+  if(!CONFIG.pipefyToken || !CONFIG.pipefyPipe){ if(manual && st) st.innerHTML = '<b style="color:#b0483c">Coloque o token e o número do pipe.</b>'; return; }
+  if(pipefyRodando) return; pipefyRodando = true;
+  try{
+    if(st) st.textContent = 'buscando cards no Pipefy...';
+    const pipes = String(CONFIG.pipefyPipe).split(/[,;\s]+/).filter(Boolean);
+    const cards = [];
+    for(const pipe of pipes){
+      let after = null, voltas = 0;
+      do{
+        const d = await pipefyGQL('query($p: ID!, $a: String){ allCards(pipeId: $p, first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } }', {p: pipe, a: after});
+        const ac = d && d.allCards; if(!ac) break;
+        (ac.edges||[]).forEach(e=>cards.push(e.node));
+        after = ac.pageInfo && ac.pageInfo.hasNextPage ? ac.pageInfo.endCursor : null;
+      } while(after && ++voltas < 20);
+    }
+    const ultimo = CONFIG.pipefyUltimo || '';
+    const pendentes = new Set();
+    /* só o que mudou desde a última vez (na primeira vez, o que ainda vai acontecer) */
+    const alvo = cards.filter(c=>!ultimo || String(c.updated_at||'') > ultimo).map(c=>cardParaLote(c, pendentes))
+      .filter(e=>e.mont || e.desm)
+      .filter(e=>eventoExistente(e) || (dia(fimDesmLote(e)) || dia(e.mont) || '9999') >= somaDiaISO(HOJE, -3));
+    pendentes.forEach(n => { if(!catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
+    const maxUp = cards.reduce((m,c)=>String(c.updated_at||'') > m ? String(c.updated_at) : m, ultimo);
+    CONFIG.pipefyUltimo = maxUp; CONFIG.pipefyQuando = new Date().toISOString();
+    if(alvo.length){ lote = alvo; gravarLote(); }
+    else salvar();
+    const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' card(s) novos ou alterados trazidos para a Central.' : 'Pipefy conferido — nada mudou.';
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    if(manual || alvo.length) toast(msg);
+  }catch(e){
+    const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? 'o navegador bloqueou a chamada ao Pipefy (sem internet ou bloqueio do Pipefy)' : e.message;
+    if(st) st.innerHTML = '<b style="color:#b0483c">Não consegui falar com o Pipefy:</b> ' + m + '.';
+    if(manual) toast('Pipefy: ' + m);
+  }finally{ pipefyRodando = false; }
+}
+const fimDesmLote = e => e.desmFim || e.desm || e.evtFim || e.evt || e.mont;
+if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMotorista){
+  setTimeout(()=>{ try{ puxarPipefy(false); }catch(e){} }, 30000);
+  setInterval(()=>{ try{ puxarPipefy(false); }catch(e){} }, 15*60*1000);
+}
+
+/* ================= PERGUNTE À CENTRAL ================= */
+const DIAS_SEM = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
+const MESES = ['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+/* data ou período dentro da frase */
+function periodoDaFrase(t){
+  const s = semAcentoSimples(t);
+  if(/depois de amanha/.test(s)) { const d = somaDiaISO(HOJE, 2); return {ini:d, fim:d, rot:rotDia(d)}; }
+  if(/\bamanha\b/.test(s)) { const d = somaDiaISO(HOJE, 1); return {ini:d, fim:d, rot:'amanhã ('+rotDia(d)+')'}; }
+  if(/\bontem\b/.test(s)) { const d = somaDiaISO(HOJE, -1); return {ini:d, fim:d, rot:'ontem'}; }
+  if(/\bhoje\b/.test(s)) return {ini:HOJE, fim:HOJE, rot:'hoje'};
+  let m = s.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if(m){ const a = m[3] ? (m[3].length===2 ? '20'+m[3] : m[3]) : HOJE.slice(0,4); const d = a + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0'); return {ini:d, fim:d, rot:fmtD(d)}; }
+  m = s.match(/\bdia (\d{1,2})\b/);
+  if(m){ let d = HOJE.slice(0,8) + m[1].padStart(2,'0'); if(d < somaDiaISO(HOJE, -7)){ const x = new Date(d+'T12:00'); x.setMonth(x.getMonth()+1); d = x.toISOString().slice(0,10); } return {ini:d, fim:d, rot:fmtD(d)}; }
+  const w = DIAS_SEM.findIndex(n=>new RegExp('\\b' + n.slice(0,3) + '(' + n.slice(3) + ')?(-feira)?\\b').test(s) || (n==='sabado' && /\bsab\b/.test(s)));
+  if(w >= 0){ const hoje = new Date(HOJE+'T12:00').getDay(); let n = (w - hoje + 7) % 7; if(/que vem|proxim/.test(s) && n===0) n = 7; const d = somaDiaISO(HOJE, n); return {ini:d, fim:d, rot:rotDia(d)}; }
+  if(/semana que vem|proxima semana/.test(s)){ const seg = somaDiaISO(segundaDe(HOJE), 7); return {ini:seg, fim:somaDiaISO(seg, 6), rot:'semana que vem'}; }
+  if(/essa semana|esta semana|nesta semana|nessa semana|da semana/.test(s)){ const seg = segundaDe(HOJE); return {ini:seg, fim:somaDiaISO(seg, 6), rot:'esta semana'}; }
+  if(/mes passado/.test(s)){ const x = new Date(HOJE.slice(0,8)+'15T12:00'); x.setMonth(x.getMonth()-1); const a = x.toISOString().slice(0,7); return {ini:a+'-01', fim:a+'-'+String(new Date(+a.slice(0,4), +a.slice(5,7), 0).getDate()).padStart(2,'0'), rot:nomeMes(a)}; }
+  const mi = MESES.findIndex(n=>new RegExp('\\b' + n + '\\b').test(s));
+  if(mi >= 0 || /(esse|este|neste|nesse) mes/.test(s)){
+    let a = HOJE.slice(0,4); if(mi >= 0 && /\b(20\d\d)\b/.test(s)) a = s.match(/\b(20\d\d)\b/)[1];
+    const mm = mi >= 0 ? String(mi+1).padStart(2,'0') : HOJE.slice(5,7);
+    return {ini:a+'-'+mm+'-01', fim:a+'-'+mm+'-'+String(new Date(+a, +mm, 0).getDate()).padStart(2,'0'), rot:nomeMes(a+'-'+mm)};
+  }
+  return null;
+}
+function eventoDaFrase(s){
+  const q = semAcentoSimples(s);
+  let melhor = null, pts = 0;
+  eventos.filter(e=>e.esp!=='cancelado').forEach(e=>{
+    const ws = semAcentoSimples(e.nome).split(/[^a-z0-9]+/).filter(w=>w.length >= 4 && !/^(evento|montagem|festa|show|2026|2025)$/.test(w));
+    const n = ws.filter(w=>q.includes(w)).length;
+    if(n > pts || (n === pts && n && melhor && Math.abs(new Date(e.mont) - Date.now()) < Math.abs(new Date(melhor.mont) - Date.now()))){ melhor = e; pts = n; }
+  });
+  return pts ? melhor : null;
+}
+function pessoaDaFrase(s){
+  const q = ' ' + semAcentoSimples(s) + ' ';
+  return pessoasAgenda().filter(p=>q.includes(' ' + semAcentoSimples(p.nome) + ' ') || q.includes(' ' + semAcentoSimples(p.nome.split(' ')[0]) + ' '))
+    .sort((a,b)=>b.nome.length - a.nome.length)[0] || null;
+}
+function responder(pergunta){
+  const s = semAcentoSimples(pergunta), per = periodoDaFrase(pergunta);
+  const esc = x => String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const dias = per ? diasEntre(per.ini, per.fim) : [];
+  const pessoa = pessoaDaFrase(pergunta);
+  /* 1) pessoa livre? */
+  if(pessoa && /livre|disponivel|folga|trabalha|esta em|onde (o|a) |escalad|agenda/.test(s)){
+    const D = per ? per.ini : HOJE;
+    const l = (agendaDe(pessoa.tipo, pessoa.nome)[D] || []);
+    const oc = l.filter(x=>x.st==='T' || x.st==='MT');
+    return '<b>' + esc(pessoa.nome) + '</b> em ' + (per ? per.rot : 'hoje') + ': ' + (oc.length
+      ? '<b style="color:#b0483c">ocupado</b> — ' + oc.map(x=>esc(x.ev.nome) + ' <small>(' + esc(x.papel) + ')</small>').join(', ')
+      : '<b style="color:#0f8a4d">livre</b>' + (l.some(x=>x.st==='FO') ? ' <small>(de folga em ' + l.filter(x=>x.st==='FO').map(x=>esc(x.ev.nome)).join(', ') + ')</small>' : '')) +
+      ' <button class="mini" onclick="fechar(\'ov-pergunta\');abrirAgenda(\'' + pessoa.tipo + '\',\'' + pessoa.nome.replace(/'/g,"\\'") + '\',\'' + D.slice(0,7) + '\')">ver agenda do mês</button>';
+  }
+  /* 2) quem está livre */
+  if(/quem.*(livre|disponivel|folga)|(livres|disponiveis)/.test(s)){
+    const D = per ? per.ini : HOJE, r = livresNoDia(D);
+    const quer = /motorista/.test(s) ? ['mot'] : /montador|lider|equipe/.test(s) ? ['mont'] : ['mont','mot'];
+    return 'Livres em ' + (per ? per.rot : 'hoje') + ':' + quer.map(t=>'<br><b>' + (t==='mot'?'Motoristas':'Montadores e líderes') + ' (' + r[t].length + '):</b> ' + (r[t].map(p=>esc(p.nome)).join(', ') || 'ninguém')).join('');
+  }
+  /* 3) onde está uma estrutura */
+  const estr = TIPOS_ESTR.find(k=>s.includes(k));
+  if(estr && /onde|esta|livre|disponivel|quantos|quantas|tem|usando|evento/.test(s) && !/km|custo|diesel/.test(s)){
+    const q = (s.match(new RegExp(estr + '\\s*(\\d+(?:[.,]\\d+)?\\s*x\\s*\\d+(?:[.,]\\d+)?)?')) || [estr])[0].trim();
+    const D = per ? per.ini : '';
+    const res = eventos.filter(e=>e.esp!=='cancelado' && e.mont && [...(e.estruturas||[]), ...(e.itens||[]).map(i=>i.nome)].some(t=>semAcentoSimples(t).replace(/\s*x\s*/g,'x').includes(q.replace(/\s*x\s*/g,'x').replace(/,/g,'.'))))
+      .map(e=>({e, ini:dia(e.mont), fim:dia(fimDesm(e)) || dia(e.desm) || dia(e.mont)}))
+      .filter(r=>D ? (D >= r.ini && D <= r.fim) : r.fim >= HOJE).sort((a,b)=>a.ini.localeCompare(b.ini));
+    return '"' + esc(q) + '"' + (D ? ' em ' + per.rot : ' daqui para frente') + ': ' + (res.length ? res.length + ' evento(s)<br>' + res.map(r=>'• <b>' + esc(r.e.nome) + '</b> <small>fora do galpão de ' + fmtD(r.ini).slice(0,5) + ' a ' + fmtD(r.fim).slice(0,5) + '</small>').join('<br>') : 'em nenhum evento.');
+  }
+  /* 4) km / custo */
+  if(/\bkm\b|quilometr|rodamos|rodou|rodado|custo|gasto|diesel|pedagio/.test(s)){
+    const P = per || {ini: HOJE.slice(0,8)+'01', fim: HOJE, rot: 'este mês'};
+    let km = 0, custo = 0, viagens = 0;
+    eventos.forEach(ev=>{ if(ev.esp==='cancelado' || ev.esp==='terceirizado' || !ev.mont) return;
+      [['mont', dia(ev.mont)], ['desm', dia(ev.desm)]].forEach(([f, d])=>{ if(!d || d < P.ini || d > P.fim) return;
+        const c = custoFase(ev, f); km += c.km; custo += c.total; viagens += escalaDo(ev, f).length; }); });
+    return 'Em <b>' + esc(P.rot) + '</b>: <b>≈' + Math.round(km).toLocaleString('pt-BR') + ' km</b> em ' + viagens + ' viagem(ns) de caminhão · custo de frota <b>≈' + reais(custo) + '</b> (diesel + pedágio).';
+  }
+  /* 5) quantos eventos / montagens / desmontagens */
+  if(/quant[oa]s?.*(evento|montag|desmontag|operac)/.test(s)){
+    const P = per || {ini: HOJE.slice(0,8)+'01', fim: somaDiaISO(HOJE.slice(0,8)+'28', 5).slice(0,8) + '01', rot:'este mês'};
+    if(!per){ P.fim = HOJE.slice(0,8) + String(new Date(+HOJE.slice(0,4), +HOJE.slice(5,7), 0).getDate()).padStart(2,'0'); }
+    const M = eventos.filter(e=>e.esp!=='cancelado' && dia(e.mont) >= P.ini && dia(e.mont) <= P.fim);
+    const De = eventos.filter(e=>e.esp!=='cancelado' && e.desm && dia(e.desm) >= P.ini && dia(e.desm) <= P.fim);
+    return 'Em <b>' + esc(P.rot) + '</b>: <b>' + M.length + ' montagem(ns)</b> e <b>' + De.length + ' desmontagem(ns)</b>' + (M.length ? '<br><small>' + M.slice(0,12).map(e=>esc(e.nome) + ' (' + fmtD(dia(e.mont)).slice(0,5) + ')').join(' · ') + (M.length>12?' …':'') + '</small>' : '');
+  }
+  /* 6) diárias */
+  if(/diaria/.test(s)){
+    const mes = per ? per.ini.slice(0,7) : HOJE.slice(0,7);
+    const l = calcularDiarias(mes).filter(p=>!pessoa || p.nome === pessoa.nome);
+    if(pessoa) return l.length ? '<b>' + esc(pessoa.nome) + '</b> em ' + nomeMes(mes) + ': <b>' + l.map(p=>p.T).reduce((a,b)=>a+b,0) + ' diária(s)</b> trabalhada(s)' + (l[0].FA ? ', ' + l[0].FA + ' falta(s)' : '') + '.' : esc(pessoa.nome) + ' não tem diária em ' + nomeMes(mes) + '.';
+    return 'Diárias em ' + nomeMes(mes) + ': <b>' + l.reduce((a,p)=>a+p.T,0) + '</b> no total, ' + l.length + ' pessoa(s). <button class="mini" onclick="fechar(\'ov-pergunta\');abrirDiarias()">abrir fechamento</button>';
+  }
+  /* 7) sobre um evento */
+  const ev = eventoDaFrase(pergunta);
+  if(ev){
+    const eq = ev.equipe || plano(ev).equipe, cam = escalaDo(ev,'mont').map(x=>{ const v = veiculos.find(y=>y.id===x.v); return v ? v.tipo+' '+v.placa+(x.motorista?' ('+x.motorista+')':'') : null; }).filter(Boolean);
+    const hs = horariosSaida(ev, 'mont');
+    return '<b>' + esc(ev.nome) + '</b><br>🔨 Montagem ' + fmtD(ev.mont) + (dia(fimMont(ev))!==dia(ev.mont) ? ' a ' + fmtD(fimMont(ev)) : '') + (String(ev.mont).slice(11,16) ? ' às ' + String(ev.mont).slice(11,16) : '') +
+      ' · 📤 Desmontagem ' + (ev.desm ? fmtD(ev.desm) : '—') + '<br>📍 ' + esc(destinoTexto(ev) || '—') + (+ev.km ? ' · ' + ev.km + ' km' : '') +
+      '<br>👷 Equipe ' + esc(eq || '—') + ' · 🎬 ' + esc(produtorDo(ev) || '—') + '<br>🚚 ' + (cam.map(esc).join(', ') || 'sem caminhão') + (hs ? '<br>' + txtSaida(hs) : '') +
+      ' <button class="mini" onclick="fechar(\'ov-pergunta\');verEvento(\'' + ev.id + '\')">abrir evento</button>';
+  }
+  /* 8) o que sai / o que tem no dia (padrão quando há data) */
+  if(per || /sai|saem|tem|opera|montag|desmontag|agenda|programa/.test(s)){
+    const ds = per ? dias : [HOJE];
+    const blocos = ds.slice(0, 14).map(D=>{
+      const {ops} = opsDoDia(D);
+      if(!ops.length) return ds.length > 1 ? '' : '<b>' + rotDia(D) + '</b>: nada na rua.';
+      return '<b>' + rotDia(D) + '</b>' + ops.map(o=>'<br>' + (o.fase==='desm'?'📤 ':'🔨 ') + '<b>' + esc(o.ev.nome) + '</b>' + (o.hora ? ' às ' + o.hora : '') + ' · ' + esc(o.equipe||'—') +
+        (o.viagens.length ? ' · ' + o.viagens.map(x=>esc(x.v.tipo+' '+x.v.placa)+(x.motorista?' ('+esc(x.motorista)+')':'')).join(', ') : '') + (o.ev.cidade && o.ev.cidade!=='—' ? ' · ' + esc(o.ev.cidade) : '')).join('');
+    }).filter(Boolean);
+    return blocos.join('<br><br>') || 'Nada na rua ' + (per ? per.rot : 'hoje') + '.';
+  }
+  return 'Não entendi. Tente assim:<br>• o que sai sábado?<br>• o Wagner está livre dia 30?<br>• quem está livre amanhã?<br>• onde está o palco 12x10?<br>• quantos km rodamos em setembro?<br>• quantas montagens semana que vem?<br>• diárias do Yago em setembro<br>• caminhão da maratona';
+}
+function perguntar(txt){
+  const i = document.getElementById('pergunta-in');
+  const q = (txt != null ? txt : (i && i.value) || '').trim();
+  if(!q) return;
+  if(i) i.value = q;
+  const box = document.getElementById('pg-resp');
+  let r; try{ r = responder(q); }catch(e){ r = 'Não consegui responder essa (' + e.message + ').'; }
+  box.innerHTML = '<div style="font-size:13px;color:var(--muted);margin-bottom:6px">“' + q.replace(/</g,'&lt;') + '”</div><div style="font-size:14.5px;line-height:1.6">' + r + '</div>';
+  document.getElementById('ov-pergunta').classList.add('on');
+}
+
+/* ================= PREVISÃO DE PICO =================
+   Para cada semana à frente: o que já está confirmado + o que o histórico (mesma semana nos anos
+   anteriores) diz que costuma vir, contra a capacidade de equipes e caminhões. Também lista eventos
+   que aconteceram no ano passado e ainda não voltaram para o quadro. */
+function semanaDoAno(iso){ const d = new Date(iso + 'T12:00'); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const dn = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - dn + 3); const f = new Date(Date.UTC(t.getUTCFullYear(), 0, 4)); return 1 + Math.round(((t - f) / 864e5 - 3 + ((f.getUTCDay() + 6) % 7)) / 7); }
+const evValido = e => e.mont && e.esp !== 'cancelado' && e.esp !== 'terceirizado' && e.equipe !== EQUIPE_TERC;
+/* uso de uma semana: dias de equipe (montagem + desmontagem) e dias de caminhão */
+function usoNaSemana(lista, seg){
+  const dias = new Set(diasEntre(seg, somaDiaISO(seg, 6)));
+  let eq = 0, cam = 0; const evs = [];
+  lista.forEach(e=>{
+    const dE = diasEquipe(e).filter(d=>dias.has(d)).length;
+    const dC = diasVeiculo(e).filter(d=>dias.has(d)).length * Math.max(1, (frotaDo(e,'mont')||[]).length);
+    if(dE || dC){ eq += dE; cam += dC; evs.push(e); }
+  });
+  return {eq, cam, evs};
+}
+const chaveNomeEv = n => semAcentoSimples(n).replace(/\(.*?\)/g,' ').replace(/\b(19|20)\d\d\b/g,' ').replace(/\b\d+[ªaº]?\b/g,' ').split(/[^a-z]+/).filter(w=>w.length >= 3 && !/^(evento|festa|show|montagem|dos|das|del|para|com)$/.test(w));
+const pareceMesmo = (a, b) => { const A = chaveNomeEv(a), B = chaveNomeEv(b); if(!A.length || !B.length) return false; const c = A.filter(w=>B.includes(w)).length; return c / Math.min(A.length, B.length) >= 0.6; };
+function previsaoPico(nSem){
+  const seg0 = segundaDe(HOJE), anoAtual = +HOJE.slice(0,4);
+  const validos = eventos.filter(evValido);
+  const futuros = validos.filter(e => (dia(fimDesm(e)) || dia(e.mont)) >= seg0);
+  const passados = validos.filter(e => dia(e.mont) < somaDiaISO(HOJE, -60));   /* histórico: o que já passou há mais de 2 meses */
+  const anos = [...new Set(passados.map(e=>+dia(e.mont).slice(0,4)))].filter(a=>a < anoAtual);
+  const nEq = equipes.filter(e=>e.nome !== EQUIPE_TERC).length, nCam = veiculos.filter(v=>!v.manut).length;
+  const capEq = nEq * 6, capCam = nCam * 6;   /* 6 dias úteis de trabalho por semana */
+  const cresc = 1 + (+CONFIG.picoCrescimento || 0) / 100;
+  const semanas = [];
+  for(let i = 0; i < nSem; i++){
+    const seg = somaDiaISO(seg0, 7*i), w = semanaDoAno(seg);
+    const conf = usoNaSemana(futuros, seg);
+    /* mesma semana (±1) nos anos anteriores, pela média dos anos que têm dado */
+    const hist = anos.map(a=>{
+      const segA = segundaDe(a + seg.slice(4));   /* a mesma época no ano a */
+      const u = [-7, 0, 7].map(k=>usoNaSemana(passados, somaDiaISO(segA, k)));
+      return {eq: (u[0].eq + 2*u[1].eq + u[2].eq) / 4, cam: (u[0].cam + 2*u[1].cam + u[2].cam) / 4, evs: u[1].evs};
+    });
+    const hEq = hist.length ? hist.reduce((s,x)=>s+x.eq,0) / hist.length * cresc : 0;
+    const hCam = hist.length ? hist.reduce((s,x)=>s+x.cam,0) / hist.length * cresc : 0;
+    const prevEq = Math.max(conf.eq, hEq), prevCam = Math.max(conf.cam, hCam);
+    const uso = Math.max(capEq ? prevEq / capEq : 0, capCam ? prevCam / capCam : 0);
+    semanas.push({seg, w, conf, hEq, hCam, prevEq, prevCam, capEq, capCam, uso, histEvs: hist.flatMap(x=>x.evs)});
+  }
+  /* eventos do ano passado que devem voltar e ainda não estão no quadro */
+  const fim = somaDiaISO(seg0, 7*nSem);
+  const voltam = [];
+  passados.forEach(e=>{
+    const a = +dia(e.mont).slice(0,4);
+    const dNovo = String(anoAtual + (dia(e.mont).slice(5) < HOJE.slice(5) ? 1 : 0)) + dia(e.mont).slice(4);
+    if(a >= anoAtual || dNovo < HOJE || dNovo > fim) return;
+    if(validos.some(x=>x !== e && dia(x.mont) >= somaDiaISO(HOJE, -60) && pareceMesmo(x.nome, e.nome))) return;
+    if(voltam.some(v=>pareceMesmo(v.e.nome, e.nome))) return;
+    voltam.push({e, quando: dNovo});
+  });
+  voltam.sort((a,b)=>a.quando.localeCompare(b.quando));
+  return {semanas, anos, capEq, capCam, nEq, nCam, voltam, poucoHist: !anos.length};
+}
+function abrirPico(){
+  const c = document.getElementById('pico-cresc'); if(c) c.value = +CONFIG.picoCrescimento || 0;
+  renderPico();
+  document.getElementById('ov-pico').classList.add('on');
+}
+function renderPico(){
+  const n = +((document.getElementById('pico-sem')||{}).value || 16);
+  const P = previsaoPico(n);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  document.getElementById('pico-sub').textContent = P.nEq + ' equipes e ' + P.nCam + ' caminhões · capacidade ' + P.capEq + ' dias-equipe e ' + P.capCam + ' dias-caminhão por semana · histórico: ' + (P.anos.length ? P.anos.join(', ') : 'nenhum ano anterior ainda');
+  /* gráfico: uso previsto das equipes por semana (confirmado + o que o histórico indica), linha = capacidade */
+  const W = 880, H = 230, pl = 36, pb = 38, pt = 16;
+  const max = Math.max(P.capEq * 1.2, ...P.semanas.map(s=>s.prevEq), 1);
+  const y = v => pt + (H - pt - pb) * (1 - v / max);
+  const passo = (W - pl) / P.semanas.length, bw = Math.max(8, Math.min(36, passo * 0.62));
+  const marcas = [];
+  [0, Math.round(P.capEq/2), P.capEq].forEach(t=>marcas.push('<line x1="'+pl+'" x2="'+W+'" y1="'+y(t)+'" y2="'+y(t)+'" stroke="#e8ecf3"/><text x="'+(pl-6)+'" y="'+(y(t)+4)+'" font-size="10" fill="#8892a4" text-anchor="end">'+t+'</text>'));
+  P.semanas.forEach((s,i)=>{
+    const x = pl + passo*i + (passo-bw)/2;
+    const yc = y(s.conf.eq), yp = y(s.prevEq);
+    const extra = s.prevEq - s.conf.eq;
+    if(s.conf.eq) marcas.push('<rect x="'+x+'" y="'+yc+'" width="'+bw+'" height="'+(y(0)-yc)+'" rx="3" fill="#1c4fa0"><title>Semana de '+fmtD(s.seg).slice(0,5)+': '+s.conf.eq+' dias-equipe confirmados</title></rect>');
+    if(extra > 0.4) marcas.push('<rect x="'+x+'" y="'+yp+'" width="'+bw+'" height="'+Math.max(0, yc-yp-(s.conf.eq?2:0))+'" rx="3" fill="#f0851e" opacity=".85"><title>Semana de '+fmtD(s.seg).slice(0,5)+': +'+extra.toFixed(1)+' dias-equipe previstos pelo histórico</title></rect>');
+    const pct = Math.round(s.uso*100);
+    marcas.push('<text x="'+(x+bw/2)+'" y="'+(Math.min(yc,yp)-5)+'" font-size="10" font-weight="700" fill="'+(pct>=100?'#b0483c':pct>=85?'#a86412':'#1c2740')+'" text-anchor="middle">'+pct+'%</text>');
+    if(P.semanas.length <= 16 || i % 2 === 0) marcas.push('<text x="'+(x+bw/2)+'" y="'+(H-pb+14)+'" font-size="9.5" fill="#5a6478" text-anchor="middle">'+fmtD(s.seg).slice(0,5)+'</text>');
+  });
+  marcas.push('<line x1="'+pl+'" x2="'+W+'" y1="'+y(P.capEq)+'" y2="'+y(P.capEq)+'" stroke="#b0483c" stroke-width="2" stroke-dasharray="6 4"/><text x="'+W+'" y="'+(y(P.capEq)-5)+'" font-size="10.5" font-weight="700" fill="#b0483c" text-anchor="end">capacidade das equipes</text>');
+  const grafico = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Uso previsto das equipes por semana">'+marcas.join('')+'</svg>'+
+    '<div style="display:flex;gap:16px;font-size:11.5px;color:var(--muted);margin:2px 0 14px"><span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#1c4fa0;margin-right:5px;vertical-align:-1px"></i>confirmado no quadro</span><span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f0851e;margin-right:5px;vertical-align:-1px"></i>a mais que o histórico indica</span><span>% = uso previsto (equipe ou caminhão, o maior)</span></div>';
+  const picos = P.semanas.filter(s=>s.uso >= 0.85);
+  const tab = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:5px">Semana</th><th>Equipes (dias)</th><th>Caminhões (dias)</th><th>Uso</th><th>No histórico nessa época</th></tr></thead><tbody>'+
+    P.semanas.map(s=>{ const pct = Math.round(s.uso*100), cor = pct>=100?'#b0483c':pct>=85?'#a86412':'#0f8a4d';
+      return '<tr style="border-top:1px solid var(--line)"><td style="padding:6px 5px;white-space:nowrap"><b>'+fmtD(s.seg).slice(0,5)+'</b> a '+fmtD(somaDiaISO(s.seg,6)).slice(0,5)+'</td>'+
+        '<td>'+s.conf.eq+(s.hEq > s.conf.eq + 0.4 ? ' <small style="color:#a86412">→ ≈'+Math.round(s.prevEq)+'</small>' : '')+' <small style="color:var(--muted)">/ '+s.capEq+'</small></td>'+
+        '<td>'+s.conf.cam+(s.hCam > s.conf.cam + 0.4 ? ' <small style="color:#a86412">→ ≈'+Math.round(s.prevCam)+'</small>' : '')+' <small style="color:var(--muted)">/ '+s.capCam+'</small></td>'+
+        '<td><b style="color:'+cor+'">'+pct+'%</b>'+(pct>=100?' falta':pct>=85?' pico':'')+'</td>'+
+        '<td><small>'+([...new Set(s.histEvs.map(e=>e.nome))].slice(0,3).map(esc).join(', ') || '—')+'</small></td></tr>'; }).join('')+'</tbody></table>';
+  document.getElementById('pico-corpo').innerHTML =
+    (P.poucoHist ? '<div class="alert amber" style="margin:0 0 12px">Ainda não há eventos de anos anteriores no quadro, então a previsão mostra só o que já está confirmado. Para a Central aprender os picos, importe as planilhas dos anos passados (Importar XML/planilha) — eles entram como histórico.</div>' : '')+
+    (picos.length ? '<div class="alert red" style="margin:0 0 12px"><b>Semanas apertadas:</b> '+picos.map(s=>fmtD(s.seg).slice(0,5)+' ('+Math.round(s.uso*100)+'%)').join(' · ')+' — hora de reservar agregado, chamar diarista ou negociar datas.</div>' : '<div class="alert green" style="margin:0 0 12px">Nenhuma semana acima de 85% da capacidade no período.</div>')+
+    grafico+
+    (P.voltam.length ? '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>🔁 Aconteceram no ano passado e ainda não estão no quadro:</b><br>'+
+      P.voltam.map(v=>'• <b>'+esc(v.e.nome)+'</b> — ano passado em '+fmtD(dia(v.e.mont))+(v.e.cidade && v.e.cidade!=='—' ? ' · '+esc(v.e.cidade) : '')+' <small>(equipe '+esc(v.e.equipe||'—')+', '+diasEquipe(v.e).length+' dias)</small>').join('<br>')+
+      '<br><small>Vale o comercial confirmar com o cliente — se voltar, já dá para reservar equipe e caminhão.</small></div>' : '')+
+    tab;
+}
+/* no resumo da semana: aviso das semanas apertadas que vêm aí */
+function avisosPico(){
+  try{ return previsaoPico(8).semanas.filter(s=>s.uso >= 0.85).map(s=>'📈 Semana de ' + fmtD(s.seg).slice(0,5) + ': previsão de ' + Math.round(s.uso*100) + '% da capacidade'); }catch(e){ return []; }
+}
+
 /* ================= FICHA DO LOCAL =================
    O que já aprendemos em cada local fica guardado e aparece sozinho no próximo evento lá. */
 const ACESSO_OPC = [[0,'qualquer caminhão entra'],[8.6,'até TRUCK (carreta não entra)'],[7,'até TOCO / BAÚ'],[4.5,'só F-4000 ou menor']];
@@ -3059,6 +4044,25 @@ function chaveLocal(ev){
   return n(l) + '|' + n(c==='—' ? '' : c);
 }
 function fichaLocal(ev){ const k = chaveLocal(ev); return (k && CONFIG.locais && CONFIG.locais[k]) || null; }
+/* "só das 6h às 10h", "06:00 às 10:00", "6h-10h", "até 10h", "a partir das 7h" */
+function janelaDescarga(f){
+  const t = semAcentoSimples(f && f.descarga || ''); if(!t) return null;
+  const h2 = s => { const m = /(\d{1,2})(?:\s*[:h]\s*(\d{2}))?/.exec(s); return m ? (+m[1])*60 + (+(m[2]||0)) : null; };
+  let m = t.match(/(\d{1,2}(?:\s*[:h]\s*\d{2})?\s*h?)\s*(?:as|a|ate|-|–|—)\s*(\d{1,2}(?:\s*[:h]\s*\d{2})?\s*h?)/);
+  if(m){ const a = h2(m[1]), b = h2(m[2]); if(a != null && b != null && b > a) return {ini:a, fim:b}; }
+  m = t.match(/(?:ate|antes d[ae]s?)\s*(\d{1,2}(?:\s*[:h]\s*\d{2})?)/); if(m) return {ini:0, fim:h2(m[1])};
+  m = t.match(/(?:a partir d[ae]s?|depois d[ae]s?|apos)\s*(\d{1,2}(?:\s*[:h]\s*\d{2})?)/); if(m) return {ini:h2(m[1]), fim:24*60};
+  return null;
+}
+/* o caminhão chega dentro da janela de descarga do local? */
+function alertaDescarga(ev, hs){
+  const j = janelaDescarga(fichaLocal(ev)); if(!j || !hs || hs.fase === 'desm') return null;
+  const ch = minDe(hs.chegada); if(ch == null) return null;
+  if(ch >= j.ini && ch <= j.fim) return null;
+  const jan = hm(j.ini) + '–' + (j.fim >= 1440 ? '24:00' : hm(j.fim));
+  const sair = ch > j.fim ? hm(minDe(hs.saida) - (ch - j.fim) - 15) : null;
+  return {txt: '⏰ Chega ' + hs.chegada + ', fora da janela de descarga do local (' + jan + ')' + (sair ? ' — sair até ' + sair : ch < j.ini ? ' — vai esperar até ' + hm(j.ini) : ''), sair};
+}
 function resumoFicha(f){
   const p = [];
   if(+f.maxC) p.push(rotuloAcesso(f.maxC));
@@ -3093,6 +4097,7 @@ function blocoFicha(ev){
       '<label style="font-size:11.5px;color:var(--muted)">Portaria / contato do local<input style="'+inp+';width:100%" value="'+esc(f.portaria)+'" placeholder="ex.: Sr. José (21) 9..." onchange="setFicha(\''+ev.id+'\',\'portaria\',this.value)"></label>'+
       '<label style="font-size:11.5px;color:var(--muted);grid-column:1/-1">Acesso e observações<input style="'+inp+';width:100%" value="'+esc(f.obs)+'" placeholder="ex.: portão baixo (3,5m), rodízio de caminhão, entrada pela rua de trás" onchange="setFicha(\''+ev.id+'\',\'obs\',this.value)"></label>'+
     '</div>'+
+    (function(){ const j = janelaDescarga(f); return f.descarga ? '<div style="font-size:11px;margin-top:4px;color:'+(j?'#0f8a4d':'#a86412')+'">'+(j ? '⏰ Janela de descarga entendida: '+hm(j.ini)+' às '+(j.fim>=1440?'24:00':hm(j.fim))+' — a Central confere a chegada do caminhão' : 'Não entendi o horário de descarga — escreva como "das 6h às 10h"')+'</div>' : ''; })()+
     '<div style="font-size:11px;color:var(--muted);margin-top:5px">'+(f.atualizado ? 'Ficha atualizada em '+fmtD(f.atualizado)+' · ' : '')+'vale para todo evento em '+esc(ev.local)+
       (ant.length ? ' · já fizemos aqui: '+ant.slice(0,4).map(e=>esc(e.nome)+(e.mont?' ('+fmtD(dia(e.mont)).slice(3)+')':'')).join(', ')+(ant.length>4?'…':'') : ' · primeiro evento neste local')+'</div>';
 }
@@ -3117,50 +4122,135 @@ function distLinha(a, b){
 /* distância por estrada estimada entre dois eventos (linha reta × 1,3) */
 function kmEntre(a, b){ const ga = evGeo(a), gb = evGeo(b); return (ga && gb) ? Math.round(distLinha(ga, gb) * 1.3) : null; }
 /* ordem das paradas e horários da viagem combinada */
-function rotaJunta(D, aId, bId, fase){
-  const a = eventos.find(e=>e.id===aId), b = eventos.find(e=>e.id===bId);
-  if(!a || !b) return null;
+/* ---- viagem combinada com 2, 3 ou 4 eventos ----
+   x.junto guarda o grupo ("id1+id2+id3"); o formato antigo (só o id do outro) continua valendo */
+function membrosJunto(evId, junto){
+  if(!junto) return [evId];
+  const ids = String(junto).includes('+') ? String(junto).split('+') : [evId, String(junto)];
+  if(!ids.includes(evId)) ids.push(evId);
+  return [...new Set(ids)].filter(id=>eventos.some(e=>e.id===id)).sort();
+}
+const outrosJunto = (evId, junto) => membrosJunto(evId, junto).filter(i=>i!==evId);
+const nomesJunto = (evId, junto) => outrosJunto(evId, junto).map(nomeDo).join(' + ');
+/* ordem das paradas: a otimizada pelo TomTom (quando já calculada) ou pela hora de início */
+const ROTA_OTIMA = {}, rotaPendente = {};
+function rotaGrupo(D, ids, fase){
+  const evs = ids.map(id=>eventos.find(e=>e.id===id)).filter(Boolean);
+  if(evs.length < 2) return null;
+  const key = D + '|' + fase + '|' + evs.map(e=>e.id).sort().join('+');
   const hora = ev => minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
-  const ord = [a, b].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)) || ((+x.km||0) - (+y.km||0)));
-  const [p1, p2] = ord, trecho = kmEntre(p1, p2);
   const c = cfgSaida();
-  const h1 = horariosSaida(p1, fase, D);
-  const minTrecho = trecho != null ? Math.round(trecho / c.vel * 60) : null;
-  const cheg2 = (h1 && minTrecho != null) ? minDe(h1.chegada) + c.descarga + minTrecho : null;
-  const kmTot = (+p1.km||0) + (trecho||0) + (+p2.km||0);
-  return {paradas: ord.map(ev=>({ev})), trecho, kmTot, h1, chegada2: cheg2 != null ? hm(cheg2) : null,
-    atraso2: (cheg2 != null && hora(p2) != null) ? cheg2 - hora(p2) : null};
+  const ot = ROTA_OTIMA[key];
+  const ordem = (ot && ot.ordem.length === evs.length) ? ot.ordem.map(id=>evs.find(e=>e.id===id)).filter(Boolean)
+    : [...evs].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)) || ((+x.km||0) - (+y.km||0)));
+  const h1 = horariosSaida(ordem[0], fase, D);
+  const paradas = [{ev:ordem[0], chegada: h1 ? h1.chegada : null, atraso: 0, trecho: +ordem[0].km || null}];
+  let t = h1 ? minDe(h1.chegada) : null, km = +ordem[0].km || 0;
+  for(let i=1; i<ordem.length; i++){
+    const leg = ot && ot.legs && ot.legs[i];
+    const tr = leg ? leg.km : kmEntre(ordem[i-1], ordem[i]);
+    const mn = leg ? leg.min : (tr != null ? Math.round(tr / c.vel * 60) : null);
+    t = (t != null && mn != null) ? t + c.descarga + mn : null;
+    km += tr || 0;
+    const jan = janelaDescarga(fichaLocal(ordem[i]));
+    paradas.push({ev:ordem[i], chegada: t != null ? hm(t) : null, trecho: tr,
+      atraso: (t != null && hora(ordem[i]) != null) ? t - hora(ordem[i]) : null,
+      foraJanela: (jan && t != null && fase !== 'desm' && (t < jan.ini || t > jan.fim)) ? hm(jan.ini) + '–' + (jan.fim>=1440?'24:00':hm(jan.fim)) : null});
+  }
+  km += +ordem[ordem.length-1].km || 0;
+  if(!ot) pedirOtimizacao(D, evs.map(e=>e.id), fase);
+  return {key, paradas, kmTot: Math.round(km), h1, otimizada: !!ot,
+    /* compatível com a versão de 2 paradas */
+    chegada2: paradas[1].chegada, atraso2: paradas[1].atraso, trecho: paradas[1].trecho};
+}
+function rotaJunta(D, aId, junto, fase){ return rotaGrupo(D, membrosJunto(aId, junto), fase); }
+/* TomTom escolhe a melhor ordem (galpão → paradas → galpão); se ela estourar horário ou janela e a
+   ordem pela hora não estourar, fica a ordem pela hora */
+function pedirOtimizacao(D, ids, fase){
+  if(!CONFIG.tomtomKey || typeof fetch === 'undefined') return;
+  const key = D + '|' + fase + '|' + [...ids].sort().join('+');
+  if(rotaPendente[key] || ROTA_OTIMA[key]) return;
+  rotaPendente[key] = true;
+  otimizarRota(D, ids, fase).then(r=>{ if(r){ ROTA_OTIMA[key] = r;
+      try{ if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha(); }catch(e){}
+      try{ if(evAberto && document.getElementById('ov-ev').classList.contains('on') && ids.includes(evAberto)) verEvento(evAberto); }catch(e){}
+    } }).catch(()=>{}).finally(()=>{ setTimeout(()=>{ delete rotaPendente[key]; }, 10*60*1000); });
+}
+async function otimizarRota(D, ids, fase){
+  const g0 = await coordGalpao(); if(!g0) return null;
+  const evs = ids.map(id=>eventos.find(e=>e.id===id)).filter(Boolean);
+  const pts = evs.map(evGeo); if(pts.some(x=>!x)) return null;
+  const cam = evs.map(e=>maiorCaminhao(e, fase)).filter(Boolean)[0];
+  const locs = [g0, ...pts, g0].map(p=>p.lat + ',' + p.lon).join(':');
+  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + locs + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) +
+    '&travelMode=truck&routeType=fastest&computeBestOrder=true' + paramsCaminhao(cam);
+  const r = await fetch(u); if(!r.ok) return null;
+  const j = await r.json(), rt = j.routes && j.routes[0]; if(!rt) return null;
+  const opt = (j.optimizedWaypoints || []).sort((a,b)=>a.optimizedIndex - b.optimizedIndex).map(w=>evs[w.providedIndex]).filter(Boolean);
+  const ordemTT = opt.length === evs.length ? opt : evs;
+  const legs = [null, ...(rt.legs||[]).slice(1, evs.length).map(l=>({km: Math.round((l.summary.lengthInMeters||0)/1000), min: Math.round((l.summary.travelTimeInSeconds||0)/60)}))];
+  const candTT = {ordem: ordemTT.map(e=>e.id), legs, km: Math.round((rt.summary.lengthInMeters||0)/1000), t: Date.now(), fonte:'tomtom'};
+  /* confere horário/janela da ordem do TomTom contra a ordem pela hora */
+  ROTA_OTIMA[D + '|' + fase + '|' + [...ids].sort().join('+')] = candTT;
+  const rTT = rotaGrupo(D, ids, fase);
+  const ruimTT = rTT.paradas.filter(p=>(p.atraso != null && p.atraso > 30) || p.foraJanela).length;
+  if(ruimTT){
+    delete ROTA_OTIMA[D + '|' + fase + '|' + [...ids].sort().join('+')];
+    const hora = ev => minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
+    const ordH = [...evs].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)));
+    if(ordH.map(e=>e.id).join() !== ordemTT.map(e=>e.id).join()){
+      const locs2 = [g0, ...ordH.map(evGeo), g0].map(p=>p.lat + ',' + p.lon).join(':');
+      const r2 = await fetch('https://api.tomtom.com/routing/1/calculateRoute/' + locs2 + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&travelMode=truck&routeType=fastest' + paramsCaminhao(cam));
+      if(r2.ok){ const j2 = await r2.json(), rt2 = j2.routes && j2.routes[0];
+        if(rt2) return {ordem: ordH.map(e=>e.id), legs:[null, ...(rt2.legs||[]).slice(1, evs.length).map(l=>({km: Math.round((l.summary.lengthInMeters||0)/1000), min: Math.round((l.summary.travelTimeInSeconds||0)/60)}))],
+          km: Math.round((rt2.summary.lengthInMeters||0)/1000), t: Date.now(), fonte:'horário'}; }
+    }
+  }
+  return candTT;
+}
+/* unidades do dia: cada evento com 1 viagem, ou um grupo já combinado */
+function unidadesDoDia(ops){
+  const out = [], vistos = new Set();
+  ops.forEach(o=>{
+    const vs = o.viagens.filter(x=>!x.jaLocal);
+    if(vs.length !== 1) return;
+    const ids = membrosJunto(o.ev.id, vs[0].junto);
+    const k = o.fase + '|' + ids.join('+');
+    if(vistos.has(k)) return; vistos.add(k);
+    out.push({fase:o.fase, ids, evs: ids.map(id=>eventos.find(e=>e.id===id)), v: vs[0].v, motorista: vs[0].motorista});
+  });
+  return out;
 }
 function sugestoesJuntar(D){
   const {ops} = opsDoDia(D);
   const raio = cfgSaida().raio;
   const out = [];
   if(!raio) return out;
-  for(let i=0; i<ops.length; i++) for(let j=i+1; j<ops.length; j++){
-    const A = ops[i], B = ops[j];
-    if(A.fase !== B.fase) continue;
-    const vA = A.viagens.filter(x=>!x.jaLocal), vB = B.viagens.filter(x=>!x.jaLocal);
-    if(vA.length !== 1 || vB.length !== 1) continue;           /* só viagem única de cada lado */
-    if(vA[0].junto || vB[0].junto) continue;
-    const km = kmEntre(A.ev, B.ev);
+  const U = unidadesDoDia(ops);
+  for(let i=0; i<U.length; i++) for(let j=i+1; j<U.length; j++){
+    const A = U[i], B = U[j];
+    if(A.fase !== B.fase || A.ids.some(id=>B.ids.includes(id))) continue;
+    if(A.ids.length + B.ids.length > 4) continue;                 /* no máximo 4 paradas */
+    let km = null;
+    A.evs.forEach(a=>B.evs.forEach(b=>{ const d = kmEntre(a, b); if(d != null && (km == null || d < km)) km = d; }));
     if(km == null || km > raio) continue;
-    const cA = carga(A.ev), cB = carga(B.ev);
-    if(!(cA.volF || cA.pesoF) || !(cB.volF || cB.pesoF)) continue;
-    const lim = Math.min(...[A.ev, B.ev].map(e=>+((fichaLocal(e)||{}).maxC) || 999));
-    const pecaMax = Math.max(cA.maiorPeca||0, cB.maiorPeca||0);
-    const cand = [vA[0].v, vB[0].v].filter(v=>!v.manut && (+v.c||0) <= lim && (!pecaMax || (+v.c||0) >= pecaMax))
-      .filter(v => v.vol >= cA.volF + cB.volF && v.peso >= cA.pesoF + cB.pesoF)
-      .sort((x,y)=>x.vol - y.vol);
+    const todos = [...A.evs, ...B.evs];
+    const cs = todos.map(carga);
+    if(cs.some(c=>!(c.volF || c.pesoF))) continue;
+    const vol = cs.reduce((s,c)=>s+c.volF, 0), peso = cs.reduce((s,c)=>s+c.pesoF, 0);
+    const lim = Math.min(...todos.map(e=>+((fichaLocal(e)||{}).maxC) || 999));
+    const pecaMax = Math.max(...cs.map(c=>c.maiorPeca||0));
+    const cand = [A, B].filter(u=>!u.v.manut && (+u.v.c||0) <= lim && (!pecaMax || (+u.v.c||0) >= pecaMax) && u.v.vol >= vol && u.v.peso >= peso)
+      .sort((x,y)=>x.v.vol - y.v.vol);
     if(!cand.length) continue;
-    const v = cand[0];
-    const dono = (vA[0].v.id === v.id) ? A : B;
-    out.push({D, fase:A.fase, a:A.ev, b:B.ev, v, dono: dono.ev, motorista: (dono===A ? vA[0] : vB[0]).motorista, km,
-      vol: cA.volF + cB.volF, livre: (vA[0].v.id===vB[0].v.id) ? null : (dono===A ? vB[0].v : vA[0].v)});
+    const dono = cand[0], outro = dono === A ? B : A;
+    out.push({D, fase:A.fase, idsA:A.ids, idsB:B.ids, a:A.evs[0], b:B.evs[0], nomesA:A.evs.map(e=>e.nome), nomesB:B.evs.map(e=>e.nome),
+      v:dono.v, motorista:dono.motorista, km, vol, livre: outro.v.id === dono.v.id ? null : outro.v, total: todos.length});
   }
   return out;
 }
-/* coloca a viagem de um evento naquele dia no caminhão V, marcando "junto" */
-function marcarViagemJunto(ev, D, fase, V, motorista, outroId, trocar){
+/* coloca a viagem de um evento naquele dia no caminhão V, marcando o grupo */
+function marcarViagemJunto(ev, D, fase, V, motorista, grupo, trocar){
   let dz = fase === 'desm';
   if(dz && !temFrotaDesm(ev)){
     ev.veiculosD = [...frotaDo(ev,'mont')];
@@ -3171,50 +4261,54 @@ function marcarViagemJunto(ev, D, fase, V, motorista, outroId, trocar){
   const esc = escalaDo(ev, dz ? 'desm' : 'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
   const alvo = esc.find(x=>(x.dia || padrao) === D);
   if(!alvo) return false;
-  if(trocar){ frota[alvo.i] = V.id; alvo.v = V.id; alvo.motorista = V.agregado ? V.motoristaFixo : (motorista || alvo.motorista); }
-  alvo.junto = outroId;
+  if(trocar && alvo.v !== V.id){ frota[alvo.i] = V.id; alvo.v = V.id; alvo.motorista = V.agregado ? V.motoristaFixo : (motorista || alvo.motorista); }
+  alvo.junto = grupo;
   if(dz){ ev.veiculosD = frota; ev.escalaD = esc; } else { ev.veiculos = frota; ev.escala = esc; }
   return true;
 }
-function juntarViagem(D, aId, bId, fase){
-  const s = sugestoesJuntar(D).find(x=>x.fase===fase && ((x.a.id===aId && x.b.id===bId) || (x.a.id===bId && x.b.id===aId)));
+function juntarViagem(D, aKey, bKey, fase){
+  const ka = String(aKey).split('+').sort().join('+'), kb = String(bKey).split('+').sort().join('+');
+  const s = sugestoesJuntar(D).find(x=>x.fase===fase && ((x.idsA.join('+')===ka && x.idsB.join('+')===kb) || (x.idsA.join('+')===kb && x.idsB.join('+')===ka)));
   if(!s) return toast('Essa combinação não vale mais — confira os caminhões do dia.');
-  const outro = s.dono.id === s.a.id ? s.b : s.a;
-  marcarViagemJunto(s.dono, D, fase, s.v, s.motorista, outro.id, false);
-  marcarViagemJunto(outro, D, fase, s.v, s.motorista, s.dono.id, true);
+  const ids = [...new Set([...s.idsA, ...s.idsB])].sort(), grupo = ids.join('+');
+  ids.forEach(id=>{ const ev = eventos.find(e=>e.id===id); if(ev) marcarViagemJunto(ev, D, fase, s.v, s.motorista, grupo, true); });
   salvar(); replanejar(true); renderQuadro();
   if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha();
-  if(document.getElementById('ov-ev').classList.contains('on')) verEvento(outro.id);
-  toast('🔗 ' + s.v.tipo + ' ' + s.v.placa + ' leva ' + s.a.nome + ' e ' + s.b.nome + ' na mesma viagem' + (s.livre ? ' — o ' + s.livre.tipo + ' ' + s.livre.placa + ' ficou livre' : '') + '.');
+  if(document.getElementById('ov-ev').classList.contains('on') && evAberto) verEvento(evAberto);
+  toast('🔗 ' + s.v.tipo + ' ' + s.v.placa + ' leva ' + [...s.nomesA, ...s.nomesB].join(' + ') + ' na mesma viagem' + (s.livre ? ' — o ' + s.livre.tipo + ' ' + s.livre.placa + ' ficou livre' : '') + '.');
 }
-function desfazerJunto(aId, bId){
-  [aId, bId].forEach(id=>{
+function desfazerJunto(aId, junto){
+  const membros = membrosJunto(aId, junto);
+  membros.forEach(id=>{
     const ev = eventos.find(e=>e.id===id); if(!ev) return;
-    ['escala','escalaD'].forEach(k=>{ (ev[k]||[]).forEach(x=>{ if(x.junto === (id===aId ? bId : aId)) x.junto = null; }); });
+    ['escala','escalaD'].forEach(k=>{ (ev[k]||[]).forEach(x=>{ if(x.junto && membrosJunto(id, x.junto).some(m=>m!==id && membros.includes(m))) x.junto = null; }); });
   });
   salvar(); replanejar(true); renderQuadro();
-  if(document.getElementById('ov-ev').classList.contains('on')) verEvento(aId);
+  if(document.getElementById('ov-ev').classList.contains('on') && evAberto) verEvento(evAberto);
   toast('Viagem separada. Confira o caminhão de cada evento.');
 }
-function htmlRota(D, aId, bId, fase){
-  const rt = rotaJunta(D, aId, bId, fase); if(!rt) return '';
+function htmlRota(D, aId, junto, fase){
+  const rt = rotaJunta(D, aId, junto, fase); if(!rt) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const [p1, p2] = rt.paradas.map(x=>x.ev);
-  return 'Galpão → <b>' + esc(p1.nome) + '</b>' + (+p1.km ? ' (' + p1.km + ' km)' : '') + ' → <b>' + esc(p2.nome) + '</b>' + (rt.trecho!=null ? ' (≈' + rt.trecho + ' km)' : '') + ' → galpão · ≈' + rt.kmTot + ' km no total' +
-    (rt.h1 ? '<br><small>' + txtSaida(rt.h1) + ' na 1ª parada' + (rt.chegada2 ? ' · 2ª parada ≈' + rt.chegada2 + (rt.atraso2 > 15 ? ' <b style="color:#b0483c">(' + durTxt(rt.atraso2) + ' depois do início de ' + esc(p2.nome) + ')</b>' : '') : '') + '</small>' : '') +
-    '<br><small>' + (fase==='desm' ? 'Recolhe primeiro ' + esc(p1.nome) + ', depois ' + esc(p2.nome) + '.' : 'Carregue primeiro o material de ' + esc(p2.nome) + ' (vai no fundo) e por último o de ' + esc(p1.nome) + '.') + '</small>';
+  const P = rt.paradas;
+  return 'Galpão → ' + P.map((p,i)=>'<b>' + esc(p.ev.nome) + '</b>' + (p.trecho != null ? ' <small>(' + (i?'≈':'') + p.trecho + ' km' + (p.chegada ? ', ' + (i?'≈':'') + p.chegada : '') + ')</small>' : '') +
+      (p.atraso != null && p.atraso > 15 ? ' <b style="color:#b0483c">⚠ ' + durTxt(p.atraso) + ' depois do início</b>' : '') +
+      (p.foraJanela ? ' <b style="color:#b0483c">⏰ fora da janela ' + p.foraJanela + '</b>' : '')).join(' → ') +
+    ' → galpão · ≈' + rt.kmTot + ' km' + (rt.otimizada ? ' · <span style="color:#0f8a4d">🧭 ordem otimizada</span>' : (CONFIG.tomtomKey ? ' · <small>otimizando…</small>' : '')) +
+    (rt.h1 ? '<br><small>' + txtSaida(rt.h1) + ' na 1ª parada</small>' : '') +
+    '<br><small>' + (fase==='desm' ? 'Recolhe na ordem: ' + P.map(p=>esc(p.ev.nome)).join(', ') + '.' : 'Carregue na ordem inversa das paradas: primeiro ' + P.slice().reverse().map(p=>esc(p.ev.nome)).join(', depois ') + ' (o da 1ª parada fica na porta).') + '</small>';
 }
 function htmlJuntar(D){
   const {ops} = opsDoDia(D);
   const feitos = [], vistos = new Set();
   ops.forEach(o=>o.viagens.forEach(x=>{
     if(!x.junto) return;
-    const k = [o.ev.id, x.junto].sort().join('+') + o.fase;
+    const k = membrosJunto(o.ev.id, x.junto).join('+') + o.fase;
     if(vistos.has(k)) return; vistos.add(k);
     feitos.push('🔗 <b>' + x.v.tipo + ' ' + x.v.placa + '</b>' + (x.motorista ? ' (' + x.motorista + ')' : '') + ': ' + htmlRota(D, o.ev.id, x.junto, o.fase));
   }));
-  const sug = sugestoesJuntar(D).map(s=>'💡 <b>' + s.a.nome + '</b> e <b>' + s.b.nome + '</b> ficam a ≈' + s.km + ' km um do outro e a carga (' + num(s.vol) + ' m³) cabe no <b>' + s.v.tipo + ' ' + s.v.placa + '</b>' + (s.livre ? ' — libera o ' + s.livre.tipo + ' ' + s.livre.placa : '') + '. ' +
-    '<button class="mini" onclick="event.stopPropagation();juntarViagem(\'' + D + '\',\'' + s.a.id + '\',\'' + s.b.id + '\',\'' + s.fase + '\')">🔗 Juntar na mesma viagem</button>');
+  const sug = sugestoesJuntar(D).map(s=>'💡 <b>' + [...s.nomesA, ...s.nomesB].join('</b> + <b>') + '</b> ficam a ≈' + s.km + ' km e a carga (' + num(s.vol) + ' m³) cabe no <b>' + s.v.tipo + ' ' + s.v.placa + '</b>' + (s.livre ? ' — libera o ' + s.livre.tipo + ' ' + s.livre.placa : '') + '. ' +
+    '<button class="mini" onclick="event.stopPropagation();juntarViagem(\'' + D + '\',\'' + s.idsA.join('+') + '\',\'' + s.idsB.join('+') + '\',\'' + s.fase + '\')">🔗 Juntar na mesma viagem</button>');
   if(!feitos.length && !sug.length) return '';
   return '<div class="alert" style="margin:0 0 12px;line-height:1.6">' + (feitos.length ? '<b>Viagens combinadas</b><br>' + feitos.join('<br>') : '') + (feitos.length && sug.length ? '<br>' : '') + (sug.length ? '<b>Dá pra juntar</b><br>' + sug.join('<br>') : '') + '</div>';
 }
@@ -3230,14 +4324,14 @@ function blocoJuntarEv(ev){
       partes.push('🔗 <b>' + rotDia(D) + '</b> — ' + x.v.tipo + ' ' + x.v.placa + ': ' + htmlRota(D, ev.id, x.junto, o.fase) +
         ' <button class="mini" onclick="desfazerJunto(\'' + ev.id + '\',\'' + x.junto + '\')">Separar</button>');
     }));
-    sugestoesJuntar(D).filter(s=>s.a.id===ev.id || s.b.id===ev.id).forEach(s=>{
-      const o = s.a.id===ev.id ? s.b : s.a;
-      partes.push('💡 <b>' + rotDia(D) + '</b> — ' + o.nome + ' fica a ≈' + s.km + ' km e as duas cargas cabem no ' + s.v.tipo + ' ' + s.v.placa + '. ' +
-        '<button class="mini" onclick="juntarViagem(\'' + D + '\',\'' + s.a.id + '\',\'' + s.b.id + '\',\'' + s.fase + '\')">🔗 Juntar</button>');
+    sugestoesJuntar(D).filter(s=>s.idsA.includes(ev.id) || s.idsB.includes(ev.id)).forEach(s=>{
+      const outros = s.idsA.includes(ev.id) ? s.nomesB : s.nomesA;
+      partes.push('💡 <b>' + rotDia(D) + '</b> — ' + outros.join(' + ') + ' fica a ≈' + s.km + ' km e as cargas cabem no ' + s.v.tipo + ' ' + s.v.placa + '. ' +
+        '<button class="mini" onclick="juntarViagem(\'' + D + '\',\'' + s.idsA.join('+') + '\',\'' + s.idsB.join('+') + '\',\'' + s.fase + '\')">🔗 Juntar</button>');
     });
   });
   if(!partes.length) return '';
-  return '<div style="grid-column:1/-1"><i>🔗 Um caminhão, dois eventos</i><div style="font-size:12.5px;line-height:1.7">' + partes.join('<br>') + '</div></div>';
+  return '<div style="grid-column:1/-1"><i>🔗 Um caminhão, vários eventos</i><div style="font-size:12.5px;line-height:1.7">' + partes.join('<br>') + '</div></div>';
 }
 /* coordenadas dos eventos das próximas semanas (para achar vizinhos), sem mexer no km */
 let geoRodando = false;
@@ -3269,7 +4363,7 @@ function resumoSemana(seg){
       (o.fase==='desm' ? evsD : evsM).add(o.ev.id);
       diarias += o.pessoas.filter(pp=>!pp.prod).length;
       o.viagens.filter(x=>!x.jaLocal).forEach(x=>{
-        if(x.junto){ const k = [o.ev.id, x.junto].sort().join('+'); if(combos.has(k)) return; combos.add(k);
+        if(x.junto){ const k = membrosJunto(o.ev.id, x.junto).join('+'); if(combos.has(k)) return; combos.add(k);
           const rt = rotaJunta(d.D, o.ev.id, x.junto, o.fase); saidas++; km += rt ? rt.kmTot : 2*(+o.ev.km||0); return; }
         saidas++; km += 2*(+o.ev.km||0);
       });
@@ -3284,6 +4378,7 @@ function resumoSemana(seg){
   [...new Set([...evsM, ...evsD])].forEach(id=>{
     const ev = eventos.find(e=>e.id===id);
     plano(ev).conflitos.forEach(c=>atencao.push('⚠ ' + ev.nome + ': ' + c.msg));
+    { const t = tempoAprendido(ev); if(t && t.curto) atencao.push('🧠 ' + ev.nome + ': ' + t.estr + ' costuma levar ' + t.dias + ' dias de montagem — planejado ' + t.planejado); }
   });
   /* semana passada */
   const ant = [0,1,2,3,4,5,6].map(n=>somaDias(seg, n-7));
@@ -3297,6 +4392,7 @@ function resumoSemana(seg){
     const fimE = dia(fimDesm(ev)) || dia(ev.desm);
     if(fimE && ant.includes(fimE)) final.push(ev.nome + (ev.esp==='finalizado' ? '' : ' (ainda não marcado como finalizado)'));
   });
+  avisosPico().forEach(a=>atencao.push(a));
   return {seg, fim:dias[6], porDia, num:{mont:evsM.size, desm:evsD.size, saidas, km:Math.round(km), diarias},
     atencao:[...new Set(atencao)], sug, passada:{faltas, manut, final, ini:ant[0], fim:ant[6]}};
 }
@@ -3741,6 +4837,7 @@ function verEvento(id){
         '📅 <b>A importação mudou as datas deste evento:</b> '+ev.datasMudaram.o_que.join(' · ')+'.'+
         (ev.datasMudaram.avisar ? ' A escala e a agenda já tinham sido enviadas com as datas antigas — <b>avise Produção e Frota</b>.' : '')+
         ' <button class="mini" onclick="okRemarcado(\''+ev.id+'\')">Ciente, tirar o aviso</button></div></div>' : '')+
+      blocoTempoAprendido(ev)+blocoDatasEspeciais(ev)+
       (function(){
         const hs = horaSugerida(ev);
         if(!hs || !ev.mont || String(ev.mont).slice(11,16) === hs.hora) return '';
@@ -3757,10 +4854,11 @@ function verEvento(id){
         'style="width:90px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
         'onchange="setKmEvento(\''+ev.id+'\',this.value)"><b>km</b>'+
         '<button class="mini" onclick="calcularKm(\''+ev.id+'\')" title="Distância por estrada do galpão até o local do evento">📍 Calcular</button></div>'+
-        (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+'</small>' : '')+'</div>'+
+        (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+(ev.rotaCaminhao?' · rota de caminhão ('+ev.rotaCaminhao+')':'')+'</small>' : '')+'</div>'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
       blocoTransito(ev)+
+      '<div style="grid-column:1/-1"><i>⛽ Custo da viagem</i>'+blocoCusto(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
       blocoJuntarEv(ev)+blocoDiasFora(ev)+
@@ -4081,7 +5179,7 @@ function blocoFrota(ev, modo){
       const alternado = x.dia && x.dia !== padraoDia;
       return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+viagem+' <span style="color:var(--muted)">'+num(v2.vol)+' m³ · '+num(v2.peso)+' kg</span>'+
              (alternado?' <span class="tag" style="color:#a86412">sai '+fmtD(x.dia)+'</span>':'')+
-             ((x.junto && (fase==='mont' || temFrotaDesm(ev))) ? ' <span class="tag" style="color:#1c4fa0" title="Mesmo caminhão, mesma viagem">🔗 junto com '+nomeDo(x.junto)+' <a href="#" onclick="event.preventDefault();desfazerJunto(\''+ev.id+'\',\''+x.junto+'\')" style="color:#b0483c">desfazer</a></span>' : '')+'</span>'+
+             ((x.junto && (fase==='mont' || temFrotaDesm(ev))) ? ' <span class="tag" style="color:#1c4fa0" title="Mesmo caminhão, mesma viagem">🔗 junto com '+nomesJunto(ev.id, x.junto)+' <a href="#" onclick="event.preventDefault();desfazerJunto(\''+ev.id+'\',\''+x.junto+'\')" style="color:#b0483c">desfazer</a></span>' : '')+'</span>'+
              '<span style="display:flex;gap:10px;align-items:center">'+
              '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              sel+
@@ -5594,7 +6692,7 @@ function renderCadastros(){
 
   document.getElementById('tb-motoristas').innerHTML = motoristas.map((m,i)=>{
     const v = m.veiculo ? veiculos.find(x=>x.id===m.veiculo) : null;
-    return '<tr><td><b>'+m.nome+'</b></td>'+
+    return '<tr><td><b>'+m.nome+'</b><br><input class="cad" style="width:140px;margin-top:4px" value="'+String(m.tel||'').replace(/"/g,'&quot;')+'" placeholder="WhatsApp" onchange="motoristas['+i+'].tel=this.value.trim();salvar()"></td>'+
     '<td>'+(m.agregado ? '<span class="tag">Agregado</span>' : '<span class="tag">Frota própria</span>')+'</td>'+
     '<td>'+(v ? v.tipo+' '+v.placa : (m.carreta ? 'Roda carreta e o resto da frota' : 'Toco, truck, baú e F-4000'))+'</td>'+
     '<td><span class="dot" style="background:'+(m.situacao==='Ativo'?'var(--green)':'var(--amber)')+'"></span>'+m.situacao+'</td>'+
@@ -5624,7 +6722,13 @@ function renderCadastros(){
     '<td style="white-space:nowrap">'+
       '<input class="cad dim" type="number" step="0.05" value="'+v.c+'" title="Comprimento" onchange="setVeiculoDim(\''+v.id+'\',\'c\',this.value)"> × '+
       '<input class="cad dim" type="number" step="0.05" value="'+v.l+'" title="Largura" onchange="setVeiculoDim(\''+v.id+'\',\'l\',this.value)"> × '+
-      '<input class="cad dim" type="number" step="0.05" value="'+v.a+'" title="Altura" onchange="setVeiculoDim(\''+v.id+'\',\'a\',this.value)"> m</td>'+
+      '<input class="cad dim" type="number" step="0.05" value="'+v.a+'" title="Altura" onchange="setVeiculoDim(\''+v.id+'\',\'a\',this.value)"> m'+
+      (function(){ const d = dimsCaminhao(v);
+        return '<div style="font-size:11px;color:var(--muted);margin-top:4px" title="Usado na rota de caminhão: evita viaduto baixo e ponte com limite de peso">🚚 na rua: altura '+
+          '<input class="cad dim" style="width:58px" type="number" step="0.05" value="'+(v.alturaTotal||'')+'" placeholder="'+d.altura.toFixed(1)+'" onchange="setVeiculoCampo(\''+v.id+'\',\'alturaTotal\',+this.value||null)"> m · peso bruto '+
+          '<input class="cad" style="width:74px" type="number" step="100" value="'+(v.pbt||'')+'" placeholder="'+d.peso+'" onchange="setVeiculoCampo(\''+v.id+'\',\'pbt\',+this.value||null)"> kg</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:3px">⛽ consumo <input class="cad dim" style="width:50px" type="number" step="0.1" value="'+(v.consumo||'')+'" placeholder="'+consumoDe(v)+'" onchange="setVeiculoCampo(\''+v.id+'\',\'consumo\',+this.value||null)"> km/l · eixos '+
+          '<input class="cad dim" style="width:42px" type="number" step="1" value="'+(v.eixos||'')+'" placeholder="'+eixosDe(v)+'" onchange="setVeiculoCampo(\''+v.id+'\',\'eixos\',+this.value||null)"></div>'; })()+'</td>'+
     '<td style="white-space:nowrap"><input class="cad num" style="width:76px" type="number" step="0.1" value="'+v.vol+'" onchange="setVeiculoCampo(\''+v.id+'\',\'vol\',+this.value||0)"> m³</td>'+
     '<td style="white-space:nowrap"><input class="cad num" style="width:86px" type="number" step="10" value="'+v.peso+'" onchange="setVeiculoCampo(\''+v.id+'\',\'peso\',+this.value||0)"> kg</td>'+
     '<td style="white-space:nowrap">'+
@@ -5651,6 +6755,13 @@ function renderCadastros(){
   const ge = document.getElementById('galpao-end');
   if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
   { const tk = document.getElementById('cfg-tomtom'); if(tk && document.activeElement !== tk) tk.value = CONFIG.tomtomKey || ''; }
+  { const di = document.getElementById('cfg-diesel'); if(di && document.activeElement !== di) di.value = CONFIG.precoDiesel || ''; }
+  { const ur = document.getElementById('cfg-url'); if(ur && document.activeElement !== ur) ur.value = CONFIG.urlCentral || ''; }
+  { const pb = document.getElementById('cfg-pracas'); if(pb) pb.innerHTML = htmlPracas(); }
+  { const rb = document.getElementById('cfg-restr'); if(rb) rb.innerHTML = htmlRestricoes(); }
+  { const db = document.getElementById('cfg-datas'); if(db) db.innerHTML = htmlDatasEspeciais(); }
+  { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || ''; }
+  { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
   { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
@@ -6710,7 +7821,7 @@ function imprimirDiretoria(){
   const ini = REL.ini, fim = REL.fim;
   /* ---- números ---- */
   const evs = new Set(), eqs = {}, frota = {}, porDia = {}, atencao = [];
-  let viagens = 0, km = 0, diarias = 0;
+  let viagens = 0, km = 0, diarias = 0, custoTot = 0;
   linhas.forEach(l=>{
     const ev = l.ev, fase = l.tipo === 'Montagem' ? 'mont' : 'desm';
     evs.add(ev.id);
@@ -6731,6 +7842,8 @@ function imprimirDiretoria(){
       const f = frota[v.id] = frota[v.id] || {v, n:0, km:0, mot:new Set()};
       f.n++; f.km += k; if(x.motorista) f.mot.add(x.motorista);
     });
+    { const cf = custoFase(ev, fase); custoTot += cf.total;
+      escalaDo(ev, fase).forEach(x=>{ const f2 = frota[x.v]; if(f2){ const n = escalaDo(ev, fase).length || 1; f2.custo = (f2.custo||0) + cf.total / n; } }); }
     plano(ev).conflitos.forEach(c=>atencao.push(ev.nome + ': ' + c.msg));
     diasFase.forEach(d=>{ const c = cidadeClima(ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[d];
       if(w && riscoClima(w)) atencao.push(ev.nome + ' (' + fmtD(d).slice(0,5) + '): previsão de ' + txtClima(w).replace(/[☔⛈💨☀]/g,'').trim()); });
@@ -6742,6 +7855,7 @@ function imprimirDiretoria(){
     [nD, 'desmontagens'],
     [viagens, 'viagens de caminhão'],
     ['≈ ' + Math.round(km).toLocaleString('pt-BR'), 'km rodados'],
+    [reais(custoTot), 'custo de frota (diesel + pedágio)'],
     [diarias, 'diárias de equipe']
   ];
   /* ---- gráfico: operações em campo por dia (montagem e desmontagem empilhadas) ---- */
@@ -6775,8 +7889,8 @@ function imprimirDiretoria(){
       '<td><div class="barra"><span style="width:'+Math.round(eqs[n].dias.size/maxDias*100)+'%"></span><b>'+eqs[n].dias.size+'</b></div></td></tr>').join('')+'</tbody></table>';
   /* ---- frota ---- */
   const frL = Object.values(frota).sort((a,b)=>b.n - a.n || b.km - a.km);
-  const tabFr = frL.length ? '<table><thead><tr><th>Veículo</th><th>Motorista(s)</th><th class="n">Viagens</th><th class="n">≈ km</th></tr></thead><tbody>'+
-    frL.map(f=>'<tr><td><b>'+esc(f.v.tipo+' '+f.v.placa)+'</b>'+(f.v.agregado?' <small>agregado</small>':'')+'</td><td>'+esc([...f.mot].join(', ')||'—')+'</td><td class="n">'+f.n+'</td><td class="n">'+Math.round(f.km).toLocaleString('pt-BR')+'</td></tr>').join('')+'</tbody></table>'
+  const tabFr = frL.length ? '<table><thead><tr><th>Veículo</th><th>Motorista(s)</th><th class="n">Viagens</th><th class="n">≈ km</th><th class="n">≈ custo</th></tr></thead><tbody>'+
+    frL.map(f=>'<tr><td><b>'+esc(f.v.tipo+' '+f.v.placa)+'</b>'+(f.v.agregado?' <small>agregado</small>':'')+'</td><td>'+esc([...f.mot].join(', ')||'—')+'</td><td class="n">'+f.n+'</td><td class="n">'+Math.round(f.km).toLocaleString('pt-BR')+'</td><td class="n">'+reais(f.custo||0)+'</td></tr>').join('')+'</tbody></table>'
     : '<p class="obs">Nenhum caminhão lançado nas operações selecionadas.</p>';
   /* ---- agenda em linha do tempo ---- */
   const porIni = {};
@@ -6804,7 +7918,7 @@ function imprimirDiretoria(){
     '.topo img{max-height:58px;max-width:200px}'+
     '.topo h1{margin:0;font-size:22px;color:'+AZ+';letter-spacing:.3px;text-transform:uppercase}'+
     '.topo .per{margin-left:auto;text-align:right;font-size:12px;color:#5a6478}.topo .per b{display:block;font-size:15px;color:#1c2740}'+
-    '.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0 6px}'+
+    '.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 6px}'+
     '.kpi{border:1px solid #e3e8f0;border-top:3px solid '+AZ+';border-radius:6px;padding:9px 10px}'+
     '.kpi b{display:block;font-size:22px;color:'+AZ+';line-height:1.1}.kpi span{font-size:10.5px;color:#5a6478;text-transform:uppercase;letter-spacing:.3px}'+
     'h2{font-size:13px;color:'+AZ+';text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px;padding-left:9px;border-left:4px solid '+LA+'}'+
@@ -7121,7 +8235,7 @@ function agendaDe(tipo, nome){
       const viag = (fz, padrao, rot, semDiaProprio) => escalaDo(ev, fz).forEach(x => {
         if(x.motorista !== nome) return;
         const v = veiculos.find(y => y.id === x.v);
-        put((!semDiaProprio && x.dia) || padrao, ev, 'T', rot + (v ? ' · ' + (v.placa || v.nome || v.id) : '') + ((!semDiaProprio && x.junto) ? ' · 🔗 junto com ' + nomeDo(x.junto) : ''));
+        put((!semDiaProprio && x.dia) || padrao, ev, 'T', rot + (v ? ' · ' + (v.placa || v.nome || v.id) : '') + ((!semDiaProprio && x.junto) ? ' · 🔗 junto com ' + nomesJunto(ev.id, x.junto) : ''));
       });
       viag('mont', dia(ev.mont), 'leva a montagem');
       if(ev.desm){
@@ -7257,15 +8371,102 @@ function abrirTV(){
   clearInterval(tvTimer); tvTimer = setInterval(renderTV, 60*1000);
   clearInterval(tvRelogio); tvRelogio = setInterval(relogioTV, 1000); relogioTV();
   clearInterval(tvRola); tvRola = setInterval(rolarTV, 9000);
+  tvMostrarCards(); clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 40000);
+  carregarLeaflet().catch(()=>{});
   try{ if(location.hash !== '#tv') history.replaceState(null, '', '#tv'); }catch(e){}
 }
 function fecharTV(){
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
   t.classList.remove('on');
-  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola);
+  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola); clearTimeout(tvCarrossel);
   try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
   try{ if(tvWake) tvWake.release(); }catch(e){}
   try{ if(location.hash === '#tv') history.replaceState(null, '', location.pathname + location.search); }catch(e){}
+}
+/* ---- mapa do dia: galpão, destinos de hoje e dos próximos dias, rotas e trânsito ---- */
+let tvCarrossel = null, tvMapa = null, tvCamadas = null, leafletPromessa = null;
+function carregarLeaflet(){
+  if(typeof window === 'undefined' || typeof document === 'undefined' || !document.head) return Promise.reject();
+  if(window.L && window.L.map) return Promise.resolve();
+  if(leafletPromessa) return leafletPromessa;
+  leafletPromessa = new Promise((ok, erro)=>{
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+    s.onload = ()=>ok(); s.onerror = ()=>{ leafletPromessa = null; erro(); }; document.head.appendChild(s);
+  });
+  return leafletPromessa;
+}
+function tvMostrarCards(){
+  const c = document.getElementById('tv-cols'), m = document.getElementById('tv-mapa-box');
+  if(c) c.style.display = ''; if(m) m.style.display = 'none';
+}
+function destinosTV(){
+  const out = [];
+  [0,1,2,3,4].forEach(n=>{
+    const D = somaDiaISO(HOJE, n);
+    opsDoDia(D).ops.forEach(o=>{
+      if(o.fora) return;
+      const g = evGeo(o.ev); if(!g) return;
+      if(out.some(x=>x.ev.id===o.ev.id)) return;   /* o primeiro dia em que aparece */
+      out.push({ev:o.ev, D, n, o, g});
+    });
+  });
+  return out;
+}
+async function tvAlternar(){
+  const box = document.getElementById('tv-mapa-box'), cols = document.getElementById('tv-cols');
+  const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
+  const noMapa = box && box.style.display !== 'none';
+  if(noMapa){ tvMostrarCards(); tvCarrossel = setTimeout(tvAlternar, 40000); return; }
+  const dest = destinosTV();
+  let pronto = false;
+  try{ await carregarLeaflet(); pronto = dest.length > 0 && !!(await coordGalpao()); }catch(e){}
+  if(!pronto){ tvCarrossel = setTimeout(tvAlternar, 40000); return; }
+  cols.style.display = 'none'; box.style.display = '';
+  try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); }
+  tvCarrossel = setTimeout(tvAlternar, 20000);
+}
+async function desenharMapaTV(dest){
+  const L = window.L, g0 = await coordGalpao();
+  const key = CONFIG.tomtomKey;
+  if(!tvMapa){
+    tvMapa = L.map('tv-mapa', {zoomControl:false, attributionControl:true});
+    L.tileLayer(key ? 'https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key=' + key : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:18, attribution: key ? '© TomTom' : '© OpenStreetMap'}).addTo(tvMapa);
+    if(key) L.tileLayer('https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=' + key, {maxZoom:18, opacity:.75}).addTo(tvMapa);
+    tvCamadas = L.layerGroup().addTo(tvMapa);
+  }
+  tvMapa.invalidateSize();
+  tvCamadas.clearLayers();
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const pts = [[g0.lat, g0.lon]];
+  /* rotas: as que já estão na memória; as que faltam, busca (só com a chave) */
+  for(const d of dest){
+    if(!ROTAS[d.ev.id] && key){ try{ const r = await rotaTomTom(g0, d.g, maiorCaminhao(d.ev, 'mont')); if(r && r.pts) ROTAS[d.ev.id] = r.pts; }catch(e){} }
+    const cor = d.n === 0 ? '#f0851e' : corEquipe(d.o.equipe) || '#3d7be0';
+    if(ROTAS[d.ev.id]) L.polyline(ROTAS[d.ev.id], {color: cor, weight: d.n===0 ? 6 : 4, opacity: d.n===0 ? .95 : .6}).addTo(tvCamadas);
+    const rot = '<div style="background:'+(d.n===0?'#f0851e':'#16234b')+';color:#fff;border:2px solid #fff;border-radius:9px;padding:5px 10px;font:700 15px Segoe UI,Arial;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)">'+
+      (d.o.fase==='desm'?'📤 ':'🔨 ')+esc(d.ev.nome.length>28 ? d.ev.nome.slice(0,27)+'…' : d.ev.nome)+
+      '<div style="font-weight:500;font-size:12.5px;opacity:.9">'+(d.n===0?'HOJE':rotDia(d.D))+(d.o.hora?' · '+d.o.hora:'')+' · '+esc(d.o.equipe||'')+'</div></div>';
+    L.marker([d.g.lat, d.g.lon], {icon: L.divIcon({className:'', html: rot, iconSize:null, iconAnchor:[-14, 22]})}).addTo(tvCamadas);
+    L.circleMarker([d.g.lat, d.g.lon], {radius:8, color:'#fff', weight:3, fillColor: cor, fillOpacity:1}).addTo(tvCamadas);
+    pts.push([d.g.lat, d.g.lon]);
+  }
+  /* caminhões com o GPS do motorista */
+  Object.keys(LOCS).forEach(k=>{
+    const l = LOCS[k]; if(!l || l.lat == null || Date.now() - (l.t||0) > 8*3600*1000 || l.status === 'local') return;
+    const ev = eventos.find(e=>e.id===l.ev); if(!ev) return;
+    const e = ETA[k];
+    L.marker([l.lat, l.lon], {icon: L.divIcon({className:'', iconSize:null, iconAnchor:[18,18], html:'<div style="display:flex;align-items:center;gap:6px"><div style="width:36px;height:36px;border-radius:50%;background:#ffb25e;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:19px">🚚</div>'+
+      '<div style="background:#fff;color:#16234b;border-radius:8px;padding:3px 8px;font:700 13px Segoe UI,Arial;white-space:nowrap">'+esc(l.mot || '')+' → '+esc(ev.nome.slice(0,22))+(e ? ' · chega ≈'+e.hora : '')+'</div></div>'})}).addTo(tvCamadas);
+    pts.push([l.lat, l.lon]);
+  });
+  L.marker([g0.lat, g0.lon], {icon: L.divIcon({className:'', iconSize:[44,44], iconAnchor:[22,22], html:'<div style="width:44px;height:44px;border-radius:50%;background:#1c4fa0;border:4px solid #f0851e;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 2px 10px rgba(0,0,0,.5)">🏭</div>'})}).addTo(tvCamadas);
+  tvMapa.fitBounds(pts, {padding:[80, 80], maxZoom: 12});
+  const hoje = dest.filter(d=>d.n===0).length;
+  document.getElementById('tv-mapa-leg').innerHTML = '<b style="font-size:20px">🗺 MAPA DAS OPERAÇÕES</b><br>'+
+    '<span style="color:#ffb25e">● HOJE</span> ('+hoje+') &nbsp; <span style="color:#9fc1ff">● próximos 4 dias</span> ('+(dest.length-hoje)+')<br>'+
+    (key ? '<small style="opacity:.85">cores nas ruas = trânsito agora (verde livre · laranja lento · vermelho parado)</small>' : '');
 }
 function relogioTV(){
   const r = document.getElementById('tv-rel'); if(!r) return;
@@ -7299,25 +8500,33 @@ function statusTV(hs, D, o){
 function cardTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const hs = saidaDaOp(o, D);
-  const st = statusTV(hs, D, o);
+  const cam = situacaoCaminhao(o, D);
+  const st = cam.length ? {cls: cam.every(c=>c.local) ? '' : 'agora', txt: cam.every(c=>c.local) ? 'NO LOCAL' : 'A CAMINHO'} : statusTV(hs, D, o);
   const semLider = o.pessoas.filter(pp=>!pp.prod);
   const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
   const al = [];
   const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
   if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
-  const tempo = w ? '<div class="tv-lin" style="'+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>' : '';
+  const chH = chuvaNoHorario(o.ev, D, o.fase);
+  const tempo = w ? '<div class="tv-lin" style="'+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>'+
+    (chH && chH.faixas.length ? '<div class="tv-lin" style="font-weight:800;color:'+(chH.forte?'#ffb4a8':'#ffd88a')+'">'+chH.txt+'</div>' : '') : '';
   const f = fichaLocal(o.ev); if(f && resumoFicha(f)) al.push('🚧 ' + resumoFicha(f));
+  { const ad = alertaDescarga(o.ev, saidaDaOp(o, D)); if(ad) al.push(ad.txt); }
+  { const ar = alertaRestricao(o.ev, o.fase, D, saidaDaOp(o, D)); if(ar) al.push(ar.txt); }
+  datasEspeciais(D, o.ev.cidade).forEach(x=>al.push((x.tipo==='feriado'?'📅 ':'🏟 ') + x.nome));
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
     '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
     '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
-    (false ? '<div class="tv-hor">'+(hs.parada===2
+    (false ? '<div class="tv-hor">'+(hs.parada>=2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
     tempo+
+    cam.map(c=>'<div class="tv-lin" style="font-weight:800;color:'+(c.local?'#9be3b5':'#ffd88a')+'">'+esc(c.x.v.tipo+' '+c.x.v.placa)+' — '+esc(c.txt)+'</div>').join('')+
+    (function(){ const b = resumoBloqueio(o.ev, o.fase, D); return b ? '<div class="tv-lin" style="font-weight:800;color:#ffb4a8">'+esc(b)+'</div>' : ''; })()+
     (function(){ const r = resumoTransito(o.ev, o.fase, D); return r ? '<div class="tv-lin" style="font-weight:800;color:'+(r.nivel===2?'#ffb4a8':r.nivel?'#ffd88a':'#9be3b5')+'">'+esc(r.txt)+'</div>' : ''; })()+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
   '</div>';
@@ -7343,7 +8552,7 @@ function carregarTV(){
   if(!l.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="tv-op" style="border-left-color:#17a05e;background:#15402c"><div class="tv-nome">📦 CARREGAR HOJE</div>'+
-    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomeDo(c.x.junto)):'')+
+    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+
       ' — monta <b style="color:#ffb25e">'+(c.D===HOJE?'hoje':rotDia(c.D).toLowerCase())+' às '+(c.o.hora||'—')+'</b></div>').join('')+'</div>';
 }
 function listaTV(D){
@@ -7353,8 +8562,10 @@ function listaTV(D){
   r.ops.sort((a,b)=> chave(a).localeCompare(chave(b)) || a.ev.nome.localeCompare(b.ev.nome));
   return r;
 }
+let tvLocsT = 0;
 function renderTV(){
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
+  if(Date.now() - tvLocsT > 55000){ tvLocsT = Date.now(); carregarLocs().then(()=>{ try{ renderTV(); }catch(e){} }); }
   try{ if(typeof replanejar === 'function') replanejar(); }catch(e){}
   const DIAS_TV = 4;   /* hoje + 4 dias pra frente */
   const dias = [0,1,2,3,4].slice(0, DIAS_TV + 1).map(n=>somaDias(HOJE, n));
@@ -7375,6 +8586,7 @@ function renderTV(){
   listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
     r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
     r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
+    r.ops.forEach(o=>{ const b = resumoBloqueio(o.ev, o.fase, D); if(b) al.push(q + ': ' + o.ev.nome + ' — ' + b.replace(/^🚧\s*/,'ROTA BLOQUEADA: ')); });
     r.ops.forEach(o=>{ const t = resumoTransito(o.ev, o.fase, D); if(t && t.nivel) al.push(q + ': ' + o.ev.nome + ' — ' + t.txt.replace(/^\S+\s/,'')); });
     r.ops.filter(o=>o.fora).forEach(o=>al.push(q + ': ' + o.ev.nome + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'));
     r.ops.forEach(o=>o.viagens.forEach(x=>{
@@ -7416,7 +8628,7 @@ function calcularDiarias(mes){
         const st = faltouDia(ev, p.nome, d) ? 'FA' : (manutDia(ev, p.nome, d) ? 'MT' : 'T');
         const chave = p.nome + (p.prod ? '#produtor' : '');
         const reg = pess[chave] = pess[chave] || {nome:p.nome, papel:p.papel, prod:!!p.prod, dias:{}};
-        (reg.dias[d] = reg.dias[d] || []).push({ev:ev.nome, st});
+        (reg.dias[d] = reg.dias[d] || []).push({ev:ev.nome, st, fer: ehFeriado(d, ev.cidade)});
       });
     });
   });
@@ -7429,7 +8641,8 @@ function calcularDiarias(mes){
       /* um dia = uma diária: vale o melhor status do dia */
       if(l.some(x=>x.st==='T')) T++; else if(l.some(x=>x.st==='MT')) MT++; else FA++;
     });
-    return {nome, papel:r.papel, prod:r.prod, T, MT, FA, dupl, dias:r.dias,
+    const FER = Object.keys(r.dias).filter(d=>r.dias[d].some(x=>x.st==='T' && x.fer)).length;
+    return {nome, papel:r.papel, prod:r.prod, T, MT, FA, FER, dupl, dias:r.dias,
       eventos:[...new Set(Object.values(r.dias).flat().map(x=>x.ev))]};
   });
 }
@@ -7458,6 +8671,7 @@ function renderDiarias(){
         '<th style="padding:7px">Pessoa</th><th style="padding:7px;text-align:center">Trabalhou</th><th style="padding:7px;text-align:center">Manutenção</th><th style="padding:7px;text-align:center">Faltou</th><th style="padding:7px">Eventos</th></tr></thead><tbody>'+
       l.map(p=>'<tr style="border-top:1px solid var(--line)">'+
         '<td style="padding:8px 7px"><b style="cursor:pointer;text-decoration:underline dotted" title="Ver a agenda do mês" data-t="'+(p.prod?'prod':'mont')+'" data-n="'+esc(p.nome).replace(/"/g,'&quot;')+'" onclick="fechar(\'ov-diarias\');abrirAgendaNome(this)">'+esc(p.nome)+'</b><br><small style="color:var(--muted)">'+esc(p.papel)+'</small>'+
+          (p.FER ? '<br><small style="color:#a86412">📅 '+p.FER+' diária(s) em feriado</small>' : '')+
           (p.dupl.length ? '<br><small style="color:#b0483c">⚠ dois eventos em '+p.dupl.map(d=>fmtD(d).slice(0,5)).join(', ')+'</small>' : '')+'</td>'+
         '<td style="padding:8px 7px;text-align:center;font-weight:800;color:#0f8a4d;font-size:15px">'+p.T+'</td>'+
         '<td style="padding:8px 7px;text-align:center;font-weight:700;color:#1c5fb8">'+(p.MT||'—')+'</td>'+
@@ -7614,6 +8828,7 @@ function registrarHistorico(){
 }
 
 async function salvar(){
+  if(typeof window !== 'undefined' && window.__modoMotorista) return;   /* celular do motorista não mexe no planejamento */
   marcarPlanoSujo();
   try{ registrarHistorico(); }catch(e){ /* histórico nunca pode travar a gravação */ }
   await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
@@ -7636,6 +8851,7 @@ async function salvar(){
       sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
       const locais = eventos.slice();
       await nuvemCarregar();
+      if(window.__modoMotorista){ marcarSync(true); paginaMotorista(); return; }
       /* primeira vez com a nuvem vazia: sobe o que já existe neste aparelho */
       if(!eventos.length && locais.length){
         eventos = locais;
@@ -7722,6 +8938,10 @@ async function salvar(){
   <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
   <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-rel" id="tv-rel"></div></div>
   <div class="tv-cols" id="tv-cols"></div>
+  <div id="tv-mapa-box" style="flex:1;position:relative;display:none;min-height:0">
+    <div id="tv-mapa" style="position:absolute;inset:0"></div>
+    <div id="tv-mapa-leg" style="position:absolute;top:14px;left:14px;z-index:500;background:rgba(15,23,51,.88);border-radius:12px;padding:12px 16px;font-size:17px;line-height:1.7"></div>
+  </div>
   <div class="tv-rod" id="tv-rod"></div>
 </div>
 </body>
