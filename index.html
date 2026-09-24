@@ -570,6 +570,12 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="calcularKmEmLote(true)">Calcular os eventos sem km</button>
       </div>
       <div id="km-status" style="margin-top:8px;font-size:12.5px;color:var(--muted)"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <b>🚦 Trânsito ao vivo</b>
+        <input id="cfg-tomtom" placeholder="Chave TomTom (grátis em developer.tomtom.com)" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.tomtomKey=this.value.trim();salvar();TRANSITO={};conferirTransitoProximas(true)">
+        <button class="mini" onclick="testarTransito()">Testar</button>
+      </div>
+      <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com a chave, a Central confere engarrafamento, acidente e interdição na rota de cada caminhão nas 3 horas antes da saída, e avisa quanto tempo antecipar. Sem a chave, cada operação tem os botões para abrir a rota no Waze ou no Google Maps.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
         <label>🌉 Ponte Rio-Niterói: caminhão atravessa até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
@@ -835,6 +841,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
     </div>
     <footer style="display:flex;justify-content:flex-end;gap:10px">
       <button class="mini" onclick="fechar('ov-rel')">Cancelar</button>
+      <button class="mini" style="font-weight:700;border-color:#1c4fa0;color:#1c4fa0" onclick="imprimirDiretoria()" title="Versão apresentável: resumo em números, gráfico, equipes, frota, agenda e pontos de atenção">📊 Relatório para a diretoria</button>
       <button class="btn-orange" id="rel-btn" onclick="imprimirRelatorio()">🖨 Imprimir</button>
     </footer>
   </div>
@@ -1043,7 +1050,7 @@ async function nuvemCarregar(){
       if(d.motoristas) motoristas = d.motoristas;
       if(d.veiculos) veiculos = d.veiculos;
       if(d.catalogo) catalogo = d.catalogo;
-      if(d.CONFIG) CONFIG = Object.assign({kmAgregado:70, piloto:'Pedro Henrique'}, d.CONFIG);
+      if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
       if(d.APRENDA) APRENDA = d.APRENDA;
     }
   });
@@ -1101,7 +1108,7 @@ function nuvemEscutar(){
       if(d.motoristas) motoristas = d.motoristas;
       if(d.veiculos) veiculos = d.veiculos;
       if(d.catalogo) catalogo = d.catalogo;
-      if(d.CONFIG) CONFIG = Object.assign({kmAgregado:70, piloto:'Pedro Henrique'}, d.CONFIG);
+      if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
       if(d.APRENDA) APRENDA = d.APRENDA;
       renderQuadro(); renderCadastros();
     })
@@ -1455,7 +1462,14 @@ let motoristas = [
 ];
 
 /* A partir de quantos km a IA prioriza o agregado */
-let CONFIG = {kmAgregado:70, piloto:'Pedro Henrique'};
+/* padrões da empresa: valem quando a nuvem vier sem o campo (ou com ele vazio) */
+function padroesConfig(c){
+  c = c || {};
+  if(!c.galpao) c.galpao = 'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000';
+  if(!c.tomtomKey) c.tomtomKey = 'rTwbfh57XpUld6HQuakwAXLAnUiU63ov';
+  return c;
+}
+let CONFIG = padroesConfig({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'});
 /* memória de aprendizado: cada confirmação do gestor reforça um padrão
    (cidade -> equipe, tipo de material -> equipe, cidade -> produtor, etc.) */
 let APRENDA = {equipe:{}, produtor:{}, hora:{}, confirmacoes:0};
@@ -1706,7 +1720,7 @@ function restaurarBackup(file){
     motoristas = d.motoristas || motoristas;
     veiculos = d.veiculos || veiculos;
     catalogo = d.catalogo || catalogo;
-    CONFIG = Object.assign({kmAgregado:70, piloto:'Pedro Henrique'}, d.CONFIG || {});
+    CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG || {}));
     APRENDA = d.APRENDA || {equipe:{}, produtor:{}, confirmacoes:0};
     salvar(); renderQuadro(); renderCadastros(); renderPeriodos();
     toast('Backup restaurado: ' + eventos.length + ' evento(s) no quadro.', 'Desfazer', function(){
@@ -2303,6 +2317,8 @@ function mensagemDia(o, D){
   o.viagens.filter(x=>x.junto).forEach(x=>{ const rt = rotaJunta(D, ev.id, x.junto, o.fase);
     if(rt) L.push('🔗 ' + x.v.tipo + ' ' + x.v.placa + ' leva também ' + nomeDo(x.junto) + ' — ' + (rt.paradas[0].ev.id===ev.id ? '1ª parada' : '2ª parada') + ' (' + rt.paradas.map(pp=>pp.ev.nome).join(' → ') + ')'); });
   { const f = fichaLocal(ev); if(f && resumoFicha(f)) L.push('🚧 Local: ' + resumoFicha(f)); }
+  { const t = resumoTransito(ev, o.fase, D); if(t && t.nivel) L.push(t.txt); }
+  if(o.viagens.some(x=>!x.jaLocal) && destinoTexto(ev)) L.push('🗺 Rota: ' + linkWaze(ev));
   if(ev.respNome || ev.respTel) L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   const cc = cidadeClima(ev), w = cc && CLIMA[cc] && CLIMA[cc].dias && CLIMA[cc].dias[D];
   if(w && riscoClima(w)) L.push('🌦 Previsão: ' + txtClima(w));
@@ -2333,6 +2349,7 @@ function renderAmanha(){
   ops.forEach(o=>{ if(!o.pessoas.some(pp=>!pp.prod) && o.fase) alertas.push('👷 <b>' + esc(o.ev.nome) + '</b> sem ninguém escalado para o dia'); });
   ops.forEach(o=>{ const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
     if(w && riscoClima(w)) alertas.push((riscoClima(w)===2?'⛈':'☔') + ' <b>' + esc(o.ev.nome) + '</b> (' + esc(c) + '): ' + txtClima(w)); });
+  ops.forEach(o=>{ const r = resumoTransito(o.ev, o.fase, D); if(r && r.nivel) alertas.push((r.nivel===2?'🚨':'🚦')+' <b>'+esc(o.ev.nome)+'</b>: '+esc(r.txt)); });
   const combos = htmlJuntar(D) + htmlCarregarNoDia(somaDiaISO(D, -1), D);
   document.getElementById('am-corpo').innerHTML = !ops.length
     ? '<div class="panel empty"><b>Nada na rua em ' + rotDia(D) + '</b>Nenhuma montagem, desmontagem ou saída de caminhão.</div>'
@@ -2347,6 +2364,11 @@ function renderAmanha(){
           (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomeDo(x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
           (function(){ const hs = saidaDaOp(o, D); return hs ? '<div class="am-lin">'+txtSaida(hs)+(hs.parada===2?'':' <small style="color:var(--muted)">('+durTxt(hs.viagem)+' de estrada)</small>')+'</div>' : ''; })()+
           (function(){ const f = fichaLocal(o.ev); return (f && resumoFicha(f)) ? '<div class="am-lin">🚧 '+esc(resumoFicha(f))+'</div>' : ''; })()+
+          (function(){ if(!o.viagens.some(x=>!x.jaLocal)) return '';
+            const r = resumoTransito(o.ev, o.fase, D);
+            return '<div class="am-lin">'+(r ? '<b style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+'">'+esc(r.txt)+'</b> ' : '')+
+              '<button class="mini" onclick="event.stopPropagation();conferirTransitoEv(\''+o.ev.id+'\',\''+o.fase+'\',\''+D+'\')">🚦 '+(CONFIG.tomtomKey?'Conferir trânsito':'Ver trânsito')+'</button> '+
+              '<a class="mini" style="text-decoration:none" target="_blank" onclick="event.stopPropagation()" href="'+linkWaze(o.ev)+'">Waze</a></div>'; })()+
           (o.pessoas.length ? '<div class="am-lin">👷 <b style="color:'+corEquipe(eq)+'">'+esc(eq)+'</b>: '+o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' <small>(produtor)</small>':'')+(pp.mt?' <small style="color:#1c5fb8">(manutenção)</small>':'')).join(', ')+'</div>' : '')+
           ((o.ev.respNome||o.ev.respTel) ? '<div class="am-lin">📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — '))+'</div>' : '')+
         '</div>';
@@ -2644,7 +2666,14 @@ async function geocodEndereco(q){
 async function coordGalpao(){
   if(!CONFIG.galpao) return null;
   if(CONFIG.galpaoCoord && CONFIG.galpaoCoord.q === CONFIG.galpao) return CONFIG.galpaoCoord;
-  const g = await geocodEndereco(CONFIG.galpao);
+  /* endereço completo; se o mapa não achar, sem lote/quadra; por último, rua + cidade */
+  const cand = [CONFIG.galpao];
+  const semLote = CONFIG.galpao.replace(/,?\s*(s\/n|lt\.?\s*\d+|lote\s*\d+|qd\.?\s*\d+|quadra\s*\d+)/gi,'').replace(/\s*-\s*Condom[ií]nio [^,]*/i,'').replace(/,\s*\d{5}-?\d{3}/,'');
+  cand.push(semLote);
+  const rua = CONFIG.galpao.split(',')[0], cid = (CONFIG.galpao.match(/([A-Za-zÀ-ú ]+)\s*-\s*[A-Z]{2}/) || [])[0];
+  if(cid) cand.push(rua + ', ' + cid, cid);
+  let g = null;
+  for(const q of [...new Set(cand)]){ g = await geocodEndereco(q + (/brasil/i.test(q) ? '' : ', Brasil')); if(g) break; }
   if(!g) return null;
   CONFIG.galpaoCoord = {q:CONFIG.galpao, lat:g.lat, lon:g.lon, nome:g.nome};
   salvar();
@@ -2853,6 +2882,170 @@ function htmlCarregarNoDia(Dc){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + ' (véspera da saída)</b><br>' +
     l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomeDo(c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
+}
+
+/* ================= TRÂNSITO NA ROTA =================
+   TomTom (chave grátis): rota de caminhão com trânsito ao vivo — atraso,
+   engarrafamento, acidente, obra, interdição. Confere sozinho as saídas
+   das próximas 3 horas a cada 10 minutos. Sem chave: links do Waze/Google Maps. */
+let TRANSITO = {};   /* chave ev|fase|dia -> {t, atraso, min, normal, eventos:[{tipo,txt,atraso}], erro} */
+const TEC = {1:'congestionamento', 2:'acidente', 3:'obras', 4:'pista estreitada', 5:'via interditada', 6:'pista escorregadia', 7:'pista alagada', 8:'veículo quebrado', 9:'evento na via', 10:'animal na pista', 11:'condição climática', 14:'veículo quebrado', 16:'protesto/manifestação', 19:'pista interditada'};
+const ICON_TT = {1:'acidente', 2:'neblina', 3:'condição perigosa', 4:'chuva', 5:'gelo', 6:'engarrafamento', 7:'faixa fechada', 8:'via interditada', 9:'obras', 10:'vento', 11:'alagamento', 14:'veículo quebrado'};
+function destinoTexto(ev){ return [ev.local!=='—'?ev.local:'', ev.cidade!=='—'?ev.cidade:''].filter(Boolean).join(', '); }
+function linkGoogleRota(ev){
+  const o = CONFIG.galpaoCoord ? CONFIG.galpaoCoord.lat + ',' + CONFIG.galpaoCoord.lon : (CONFIG.galpao || '');
+  const g = evGeo(ev);
+  const d = g ? g.lat + ',' + g.lon : destinoTexto(ev);
+  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(o) + '&destination=' + encodeURIComponent(d);
+}
+function linkWaze(ev){
+  const g = evGeo(ev);
+  return g ? 'https://waze.com/ul?ll=' + g.lat + ',' + g.lon + '&navigate=yes' : 'https://waze.com/ul?q=' + encodeURIComponent(destinoTexto(ev)) + '&navigate=yes';
+}
+function botoesRota(ev){
+  if(!destinoTexto(ev)) return '';
+  return '<a class="mini" style="text-decoration:none;display:inline-block" target="_blank" href="'+linkGoogleRota(ev)+'">🗺 Google Maps</a> '+
+         '<a class="mini" style="text-decoration:none;display:inline-block" target="_blank" href="'+linkWaze(ev)+'">🚗 Waze</a>';
+}
+async function consultarTransito(ev, fase, D, forcar){
+  const k = ev.id + '|' + fase + '|' + D;
+  const velho = TRANSITO[k];
+  if(!forcar && velho && Date.now() - velho.t < 10*60*1000) return velho;
+  if(!CONFIG.tomtomKey) return null;
+  const o = await coordGalpao();
+  let dst = evGeo(ev);
+  if(!dst){ const q = destinoTexto(ev); if(q) dst = await geocodEndereco(q + ', Brasil'); }
+  if(!o || !dst) return (TRANSITO[k] = {t:Date.now(), erro:'sem endereço no mapa'});
+  const hs = horariosSaida(ev, fase, D);
+  /* saída já perto: trânsito de agora; saída mais longe: previsão para a hora da saída */
+  let dep = 'now';
+  if(hs){
+    const sai = new Date((hs.diaSaida || D) + 'T' + hs.saida + ':00-03:00');
+    if(sai - Date.now() > 20*60*1000) dep = sai.toISOString().replace(/\.\d+Z$/,'Z');
+  }
+  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':' + dst.lat + ',' + dst.lon + '/json' +
+    '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep);
+  try{
+    const r = await fetch(u);
+    if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
+    const j = await r.json(), rt = j.routes && j.routes[0];
+    if(!rt) throw new Error('sem rota');
+    const s = rt.summary || {};
+    const evs = (rt.sections || []).filter(x=>x.sectionType === 'TRAFFIC').map(x=>{
+      const causa = (x.tec && x.tec.causes && x.tec.causes[0] && TEC[x.tec.causes[0].mainCauseCode]) ||
+        ({JAM:'engarrafamento', ROAD_WORK:'obras', ROAD_CLOSURE:'via interditada'}[x.simpleCategory] || 'lentidão');
+      return {tipo: causa, atraso: Math.round((x.delayInSeconds||0)/60), vel: x.effectiveSpeedInKmh, grave: x.simpleCategory==='ROAD_CLOSURE' || /acidente|interdit/.test(causa)};
+    }).filter(x=>x.atraso >= 2 || x.grave);
+    /* incidentes ao redor da rota (descrição do acidente, via e trecho) */
+    let inc = [];
+    try{
+      const pts = (rt.legs||[]).flatMap(l=>l.points||[]);
+      if(pts.length){
+        const la = pts.map(p=>p.latitude), lo = pts.map(p=>p.longitude);
+        const bb = [Math.min(...lo)-0.02, Math.min(...la)-0.02, Math.max(...lo)+0.02, Math.max(...la)+0.02].map(x=>x.toFixed(4)).join(',');
+        const ui = 'https://api.tomtom.com/traffic/services/5/incidentDetails?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&bbox=' + bb +
+          '&language=pt-PT&timeValidityFilter=present&fields=' + encodeURIComponent('{incidents{geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,delay,from,to,roadNumbers,events{description}}}}');
+        const ri = await fetch(ui);
+        if(ri.ok){
+          const ji = await ri.json();
+          const passo = Math.max(1, Math.floor(pts.length / 400));
+          const perto = (c) => pts.some((p,i)=> i % passo === 0 && distLinha({lat:p.latitude, lon:p.longitude}, {lat:c[1], lon:c[0]}) < 0.6);
+          inc = (ji.incidents||[]).filter(x=>{
+            const g = x.geometry || {}, cs = g.type === 'Point' ? [g.coordinates] : (g.coordinates || []);
+            return cs.length && (perto(cs[0]) || perto(cs[cs.length-1]));
+          }).map(x=>{ const pr = x.properties || {};
+            return {tipo: ICON_TT[pr.iconCategory] || 'ocorrência', grave: [1,8].includes(pr.iconCategory) || pr.magnitudeOfDelay >= 3,
+              txt: [ (pr.events && pr.events[0] && pr.events[0].description) || '', (pr.roadNumbers||[]).join('/'), pr.from ? 'em ' + pr.from : '' ].filter(Boolean).join(' · '),
+              atraso: Math.round((pr.delay||0)/60)}; })
+            .filter(x=>x.grave || x.atraso >= 2 || ['acidente','via interditada','faixa fechada','obras','alagamento'].includes(x.tipo)).slice(0, 6);
+        }
+      }
+    }catch(e){}
+    const atraso = Math.round((s.trafficDelayInSeconds || 0) / 60);
+    const res = {t:Date.now(), dep, min: Math.round((s.travelTimeInSeconds||0)/60*1.1), atraso, km: Math.round((s.lengthInMeters||0)/1000),
+      eventos: evs, incidentes: inc, grave: evs.some(x=>x.grave) || inc.some(x=>x.grave)};
+    TRANSITO[k] = res;
+    return res;
+  }catch(e){ return (TRANSITO[k] = {t:Date.now(), erro: e.message || 'sem conexão'}); }
+}
+/* texto curto do trânsito, com o ajuste na saída */
+function resumoTransito(ev, fase, D){
+  const r = TRANSITO[ev.id + '|' + fase + '|' + D];
+  if(!r || r.erro) return null;
+  const itens = [...(r.incidentes||[]).map(x=>x.tipo + (x.txt ? ' (' + x.txt + ')' : '')), ...(r.eventos||[]).filter(x=>x.atraso>=5).map(x=>x.tipo + ' +' + x.atraso + ' min')];
+  const hs = horariosSaida(ev, fase, D);
+  const antecipa = r.atraso >= 10 && hs ? hm(minDe(hs.saida) - r.atraso) : null;
+  const nivel = r.grave || r.atraso >= 30 ? 2 : (r.atraso >= 10 || itens.length ? 1 : 0);
+  return {nivel, atraso:r.atraso, itens:[...new Set(itens)].slice(0,4), antecipa, quando: r.dep === 'now' ? 'agora' : 'previsto para a saída',
+    txt: (nivel ? (nivel===2?'🚨 ':'🚦 ') : '🟢 ') + (r.atraso ? '+' + r.atraso + ' min de trânsito' : 'rota livre') + (itens.length ? ' — ' + [...new Set(itens)].slice(0,3).join('; ') : '') +
+      (antecipa ? ' → sair às ' + antecipa : '')};
+}
+/* confere sozinho as saídas das próximas 3 horas (e de amanhã cedo, quando já é noite) */
+let trRodando = false;
+async function conferirTransitoProximas(forcar){
+  if(trRodando || !CONFIG.tomtomKey) return; trRodando = true;
+  try{
+    const agora = Date.now(), avisos = [];
+    for(const D of [HOJE, somaDiaISO(HOJE, 1)]){
+      for(const o of opsDoDia(D).ops){
+        if(!o.viagens.some(x=>!x.jaLocal)) continue;
+        const hs = saidaDaOp(o, D); if(!hs) continue;
+        const sai = new Date((hs.diaSaida || D) + 'T' + hs.saida + ':00-03:00').getTime();
+        if(sai - agora > 3*3600*1000 || agora - sai > 30*60*1000) continue;
+        const antes = TRANSITO[o.ev.id + '|' + o.fase + '|' + D];
+        await consultarTransito(o.ev, o.fase, D, forcar);
+        const r = resumoTransito(o.ev, o.fase, D);
+        const antesNivel = antes && !antes.erro ? (antes.grave || antes.atraso >= 30 ? 2 : antes.atraso >= 10 ? 1 : 0) : -1;
+        if(r && r.nivel && r.nivel > antesNivel) avisos.push(o.ev.nome + ': ' + r.txt);
+      }
+    }
+    if(avisos.length) toast(avisos.join(' | '));
+    renderTV();
+    if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha();
+  }finally{ trRodando = false; }
+}
+async function conferirTransitoEv(id, fase, D){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(!CONFIG.tomtomKey){ window.open(linkGoogleRota(ev), '_blank'); return; }
+  toast('🚦 Conferindo o trânsito na rota...');
+  const r0 = await consultarTransito(ev, fase, D, true);
+  if(r0 && r0.erro) return toast('Não consegui conferir o trânsito (' + r0.erro + ').');
+  const r = resumoTransito(ev, fase, D);
+  toast(ev.nome + ': ' + (r ? r.txt : 'sem dados'));
+  if(evAberto === id && document.getElementById('ov-ev').classList.contains('on')) verEvento(id);
+  if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha();
+}
+async function testarTransito(){
+  const st = document.getElementById('tr-status');
+  if(!CONFIG.tomtomKey){ if(st) st.innerHTML = '<b style="color:#b0483c">Coloque a chave primeiro.</b> Crie uma conta grátis em developer.tomtom.com → Dashboard → Keys, copie a chave e cole aqui.'; return; }
+  if(st) st.textContent = 'testando...';
+  try{
+    const o = await coordGalpao();
+    if(!o){ if(st) st.innerHTML = '<b style="color:#b0483c">Não achei o galpão no mapa.</b>'; return; }
+    const r = await fetch('https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':-22.8870,-43.1150/json?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck');
+    if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
+    const j = await r.json(), s = j.routes[0].summary;
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">Funcionando.</b> Galpão → centro de Niterói agora: ' + Math.round(s.travelTimeInSeconds/60) + ' min' + (s.trafficDelayInSeconds ? ', ' + Math.round(s.trafficDelayInSeconds/60) + ' min de trânsito' : ', sem trânsito') + '.';
+  }catch(e){ if(st) st.innerHTML = '<b style="color:#b0483c">Não funcionou:</b> ' + e.message + '.'; }
+}
+/* bloco no evento: conferir e abrir a rota */
+function blocoTransito(ev){
+  if(!destinoTexto(ev)) return '';
+  const lin = [];
+  [['mont', ev.mont], ['desm', ev.desm]].forEach(([fase, dt])=>{
+    if(!dt || (fase==='desm' && ev.permanece && !temFrotaDesm(ev))) return;
+    const D = dia(dt), r = resumoTransito(ev, fase, D), raw = TRANSITO[ev.id+'|'+fase+'|'+D];
+    lin.push('<b>'+(fase==='desm'?'📤':'🔨')+' '+rotDia(D)+'</b> — '+
+      (r ? '<span style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+';font-weight:600">'+r.txt+'</span> <small style="color:var(--muted)">('+r.quando+', '+new Date(raw.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+')</small> '
+         : (raw && raw.erro ? '<small style="color:#b0483c">'+raw.erro+'</small> ' : ''))+
+      '<button class="mini" onclick="conferirTransitoEv(\''+ev.id+'\',\''+fase+'\',\''+D+'\')">🚦 '+(CONFIG.tomtomKey?'Conferir trânsito':'Ver trânsito no mapa')+'</button>');
+  });
+  return '<div style="grid-column:1/-1"><i>🚦 Trânsito na rota</i><div style="font-size:12.5px;line-height:2">'+lin.join('<br>')+'</div>'+
+    '<div style="margin-top:4px">'+botoesRota(ev)+(CONFIG.tomtomKey?'':' <small style="color:var(--muted)">— para a Central conferir sozinha antes da saída, coloque a chave TomTom em Integrações</small>')+'</div></div>';
+}
+if(typeof window !== 'undefined' && !window.__semClimaAuto){
+  setInterval(()=>{ try{ conferirTransitoProximas(false); }catch(e){} }, 10*60*1000);
+  setTimeout(()=>{ try{ conferirTransitoProximas(false); }catch(e){} }, 12000);
 }
 
 /* ================= FICHA DO LOCAL =================
@@ -3567,6 +3760,7 @@ function verEvento(id){
         (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+'</small>' : '')+'</div>'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
+      blocoTransito(ev)+
       '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
       blocoJuntarEv(ev)+blocoDiasFora(ev)+
@@ -5456,6 +5650,7 @@ function renderCadastros(){
 
   const ge = document.getElementById('galpao-end');
   if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
+  { const tk = document.getElementById('cfg-tomtom'); if(tk && document.activeElement !== tk) tk.value = CONFIG.tomtomKey || ''; }
   { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
@@ -6504,6 +6699,142 @@ function imprimirRelatorio(){
   w.document.close();
 }
 
+/* ================= RELATÓRIO PARA A DIRETORIA =================
+   Mesmas operações marcadas, em formato de apresentação: números, gráfico
+   por dia, equipes, frota, agenda em linha do tempo e pontos de atenção. */
+function imprimirDiretoria(){
+  const linhas = REL.linhas.filter(l=>l.marcado);
+  if(!linhas.length) return toast('Marque pelo menos uma operação.');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const AZ = '#1c4fa0', LA = '#f0851e';
+  const ini = REL.ini, fim = REL.fim;
+  /* ---- números ---- */
+  const evs = new Set(), eqs = {}, frota = {}, porDia = {}, atencao = [];
+  let viagens = 0, km = 0, diarias = 0;
+  linhas.forEach(l=>{
+    const ev = l.ev, fase = l.tipo === 'Montagem' ? 'mont' : 'desm';
+    evs.add(ev.id);
+    const diasFase = fase === 'mont' ? diasEntre(ev.mont, fimMont(ev)) : diasEntre(ev.desm, fimDesm(ev));
+    diasFase.forEach(d=>{ const x = porDia[d] = porDia[d] || {m:0, d:0}; if(fase==='mont') x.m++; else x.d++; });
+    const e = eqs[l.eq] = eqs[l.eq] || {m:0, d:0, dias:new Set(), evs:new Set()};
+    if(fase==='mont') e.m++; else e.d++;
+    diasFase.forEach(d=>e.dias.add(d)); e.evs.add(ev.nome);
+    /* pessoas × dias da fase */
+    pessoasNaEscala(ev).filter(pp=>!pp.prod).forEach(pp=>{ diarias += diasDe(ev, pp.nome).filter(d=>diasFase.includes(d)).length; });
+    /* caminhões: cada viagem conta ida e volta; desmontagem com caminhão no local só volta */
+    const jaLocal = fase==='desm' && ev.permanece && !temFrotaDesm(ev);
+    escalaDo(ev, fase).forEach(x=>{
+      const v = veiculos.find(y=>y.id===x.v); if(!v) return;
+      viagens++;
+      const k = (+ev.km||0) * (jaLocal ? 1 : 2);
+      km += k;
+      const f = frota[v.id] = frota[v.id] || {v, n:0, km:0, mot:new Set()};
+      f.n++; f.km += k; if(x.motorista) f.mot.add(x.motorista);
+    });
+    plano(ev).conflitos.forEach(c=>atencao.push(ev.nome + ': ' + c.msg));
+    diasFase.forEach(d=>{ const c = cidadeClima(ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[d];
+      if(w && riscoClima(w)) atencao.push(ev.nome + ' (' + fmtD(d).slice(0,5) + '): previsão de ' + txtClima(w).replace(/[☔⛈💨☀]/g,'').trim()); });
+  });
+  const nM = linhas.filter(l=>l.tipo==='Montagem').length, nD = linhas.length - nM;
+  const tiles = [
+    [evs.size, 'eventos atendidos'],
+    [nM, 'montagens'],
+    [nD, 'desmontagens'],
+    [viagens, 'viagens de caminhão'],
+    ['≈ ' + Math.round(km).toLocaleString('pt-BR'), 'km rodados'],
+    [diarias, 'diárias de equipe']
+  ];
+  /* ---- gráfico: operações em campo por dia (montagem e desmontagem empilhadas) ---- */
+  const dias = Object.keys(porDia).sort();
+  let grafico = '';
+  if(dias.length){
+    const W = 700, H = 190, pl = 28, pb = 34, pt = 14;
+    const max = Math.max(1, ...dias.map(d=>porDia[d].m + porDia[d].d));
+    const passo = (W - pl) / dias.length, bw = Math.max(6, Math.min(34, passo * 0.62));
+    const y = v => pt + (H - pt - pb) * (1 - v / max);
+    const marcas = [];
+    const ticks = max <= 5 ? [...Array(max+1).keys()] : [0, Math.round(max/2), max];
+    ticks.forEach(t=>marcas.push('<line x1="'+pl+'" x2="'+W+'" y1="'+y(t)+'" y2="'+y(t)+'" stroke="#e8ecf3" stroke-width="1"/><text x="'+(pl-6)+'" y="'+(y(t)+4)+'" font-size="10" fill="#8892a4" text-anchor="end">'+t+'</text>'));
+    dias.forEach((d,i)=>{
+      const x = pl + passo*i + (passo-bw)/2, m = porDia[d].m, dd = porDia[d].d;
+      const yM = y(m), yT = y(m+dd);
+      if(m) marcas.push('<rect x="'+x+'" y="'+yM+'" width="'+bw+'" height="'+(y(0)-yM)+'" rx="3" fill="'+AZ+'"><title>'+fmtD(d)+': '+m+' em montagem</title></rect>');
+      if(dd) marcas.push('<rect x="'+x+'" y="'+yT+'" width="'+bw+'" height="'+Math.max(0, yM-yT-(m?2:0))+'" rx="3" fill="'+LA+'"><title>'+fmtD(d)+': '+dd+' em desmontagem</title></rect>');
+      marcas.push('<text x="'+(x+bw/2)+'" y="'+(yT-4)+'" font-size="10" font-weight="700" fill="#1c2740" text-anchor="middle">'+(m+dd)+'</text>');
+      if(dias.length <= 20 || i % Math.ceil(dias.length/20) === 0)
+        marcas.push('<text x="'+(x+bw/2)+'" y="'+(H-pb+14)+'" font-size="9.5" fill="#5a6478" text-anchor="middle">'+fmtD(d).slice(0,5)+'</text>');
+    });
+    grafico = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Operações em campo por dia">'+marcas.join('')+'</svg>'+
+      '<div class="leg"><span><i style="background:'+AZ+'"></i>Montagem</span><span><i style="background:'+LA+'"></i>Desmontagem</span><span class="obs">número em cima = operações em campo no dia</span></div>';
+  }
+  /* ---- equipes ---- */
+  const eqL = Object.keys(eqs).sort((a,b)=>eqs[b].dias.size - eqs[a].dias.size);
+  const maxDias = Math.max(1, ...eqL.map(n=>eqs[n].dias.size));
+  const tabEq = '<table><thead><tr><th>Equipe</th><th class="n">Montagens</th><th class="n">Desmontagens</th><th style="width:38%">Dias em campo</th></tr></thead><tbody>'+
+    eqL.map(n=>'<tr><td><b>'+esc(n)+'</b><br><small>'+eqs[n].evs.size+' evento(s)</small></td><td class="n">'+eqs[n].m+'</td><td class="n">'+eqs[n].d+'</td>'+
+      '<td><div class="barra"><span style="width:'+Math.round(eqs[n].dias.size/maxDias*100)+'%"></span><b>'+eqs[n].dias.size+'</b></div></td></tr>').join('')+'</tbody></table>';
+  /* ---- frota ---- */
+  const frL = Object.values(frota).sort((a,b)=>b.n - a.n || b.km - a.km);
+  const tabFr = frL.length ? '<table><thead><tr><th>Veículo</th><th>Motorista(s)</th><th class="n">Viagens</th><th class="n">≈ km</th></tr></thead><tbody>'+
+    frL.map(f=>'<tr><td><b>'+esc(f.v.tipo+' '+f.v.placa)+'</b>'+(f.v.agregado?' <small>agregado</small>':'')+'</td><td>'+esc([...f.mot].join(', ')||'—')+'</td><td class="n">'+f.n+'</td><td class="n">'+Math.round(f.km).toLocaleString('pt-BR')+'</td></tr>').join('')+'</tbody></table>'
+    : '<p class="obs">Nenhum caminhão lançado nas operações selecionadas.</p>';
+  /* ---- agenda em linha do tempo ---- */
+  const porIni = {};
+  linhas.forEach(l=>{ (porIni[dia(l.ini)] = porIni[dia(l.ini)] || []).push(l); });
+  const agenda = Object.keys(porIni).sort().map(d=>{
+    const dt = new Date(d+'T12:00');
+    return '<div class="tl"><div class="tl-d"><b>'+fmtD(d).slice(0,5)+'</b><span>'+['DOM','SEG','TER','QUA','QUI','SEX','SÁB'][dt.getDay()]+'</span></div><div class="tl-c">'+
+      porIni[d].map(l=>{
+        const fase = l.tipo==='Montagem' ? 'mont' : 'desm';
+        const cam = escalaDo(l.ev, fase).map(x=>{ const v = veiculos.find(y=>y.id===x.v); return v ? v.tipo+' '+v.placa : null; }).filter(Boolean);
+        const loc = [l.ev.local!=='—'?l.ev.local:'', l.ev.cidade!=='—'?l.ev.cidade:''].filter(Boolean).join(' — ');
+        return '<div class="tl-i"><span class="fase '+(fase==='mont'?'m':'d')+'">'+l.tipo.toUpperCase()+'</span> <b>'+esc(l.ev.nome)+'</b>'+
+          (String(l.ini).slice(11,16) ? ' <small>às '+String(l.ini).slice(11,16)+'</small>' : '')+
+          (dia(l.ini)!==dia(l.fimD) ? ' <small>até '+fmtD(l.fimD).slice(0,5)+'</small>' : '')+
+          '<br><small>'+esc(loc||'—')+((+l.ev.km)?' · '+l.ev.km+' km':'')+' · equipe '+esc(l.eq)+(cam.length?' · '+esc(cam.join(', ')):'')+'</small></div>';
+      }).join('')+'</div></div>';
+  }).join('');
+  const aten = [...new Set(atencao)];
+  const titulo = 'Relatório de operações';
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>'+titulo+' '+fmtD(ini)+' a '+fmtD(fim)+'</title><style>'+
+    '@page{size:A4;margin:12mm}'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#1c2740;margin:26px;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.topo{display:flex;align-items:center;gap:18px;padding-bottom:12px;border-bottom:4px solid '+LA+'}'+
+    '.topo img{max-height:58px;max-width:200px}'+
+    '.topo h1{margin:0;font-size:22px;color:'+AZ+';letter-spacing:.3px;text-transform:uppercase}'+
+    '.topo .per{margin-left:auto;text-align:right;font-size:12px;color:#5a6478}.topo .per b{display:block;font-size:15px;color:#1c2740}'+
+    '.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0 6px}'+
+    '.kpi{border:1px solid #e3e8f0;border-top:3px solid '+AZ+';border-radius:6px;padding:9px 10px}'+
+    '.kpi b{display:block;font-size:22px;color:'+AZ+';line-height:1.1}.kpi span{font-size:10.5px;color:#5a6478;text-transform:uppercase;letter-spacing:.3px}'+
+    'h2{font-size:13px;color:'+AZ+';text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px;padding-left:9px;border-left:4px solid '+LA+'}'+
+    '.leg{display:flex;gap:16px;font-size:11px;color:#5a6478;margin-top:2px}.leg i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}'+
+    '.obs{color:#8892a4;font-size:11px}'+
+    'table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8892a4;text-align:left;padding:5px 7px;border-bottom:1px solid #e3e8f0}'+
+    'td{padding:6px 7px;border-bottom:1px solid #eef1f6;vertical-align:top}.n{text-align:right;white-space:nowrap}small{color:#5a6478}'+
+    '.barra{display:flex;align-items:center;gap:6px}.barra span{display:block;height:9px;border-radius:0 4px 4px 0;background:'+AZ+';min-width:3px}.barra b{font-size:11px}'+
+    '.duas{display:grid;grid-template-columns:1fr 1fr;gap:18px}'+
+    '.tl{display:flex;gap:0;page-break-inside:avoid}'+
+    '.tl-d{width:62px;flex:none;text-align:center;background:'+AZ+';color:#fff;border-radius:6px;padding:6px 0;align-self:flex-start}.tl-d b{display:block;font-size:14px}.tl-d span{font-size:10px;letter-spacing:.5px}'+
+    '.tl-c{flex:1;border-left:3px solid '+LA+';margin-left:12px;padding:0 0 12px 12px}'+
+    '.tl-i{margin-bottom:7px;line-height:1.45}'+
+    '.fase{font-size:9.5px;font-weight:800;letter-spacing:.4px;border-radius:4px;padding:1px 6px;color:#fff}.fase.m{background:'+AZ+'}.fase.d{background:'+LA+'}'+
+    '.aten{background:#fdf3ea;border:1px solid #f6d7b8;border-radius:6px;padding:9px 12px;line-height:1.6}'+
+    '.rod{margin-top:22px;padding-top:8px;border-top:1px solid #e3e8f0;font-size:10px;color:#8892a4;display:flex;justify-content:space-between}'+
+    'h2,.kpis{page-break-after:avoid} tr{page-break-inside:avoid}'+
+    '@media print{body{margin:0}}'+
+  '</style></head><body>'+
+    '<div class="topo">'+(CONFIG.logo?'<img src="'+CONFIG.logo+'">':'')+'<h1>'+titulo+'</h1><div class="per"><b>'+fmtD(ini)+' a '+fmtD(fim)+'</b>montagens e desmontagens com equipe própria</div></div>'+
+    '<div class="kpis">'+tiles.map(t=>'<div class="kpi"><b>'+t[0]+'</b><span>'+t[1]+'</span></div>').join('')+'</div>'+
+    (grafico ? '<h2>Operações em campo por dia</h2>'+grafico : '')+
+    '<div class="duas"><div><h2>Equipes</h2>'+tabEq+'</div><div><h2>Frota</h2>'+tabFr+'</div></div>'+
+    '<h2>Pontos de atenção</h2>'+(aten.length ? '<div class="aten">'+aten.map(a=>'• '+esc(a)).join('<br>')+'</div>' : '<p class="obs">Nenhum conflito ou alerta de tempo nas operações selecionadas.</p>')+
+    '<h2>Agenda das operações</h2>'+agenda+
+    '<div class="rod"><span>Gerado em '+new Date().toLocaleDateString('pt-BR')+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</span><span>'+linhas.length+' operação(ões) · km estimados pela distância do galpão (ida e volta)</span></div>'+
+  '<'+'script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');
+  w.document.close();
+}
+
 function relatorioCal(){
   const ano = calRef.getFullYear(), mes = calRef.getMonth();
   const titulo = calRef.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
@@ -6987,6 +7318,7 @@ function cardTV(o, D){
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
     tempo+
+    (function(){ const r = resumoTransito(o.ev, o.fase, D); return r ? '<div class="tv-lin" style="font-weight:800;color:'+(r.nivel===2?'#ffb4a8':r.nivel?'#ffd88a':'#9be3b5')+'">'+esc(r.txt)+'</div>' : ''; })()+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
   '</div>';
 }
@@ -7043,6 +7375,7 @@ function renderTV(){
   listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
     r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
     r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
+    r.ops.forEach(o=>{ const t = resumoTransito(o.ev, o.fase, D); if(t && t.nivel) al.push(q + ': ' + o.ev.nome + ' — ' + t.txt.replace(/^\S+\s/,'')); });
     r.ops.filter(o=>o.fora).forEach(o=>al.push(q + ': ' + o.ev.nome + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'));
     r.ops.forEach(o=>o.viagens.forEach(x=>{
       if(x.manut) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção');
