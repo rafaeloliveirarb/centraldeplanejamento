@@ -353,7 +353,19 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 #tv .tv-tit{font-size:30px;font-weight:800;letter-spacing:.5px}
 #tv .tv-tit small{display:block;font-size:17px;font-weight:500;color:#aab4d4;letter-spacing:0}
 #tv .tv-rel{margin-left:auto;font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
-#tv .tv-cols{flex:1;display:grid;grid-template-columns:1.25fr 1fr;gap:22px;padding:20px 30px;min-height:0}
+#tv .tv-cols{flex:1;display:grid;grid-template-columns:1.45fr repeat(4,1fr);gap:16px;padding:18px 24px;min-height:0}
+#tv .tv-col h2{flex-wrap:wrap}
+#tv .tv-col.tvmini h2{font-size:21px;gap:8px}
+#tv .tv-col.tvmini h2 span{font-size:14px;width:100%}
+#tv .tv-col.tvmini .tv-op{padding:10px 12px;margin-bottom:9px;border-left-width:6px;border-radius:11px}
+#tv .tv-col.tvmini .tv-nome{font-size:19px}
+#tv .tv-col.tvmini .tv-sub{font-size:13.5px}
+#tv .tv-col.tvmini .tv-hor{font-size:15px;gap:10px;margin-top:5px}
+#tv .tv-col.tvmini .tv-hor b{font-size:20px}
+#tv .tv-col.tvmini .tv-lin{font-size:13.5px;margin-top:5px}
+#tv .tv-col.tvmini .tv-cam{padding:2px 7px;font-size:13px}
+#tv .tv-col.tvmini .tv-alerta{font-size:13px}
+#tv .tv-col.tvmini .tv-vazio{font-size:17px;padding:14px 0}
 #tv .tv-col{display:flex;flex-direction:column;min-height:0}
 #tv .tv-col h2{margin:0 0 12px;font-size:26px;font-weight:800;letter-spacing:1px;display:flex;align-items:center;gap:12px}
 #tv .tv-col h2 span{font-size:17px;font-weight:500;color:#aab4d4;letter-spacing:0}
@@ -560,12 +572,13 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div id="km-status" style="margin-top:8px;font-size:12.5px;color:var(--muted)"></div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
-        <label>Tempo para carregar <input id="cfg-carga" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoCarga=+this.value||0;salvar()"> min</label>
+        <label>🌉 Ponte Rio-Niterói: caminhão atravessa até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
+        <label>e depois das <input id="cfg-ponte2" type="time" title="Deixe vazio se não pode atravessar à noite" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteDepois=this.value||'';salvar();renderQuadro()"></label>
         <label>Margem de trânsito <input id="cfg-margem" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.margemSaida=+this.value||0;salvar()"> min</label>
         <label>Descarga em cada parada <input id="cfg-desc" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoDescarga=+this.value||0;salvar()"> min</label>
         <label>Juntar viagens até <input id="cfg-raio" type="number" min="0" step="1" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.raioJuntar=+this.value||0;salvar()"> km entre eventos</label>
       </div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">A chegada é a hora de início da montagem (ou da desmontagem). Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">O carregamento é sempre no dia anterior à saída. A chegada é a hora de início da montagem (ou da desmontagem). Se a rota passa pela Ponte Rio-Niterói, a saída é antecipada para atravessar dentro do horário. Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2 style="margin:0">🖼 Logo para documentos</h2>
@@ -822,6 +835,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
     </div>
     <footer style="display:flex;justify-content:flex-end;gap:10px">
       <button class="mini" onclick="fechar('ov-rel')">Cancelar</button>
+      <button class="mini" style="font-weight:700;border-color:#1c4fa0;color:#1c4fa0" onclick="imprimirDiretoria()" title="Versão apresentável: resumo em números, gráfico, equipes, frota, agenda e pontos de atenção">📊 Relatório para a diretoria</button>
       <button class="btn-orange" id="rel-btn" onclick="imprimirRelatorio()">🖨 Imprimir</button>
     </footer>
   </div>
@@ -1195,8 +1209,9 @@ function addFrenteD(id, nomeEq){
    senão, os dias das fases em que ela está escalada */
 function diasDe(ev, nome){
   const r = (ev.diasPessoa || {})[nome];
-  if(r && r.dias && r.dias.length) return [...r.dias].sort();  /* dias escolhidos um a um */
-  if(r && r.ini) return diasEntre(r.ini, r.fim || r.ini);
+  /* dias escolhidos um a um — só valem dentro da janela do evento (restos de data errada saem) */
+  if(r && r.dias && r.dias.length){ const jan = new Set(janelaDias(ev)); return [...r.dias].filter(d=>jan.has(d)).sort(); }
+  if(r && r.ini){ const jan = new Set(janelaDias(ev)); return diasEntre(r.ini, r.fim || r.ini).filter(d=>jan.has(d)); }
   if(!temTimeDesm(ev)) return diasEquipe(ev);
   const eq = ev.equipe || plano(ev).equipe;
   const out = [];
@@ -1540,8 +1555,20 @@ function diasEntre(a,b){
 }
 /* Montagem e desmontagem podem levar mais de um dia. Quando a planilha
    traz o término, a equipe fica presa o período inteiro. */
-const fimMont = ev => ev.montFim && dia(ev.montFim) >= dia(ev.mont) ? ev.montFim : ev.mont;
-const fimDesm = ev => ev.desmFim && dia(ev.desmFim) >= dia(ev.desm) ? ev.desmFim : ev.desm;
+/* "até" da montagem/desmontagem só vale se fizer sentido: não passa do evento
+   nem de 45 dias — data trocada (dia/mês) ou ano errado viraria meses de montagem */
+const difDias = (a, b) => Math.round((new Date(dia(b)+'T12:00') - new Date(dia(a)+'T12:00')) / 864e5);
+function fimMontInvalido(ev){
+  if(!ev.montFim || !ev.mont || dia(ev.montFim) < dia(ev.mont)) return false;
+  const fimEvt = dia(ev.evtFim) || dia(ev.evt);
+  return difDias(ev.mont, ev.montFim) > 45 || (fimEvt && dia(ev.montFim) > fimEvt);
+}
+function fimDesmInvalido(ev){
+  if(!ev.desmFim || !ev.desm || dia(ev.desmFim) < dia(ev.desm)) return false;
+  return difDias(ev.desm, ev.desmFim) > 45;
+}
+const fimMont = ev => ev.montFim && dia(ev.montFim) >= dia(ev.mont) && !fimMontInvalido(ev) ? ev.montFim : ev.mont;
+const fimDesm = ev => ev.desmFim && dia(ev.desmFim) >= dia(ev.desm) && !fimDesmInvalido(ev) ? ev.desmFim : ev.desm;
 const diasEquipe = ev => [...new Set([...diasEntre(ev.mont, fimMont(ev)), ...diasEntre(ev.desm, fimDesm(ev))])];
 const diasVeiculo = ev => ev.permanece ? diasEntre(ev.mont, fimDesm(ev)) : diasEquipe(ev);
 const periodo2 = (a,b) => dia(a)===dia(b) ? fmtD(a) : fmtD(a)+' a '+fmtD(b);
@@ -1857,8 +1884,13 @@ function analisar(ev, ag){
   }
   ag = ag || novaAgenda();
   const c = carga(ev);
+  const datasRuins = [];
+  if(fimMontInvalido(ev)) datasRuins.push({msg:'A montagem está de ' + fmtD(ev.mont) + ' até ' + fmtD(ev.montFim) + ' (' + (difDias(ev.mont, ev.montFim)+1) + ' dias)' + ((dia(ev.evtFim)||dia(ev.evt)) && dia(ev.montFim) > (dia(ev.evtFim)||dia(ev.evt)) ? ', terminando depois do evento' : '') + '. A Central está considerando só o dia ' + fmtD(ev.mont) + ' até você corrigir.',
+    dica:'Abra o evento e corrija o "até" da montagem — provavelmente dia e mês trocados ou ano errado na planilha.'});
+  if(fimDesmInvalido(ev)) datasRuins.push({msg:'A desmontagem está de ' + fmtD(ev.desm) + ' até ' + fmtD(ev.desmFim) + ' (' + (difDias(ev.desm, ev.desmFim)+1) + ' dias). A Central está considerando só o dia ' + fmtD(ev.desm) + ' até você corrigir.',
+    dica:'Abra o evento e corrija o "até" da desmontagem.'});
   const dEq = diasEquipe(ev), dVe = diasVeiculo(ev);
-  const r = {carga:c, conflitos:[], just:{}, frota:[]};
+  const r = {carga:c, conflitos:[...datasRuins], just:{}, frota:[]};
 
   /* 1 e 2 — o material define a equipe */
   if(precisaJailson(ev)){
@@ -2191,8 +2223,9 @@ function opsDoDia(D){
       .map(pp => Object.assign({}, pp, {mt: manutDia(ev, pp.nome, D)}));
     if(!fase && !viagens.length && !pessoas.length) return;
     const lista = fase==='desm' ? dD : dM;
-    ops.push({ev, fase: fase || (viagens[0] && viagens[0].fase) || 'mont',
-      n: lista.indexOf(D)+1, tot: lista.length,
+    const fora = !fase && !viagens.length;   /* alguém marcado num dia que não é de montagem nem de desmontagem */
+    ops.push({ev, dia: D, fase: fase || (viagens[0] && viagens[0].fase) || 'mont', fora,
+      n: fase ? lista.indexOf(D)+1 : 0, tot: fase ? lista.length : 0,
       hora: String(fase==='desm' ? ev.desm : ev.mont || '').slice(11,16),
       equipe: ev.equipe || plano(ev).equipe, pessoas, viagens});
   });
@@ -2215,12 +2248,49 @@ function opsDoDia(D){
   const camDuplo = Object.keys(cam).filter(k=>cam[k].size>1).map(k=>({v:veiculos.find(y=>y.id===k), onde:[...grupo[k]]}));
   return {ops, duplos, camDuplo};
 }
+/* pessoas com dia marcado fora da montagem e da desmontagem deste evento */
+function diasForaFases(ev){
+  if(!ev.mont) return [];
+  const fases = new Set([...diasEntre(ev.mont, fimMont(ev)), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [])]);
+  return pessoasNaEscala(ev).filter(pp=>!pp.prod && (ev.diasPessoa||{})[pp.nome])
+    .map(pp=>({nome:pp.nome, dias: diasDe(ev, pp.nome).filter(d=>!fases.has(d))})).filter(x=>x.dias.length);
+}
+function blocoDiasFora(ev){
+  const l = diasForaFases(ev); if(!l.length) return '';
+  return '<div style="grid-column:1/-1"><div class="alert amber" style="margin:0">📅 <b>Dias marcados fora da montagem e da desmontagem:</b> '+
+    l.map(x=>x.nome+' ('+x.dias.map(d=>fmtD(d).slice(0,5)).join(', ')+')').join('; ')+
+    '. Se foi engano (sobra de data errada), tire esses dias; se for plantão no evento, pode deixar. '+
+    '<button class="mini" onclick="limparDiasFora(\''+ev.id+'\')">Tirar esses dias</button></div></div>';
+}
+function limparDiasFora(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const l = diasForaFases(ev);
+  l.forEach(x=>{
+    const r = ev.diasPessoa[x.nome];
+    const fica = diasDe(ev, x.nome).filter(d=>!x.dias.includes(d));
+    ev.diasPessoa[x.nome] = {dias: fica};
+    if(!fica.length) delete ev.diasPessoa[x.nome];
+  });
+  if(ev.diasPessoa && !Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+  if(typeof agendarEscalaEv === 'function') agendarEscalaEv(id);
+  salvar(); renderQuadro(); verEvento(id);
+  toast('📅 Dias fora da montagem e da desmontagem retirados — a Escala de Montadores é atualizada em seguida.');
+}
+/* rótulo da operação: fase e dia dela */
+function rotuloOp(o, sep){
+  sep = sep || ' · ';
+  if(o.fora){
+    const noEvento = diasEntre(o.ev.evt, o.ev.evtFim || o.ev.evt).includes(o.dia);
+    return (noEvento ? 'Dia do evento' : 'Fora da montagem e da desmontagem') + sep + 'dias marcados de ' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ');
+  }
+  return (o.fase==='desm' ? 'Desmontagem' : 'Montagem') + (o.tot>1 ? sep + 'dia ' + o.n + ' de ' + o.tot : '');
+}
 /* mensagem do líder só com o que acontece NAQUELE dia */
 function mensagemDia(o, D){
   const ev = o.ev, L = [];
   L.push('*' + (D===diaSeguinte() ? 'AMANHÃ' : 'ESCALA') + ' — ' + rotDia(D) + '*');
   L.push('*' + ev.nome + '*');
-  L.push((o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
+  L.push(o.fora ? '📅 ' + rotuloOp(o, ' — ') : (o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
   if(ev.local && ev.local!=='—') L.push('📍 ' + ev.local + (ev.cidade && ev.cidade!=='—' ? ' — ' + ev.cidade : ''));
   else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
@@ -2260,10 +2330,11 @@ function renderAmanha(){
     if(x.manut) alertas.push('🔧 <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> está em manutenção e segue escalado em ' + esc(o.ev.nome));
     else if(!x.motorista && !x.jaLocal) alertas.push('🧑‍✈️ <b>' + esc(x.v.tipo + ' ' + x.v.placa) + '</b> sem motorista em ' + esc(o.ev.nome));
   }));
+  ops.forEach(o=>{ if(o.fora) alertas.push('📅 <b>' + esc(o.ev.nome) + '</b>: ' + esc(o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ')) + ' marcado(s) num dia fora da montagem e da desmontagem — confira os 📅 dias no evento'); });
   ops.forEach(o=>{ if(!o.pessoas.some(pp=>!pp.prod) && o.fase) alertas.push('👷 <b>' + esc(o.ev.nome) + '</b> sem ninguém escalado para o dia'); });
   ops.forEach(o=>{ const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
     if(w && riscoClima(w)) alertas.push((riscoClima(w)===2?'⛈':'☔') + ' <b>' + esc(o.ev.nome) + '</b> (' + esc(c) + '): ' + txtClima(w)); });
-  const combos = htmlJuntar(D);
+  const combos = htmlJuntar(D) + htmlCarregarNoDia(somaDiaISO(D, -1), D);
   document.getElementById('am-corpo').innerHTML = !ops.length
     ? '<div class="panel empty"><b>Nada na rua em ' + rotDia(D) + '</b>Nenhuma montagem, desmontagem ou saída de caminhão.</div>'
     : (alertas.length ? '<div class="alert red" style="margin:0 0 12px"><b>Conferir antes de liberar:</b><br>' + alertas.join('<br>') + '</div>' : '<div class="alert green" style="margin:0 0 12px">Tudo certo: ninguém em dois lugares, nenhum caminhão repetido e todos com motorista.</div>') + combos +
@@ -2271,7 +2342,7 @@ function renderAmanha(){
         const eq = o.equipe;
         return '<div class="am-op" onclick="fechar(\'ov-amanha\');verEvento(\''+o.ev.id+'\')">'+
           '<div class="am-cab"><span class="ic '+(o.fase==='desm'?'d':'m')+'">'+(o.fase==='desm'?'📤':'🔨')+'</span>'+
-            '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+
+            '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+esc(rotuloOp(o))+
               (o.ev.cidade && o.ev.cidade!=='—' ? ' · '+esc(o.ev.cidade) : '')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</small></div>'+
             (o.hora ? '<b class="hora">'+o.hora+'</b>' : '')+'</div>'+
           (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomeDo(x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
@@ -2326,7 +2397,7 @@ function imprimirAmanha(){
     '<h1>Operações — '+rotDia(D)+'</h1><p class="sub">'+ops.length+' operação(ões) · '+saidas.length+' saída(s) de caminhão · gerado em '+new Date().toLocaleDateString('pt-BR')+'</p>'+
     ((duplos.length||camDuplo.length) ? '<div class="alerta">'+duplos.map(x=>'⚠ '+esc(x.nome)+' em dois lugares: '+x.onde.map(esc).join(' e ')).concat(camDuplo.map(x=>'⚠ '+esc(x.v.tipo+' '+x.v.placa)+' em dois eventos: '+x.onde.map(esc).join(' e '))).join('<br>')+'</div>' : '')+
     (saidas.length ? '<h2>Saída de caminhões</h2><table><thead><tr><th>Sai</th><th>Caminhão</th><th>Motorista</th><th>Evento</th><th>Destino</th><th>Visto</th></tr></thead><tbody>'+
-      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>carregar '+s.hs.carregar+' · chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
+      saidas.map(s=>'<tr><td>'+(s.hs ? '<b>'+s.hs.saida+'</b>'+(s.hs.vespera?' <small>(véspera)</small>':'')+'<br><small>'+(s.hs.ponte?'🌉 ponte '+s.hs.ponte+' · ':'')+'chegar '+s.hs.chegada+'</small>' : (s.o.hora||'—'))+'</td><td><b>'+esc(s.x.v.tipo+' '+s.x.v.placa)+'</b>'+(s.x.junto?'<br><small>🔗 junto com '+esc(nomeDo(s.x.junto))+'</small>':'')+'</td><td>'+esc(s.x.motorista||'—')+'</td><td>'+esc(s.o.ev.nome)+'<br><small>'+(s.o.fase==='desm'?'desmontagem':'montagem')+'</small></td><td>'+esc([s.o.ev.local!=='—'?s.o.ev.local:'', s.o.ev.cidade!=='—'?s.o.ev.cidade:''].filter(Boolean).join(' · ')||'—')+((+s.o.ev.km)?'<br><small>'+s.o.ev.km+' km</small>':'')+'</td><td style="width:90px"></td></tr>').join('')+'</tbody></table>' : '')+
     '<h2>Equipes</h2>'+ops.map(o=>'<div class="op"><b>'+esc(o.ev.nome)+'</b> — '+(o.fase==='desm'?'desmontagem':'montagem')+(o.tot>1?' (dia '+o.n+' de '+o.tot+')':'')+(o.hora?' · início '+o.hora:'')+
       '<br>👷 <b>'+esc(o.equipe)+'</b>: '+(o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' (produtor)':'')+(pp.mt?' (manutenção)':'')).join(', ')||'—')+
       ((o.ev.respNome||o.ev.respTel)?'<br>📞 '+esc([o.ev.respNome,o.ev.respTel].filter(Boolean).join(' — ')):'')+
@@ -2444,6 +2515,42 @@ async function geocodCidade(nome){
   const j = await r.json(); const x = j && j.results && j.results[0];
   return x ? {lat:x.latitude, lon:x.longitude} : null;
 }
+/* previsão de UMA cidade (usada ao abrir o evento e pelo lote) */
+const climaPendente = {};
+async function climaCidade(c, forcar){
+  const reg = CLIMA[c] || {};
+  if(!forcar && reg.dias && reg.t && Date.now() - reg.t < 3*3600*1000) return reg;
+  if(reg.lat == null){
+    let g = null;
+    try{ g = await geocodCidade(c); }catch(e){}
+    if(!g){ /* segunda tentativa: pelo mapa (OpenStreetMap) */
+      try{ const x = await geocodEndereco(c.replace(/\s*[-\/]\s*[A-Z]{2}$/,'') + ', Brasil'); if(x) g = {lat:x.lat, lon:x.lon}; }catch(e){}
+    }
+    if(!g){ CLIMA[c] = {semLocal:true, t:Date.now()}; guardarClima(); return CLIMA[c]; }
+    reg.lat = g.lat; reg.lon = g.lon;
+  }
+  const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
+    '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
+  const r = await fetch(u); if(!r.ok) throw new Error('previsão ' + r.status);
+  const j = await r.json(), dd = j.daily || {};
+  reg.dias = {};
+  (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
+    rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
+  reg.t = Date.now(); delete reg.semLocal; delete reg.erro;
+  CLIMA[c] = reg; guardarClima();
+  return reg;
+}
+/* abre o evento sem previsão: busca na hora e redesenha */
+function pedirClima(ev){
+  const c = cidadeClima(ev); if(!c || climaPendente[c]) return;
+  climaPendente[c] = true;
+  climaCidade(c, false).catch(e=>{ CLIMA[c] = Object.assign(CLIMA[c]||{}, {erro: e.message || 'sem conexão', tErro: Date.now()}); })
+    .finally(()=>{ delete climaPendente[c];
+      const m = document.getElementById('ov-ev');
+      const digitando = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName || '') && m && m.contains(document.activeElement);
+      if(m && m.classList.contains('on') && evAberto === ev.id && !digitando) verEvento(ev.id);
+      renderQuadro(); if(typeof renderTV === 'function') renderTV(); });
+}
 async function atualizarClima(forcar){
   if(climaRodando) return; climaRodando = true;
   try{
@@ -2452,18 +2559,7 @@ async function atualizarClima(forcar){
     const cidades = [...new Set(eventos.filter(ev => !ev.esp && ev.mont && dia(ev.mont) <= limISO && (dia(fimDesm(ev)) || dia(ev.mont)) >= HOJE)
       .map(cidadeClima).filter(Boolean))];
     for(const c of cidades){
-      const reg = CLIMA[c] || {};
-      if(!forcar && reg.t && Date.now() - reg.t < 3*3600*1000) continue;
-      if(reg.lat == null){ const g = await geocodCidade(c); if(!g){ CLIMA[c] = {semLocal:true, t:Date.now()}; continue; } reg.lat = g.lat; reg.lon = g.lon; }
-      const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + reg.lat + '&longitude=' + reg.lon +
-        '&daily=precipitation_sum,precipitation_probability_max,wind_gusts_10m_max,weather_code,temperature_2m_max&timezone=America%2FSao_Paulo&forecast_days=16';
-      const r = await fetch(u); if(!r.ok) continue;
-      const j = await r.json(), dd = j.daily || {};
-      reg.dias = {};
-      (dd.time||[]).forEach((d,i)=>{ reg.dias[d] = {chuva:+dd.precipitation_sum[i]||0, prob:+dd.precipitation_probability_max[i]||0,
-        rajada:+dd.wind_gusts_10m_max[i]||0, cod:+dd.weather_code[i]||0, max:+dd.temperature_2m_max[i]||0}; });
-      reg.t = Date.now();
-      CLIMA[c] = reg;
+      try{ await climaCidade(c, forcar); }catch(e){ CLIMA[c] = Object.assign(CLIMA[c]||{}, {erro: e.message || 'sem conexão', tErro: Date.now()}); }
     }
     guardarClima();
     renderQuadro();
@@ -2503,9 +2599,19 @@ function chipClima(ev){
 }
 function blocoClima(ev){
   const c = cidadeClima(ev);
-  if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade para ver a previsão.</div>';
+  if(!c) return '<div style="font-size:12px;color:var(--muted)">Sem cidade no evento — preencha a cidade em 📍 Local do evento, acima.</div>';
   const reg = CLIMA[c];
-  if(!reg || !reg.dias) return '<div style="font-size:12px;color:var(--muted)">'+(reg&&reg.semLocal?'Não achei "'+c+'" no mapa para a previsão.':'Previsão ainda não carregada (precisa de internet).')+'</div>';
+  /* a previsão cobre só os próximos 16 dias */
+  const lim = somaDiaISO(HOJE, 15);
+  const diasTrab = [...diasEntre(ev.mont, fimMont(ev)), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [])];
+  if(!diasTrab.some(d => d >= HOJE && d <= lim))
+    return '<div style="font-size:12px;color:var(--muted)">'+(diasTrab.every(d=>d < HOJE) ? 'Os dias de trabalho já passaram.' : 'A previsão sai 16 dias antes — aparece aqui a partir de '+fmtD(somaDiaISO(diasTrab.filter(d=>d>=HOJE)[0] || HOJE, -15))+'.')+'</div>';
+  if(!reg || !reg.dias){
+    if(reg && reg.semLocal) return '<div style="font-size:12px;color:var(--muted)">Não achei a cidade "'+c+'" no mapa — confira o nome da cidade em 📍 Local do evento.</div>';
+    if(reg && reg.erro && Date.now() - (reg.tErro||0) < 60000) return '<div style="font-size:12px;color:#b0483c">Não consegui buscar a previsão agora ('+reg.erro+'). <button class="mini" onclick="delete CLIMA[\''+c.replace(/'/g,"\\'")+'\'].erro;pedirClima(eventos.find(e=>e.id===\''+ev.id+'\'))">Tentar de novo</button></div>';
+    pedirClima(ev);
+    return '<div style="font-size:12px;color:var(--muted)">⏳ Buscando a previsão para '+c+'...</div>';
+  }
   const dias = [...diasEntre(ev.mont, fimMont(ev)).map(d=>({d, f:'🔨'})), ...(ev.desm ? diasEntre(ev.desm, fimDesm(ev)).map(d=>({d, f:'📤'})) : [])]
     .filter(x=>reg.dias[x.d]);
   if(!dias.length) return '<div style="font-size:12px;color:var(--muted)">Os dias de trabalho estão além dos 16 dias de previsão.</div>';
@@ -2546,12 +2652,22 @@ async function coordGalpao(){
   return CONFIG.galpaoCoord;
 }
 async function rotaKm(a, b){
-  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=false');
+  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson');
   if(!r.ok) throw new Error('rota ' + r.status);
   const j = await r.json();
   if(!j.routes || !j.routes[0]) return null;
   /* o OSRM calcula para carro: caminhão leva uns 30% a mais */
-  return {km: j.routes[0].distance / 1000, min: (j.routes[0].duration || 0) / 60 * 1.3};
+  const rt = j.routes[0], min = (rt.duration || 0) / 60 * 1.3;
+  /* passa pela Ponte Rio-Niterói? e em quanto tempo chega nela */
+  const pts = (rt.geometry && rt.geometry.coordinates) || [];
+  let acum = 0, fracPonte = null;
+  for(let i = 0; i < pts.length; i++){
+    if(i) acum += distLinha({lat:pts[i-1][1], lon:pts[i-1][0]}, {lat:pts[i][1], lon:pts[i][0]});
+    const q = {lat:pts[i][1], lon:pts[i][0]};
+    if(PONTE_PTS.some(pp => distLinha(pp, q) < 1.2)){ fracPonte = acum; break; }
+  }
+  const tot = rt.distance / 1000;
+  return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1};
 }
 /* calcula e grava o km do evento; devolve {km, fonte} ou null */
 async function calcularKm(id, silencioso){
@@ -2569,6 +2685,7 @@ async function calcularKm(id, silencioso){
     const rt = await rotaKm(orig, dest);
     if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
     ev.km = Math.round(rt.km); ev.kmFonte = fonte; ev.kmMin = Math.round(rt.min) || null;
+    if(rt.comGeo){ ev.ponteRota = rt.ponte; ev.minPonte = rt.minPonte; }
     ev.geo = {lat:dest.lat, lon:dest.lon};
     salvar(); renderQuadro();
     if(!silencioso){ verEvento(id); toast('📍 ' + ev.km + ' km do galpão até o evento, por estrada' + (fonte==='cidade' ? ' (calculado pelo centro da cidade — confira)' : '') + '.'); }
@@ -2607,12 +2724,32 @@ async function testarGalpao(){
 }
 
 /* ================= HORA DE SAÍDA =================
-   chegada = hora de início da fase; sair = chegada − estrada − margem;
-   carregar = sair − tempo de carga */
+   chegada = hora de início da fase; sair = chegada − estrada − margem.
+   O carregamento é SEMPRE no dia anterior à saída.
+   Ponte Rio-Niterói: caminhão só atravessa até as 06:00 (ajustável) —
+   se a rota passa pela ponte, a saída é antecipada e o caminhão espera no local. */
+const PONTE_PTS = [{lat:-22.8725, lon:-43.1480}, {lat:-22.8665, lon:-43.1790}]; /* vão central, sobre a baía */
 function cfgSaida(){
   const n = (v, pad) => (v === undefined || v === null || v === '' || isNaN(+v)) ? pad : +v;
-  return {carga:n(CONFIG.tempoCarga,60), margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20)};
+  return {margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20),
+    ponteAte: CONFIG.ponteAte || '06:00', ponteDepois: CONFIG.ponteDepois || ''};
 }
+/* passa pela ponte: escolha manual > rota calculada > cidade do Rio com galpão do outro lado */
+function passaPonte(ev){
+  if(ev.ponte === 'sim') return true;
+  if(ev.ponte === 'nao') return false;
+  if(typeof ev.ponteRota === 'boolean') return ev.ponteRota;
+  const cid = semAcentoSimples(ev.cidade||''), gal = semAcentoSimples(CONFIG.galpao||'');
+  if(!gal) return false;
+  const ladoRio = s => /rio de janeiro|\brj - rio\b/.test(s) && !/niteroi|sao goncalo|marica|itaborai|rio bonito/.test(s);
+  return /rio de janeiro/.test(cid) && !ladoRio(gal);
+}
+function minAtePonte(ev){
+  if(+ev.minPonte) return +ev.minPonte;
+  const vi = minViagem(ev) || 0;
+  return Math.max(0, vi - 25);   /* sem rota: a ponte fica perto do fim do caminho */
+}
+const somaDiaISO = (iso, n) => { const d = new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 function minViagem(ev){
   if(+ev.kmMin) return Math.round(+ev.kmMin);
   if(+ev.km) return Math.round(+ev.km / cfgSaida().vel * 60);
@@ -2621,13 +2758,32 @@ function minViagem(ev){
 const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); };
 const minDe = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t||''); return m ? (+m[1])*60 + (+m[2]) : null; };
 const durTxt = m => m >= 60 ? Math.floor(m/60) + 'h' + (m%60 ? String(m%60).padStart(2,'0') : '') : m + ' min';
-function horariosSaida(ev, fase){
-  /* viagem combinada: quem manda é a rota (a saída é uma só) */
+function horariosSaida(ev, fase, D){
+  const base = D || dia(fase==='desm' ? ev.desm : ev.mont);
   const ch = minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
   const vi = minViagem(ev);
-  if(ch == null || vi == null) return null;
-  const c = cfgSaida(), sai = ch - vi - c.margem;
-  return {chegada:hm(ch), saida:hm(sai), carregar:hm(sai - c.carga), viagem:vi, vespera: sai < 0, vesperaCarga: sai - c.carga < 0};
+  if(ch == null || vi == null || !base) return null;
+  const c = cfgSaida();
+  let sai = ch - vi - c.margem, ponte = null, ponteAjustou = false;
+  if(passaPonte(ev)){
+    const mp = minAtePonte(ev);
+    const ate = minDe(c.ponteAte), dep = minDe(c.ponteDepois);
+    const cruza = sai + mp;                       /* minuto do dia (pode ser negativo = véspera) */
+    const cruzaDia = ((cruza % 1440) + 1440) % 1440;
+    const ok = cruzaDia <= ate || (dep != null && cruzaDia >= dep);
+    if(!ok){
+      /* à noite (se liberado) e ainda chegando a tempo; senão antecipa para a manhã (10 min de folga) */
+      const noite = dep != null ? dep + 5 - mp : null;
+      sai = (noite != null && noite + vi <= ch && noite > sai) ? noite : ate - 10 - mp;
+      ponteAjustou = true;
+    }
+    ponte = hm(sai + mp);
+  }
+  const chegaMin = sai + vi;
+  const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
+  return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0,
+    diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou,
+    espera: ch - chegaMin > c.margem + 5 ? ch - chegaMin : 0};
 }
 /* horário de uma operação do dia: numa viagem combinada vale a saída da rota */
 function saidaDaOp(o, D){
@@ -2640,25 +2796,64 @@ function saidaDaOp(o, D){
       return Object.assign({}, rt.h1, {chegada: rt.chegada2 || '?', parada:2, primeira: rt.paradas[0].ev.nome});
     }
   }
-  return horariosSaida(o.ev, o.fase);
+  return horariosSaida(o.ev, o.fase, D);
 }
 function txtSaida(hs){
   if(!hs) return '';
-  if(hs.parada === 2) return '🕐 Caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
-  return '🕐 Carregar ' + hs.carregar + (hs.vesperaCarga ? ' (véspera)' : '') + ' · sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' · chegar ' + hs.chegada;
+  /* desmontagem: o caminhão vai vazio buscar o material — não tem carregamento */
+  const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase();
+  if(hs.parada === 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
+  return car + ' · 🕐 sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') +
+    (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : '') + ' · chegar ' + hs.chegada +
+    (hs.espera ? ' (início ' + hs.inicio + ')' : '');
 }
 function blocoSaida(ev){
   if(minViagem(ev) == null) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância (ou use 📍 Calcular) para a Central dizer a hora de sair.</div>';
   const lin = [];
   const hM = horariosSaida(ev, 'mont');
-  if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM).slice(3));
+  if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM));
   if(ev.desm){
     if(ev.permanece && !temFrotaDesm(ev)) lin.push('<b>📤 Desmontagem</b> — caminhão já está no local');
-    else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD).slice(3)); }
+    else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD)); }
   }
   const c = cfgSaida();
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' +
-    '<div style="font-size:11px;color:var(--muted)">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · ' + c.carga + ' min para carregar — ajuste em Integrações</div>';
+    ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
+      ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (caminhão só atravessa até ' + c.ponteAte + (c.ponteDepois ? ' ou depois das ' + c.ponteDepois : '') + ') — o caminhão chega antes e espera no local.</div>' : '') +
+    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
+      ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
+        '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
+        '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select></div>';
+}
+function passaPonteAuto(ev){ const s = ev.ponte; ev.ponte = null; const r = passaPonte(ev); ev.ponte = s; return r; }
+function setPonte(id, v){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.ponte = v || null;
+  salvar(); renderQuadro(); verEvento(id);
+}
+
+/* o que carrega num dia: viagens cuja saída é no dia seguinte (ou na madrugada do outro) */
+function carregarNoDia(Dc){
+  const out = [];
+  [1, 2].forEach(n=>{
+    const D = somaDiaISO(Dc, n);
+    opsDoDia(D).ops.forEach(o=>{
+      const hs = saidaDaOp(o, D);
+      if(!hs || hs.fase === 'desm' || hs.carregarDia !== Dc) return;
+      o.viagens.filter(x=>!x.jaLocal).forEach(x=>{
+        if(x.junto && hs.parada === 2) return;   /* viagem combinada: carrega uma vez só, na 1ª parada */
+        out.push({o, x, hs, D});
+      });
+    });
+  });
+  return out.sort((a,b)=> (a.hs.diaSaida + a.hs.saida).localeCompare(b.hs.diaSaida + b.hs.saida));
+}
+function htmlCarregarNoDia(Dc){
+  const l = carregarNoDia(Dc);
+  if(!l.length) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + ' (véspera da saída)</b><br>' +
+    l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomeDo(c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
 }
 
 /* ================= FICHA DO LOCAL =================
@@ -2694,7 +2889,7 @@ function eventosNoLocal(ev){
   return eventos.filter(e => e.id !== ev.id && chaveLocal(e) === k).sort((a,b)=>String(b.mont||'').localeCompare(String(a.mont||'')));
 }
 function blocoFicha(ev){
-  if(!chaveLocal(ev)) return '<div style="font-size:12px;color:var(--muted)">Sem local no evento — preencha o local para guardar a ficha dele.</div>';
+  if(!chaveLocal(ev)) return '<div style="font-size:12px;color:var(--muted)">Sem local no evento — preencha em 📍 Local do evento, acima, e a ficha aparece aqui.</div>';
   const f = fichaLocal(ev) || {};
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   const inp = 'border:1px solid var(--line);border-radius:7px;padding:7px 9px;font:inherit;font-size:12.5px';
@@ -2737,7 +2932,7 @@ function rotaJunta(D, aId, bId, fase){
   const ord = [a, b].sort((x,y)=> ((hora(x)??9999) - (hora(y)??9999)) || ((+x.km||0) - (+y.km||0)));
   const [p1, p2] = ord, trecho = kmEntre(p1, p2);
   const c = cfgSaida();
-  const h1 = horariosSaida(p1, fase);
+  const h1 = horariosSaida(p1, fase, D);
   const minTrecho = trecho != null ? Math.round(trecho / c.vel * 60) : null;
   const cheg2 = (h1 && minTrecho != null) ? minDe(h1.chegada) + c.descarga + minTrecho : null;
   const kmTot = (+p1.km||0) + (trecho||0) + (+p2.km||0);
@@ -3141,7 +3336,11 @@ function renderFases(){
     fases.map(f=>'<option '+(f===faseFiltro?'selected':'')+'>'+f+'</option>').join('');
 }
 
+let climaUltimoLote = 0;
 function renderQuadro(){
+  if(typeof window !== 'undefined' && !window.__semClimaAuto && Date.now() - climaUltimoLote > 60000){
+    climaUltimoLote = Date.now(); setTimeout(()=>atualizarClima(false), 800);
+  }
   const secJC = document.getElementById('v-jcamilo');
   if(secJC && !secJC.classList.contains('hide')) renderQuadroJC();
   replanejar(); renderFases();
@@ -3272,7 +3471,9 @@ function cardEvento(ev, soSetorJC, papel){
 /* =========================================================
    MODAL DO EVENTO
    ========================================================= */
+let evAberto = null;
 function verEvento(id){
+  evAberto = id;
   const ev = eventos.find(e=>e.id===id);
   const s = situacao(ev), a = s.a, c = a.carga;
   const eq = ev.equipe || a.equipe;
@@ -3355,6 +3556,10 @@ function verEvento(id){
           '🧠 Você costuma montar às <b>'+hs.hora+'</b> '+hs.onde+' ('+hs.vezes+'x). '+
           '<button class="mini" onclick="aplicarHora(\''+ev.id+'\',\''+hs.hora+'\')">Usar '+hs.hora+'</button></div></div>';
       })()+
+      '<div style="grid-column:1/-1"><i>📍 Local do evento</i><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<input value="'+String(ev.local && ev.local!=='—' ? ev.local : '').replace(/"/g,'&quot;')+'" placeholder="Local — ex.: Caminho Niemeyer, Marina da Glória" style="flex:2;min-width:220px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'local\',this.value)">'+
+        '<input value="'+String(ev.cidade && ev.cidade!=='—' ? ev.cidade : '').replace(/"/g,'&quot;')+'" placeholder="Cidade" style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'cidade\',this.value)">'+
+      '</div></div>'+
       '<div><i>Distância até a montagem</i><div style="display:flex;align-items:center;gap:7px">'+
         '<input type="number" min="0" step="1" value="'+(+ev.km||0)+'" '+
         'style="width:90px;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
@@ -3365,7 +3570,7 @@ function verEvento(id){
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
       '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
-      blocoJuntarEv(ev)+
+      blocoJuntarEv(ev)+blocoDiasFora(ev)+
     '</div></div>'+
 
     '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
@@ -3541,10 +3746,22 @@ function setRespTel(id, valor){
   salvar(); renderQuadro();
 }
 function setKmEvento(id, valor){
-  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; } }
+  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; e0.minPonte = null; } }
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
   salvar(); renderQuadro(); verEvento(id); /* recalcula frota (regra do agregado usa o km) */
+}
+/* local ou cidade mudou: a rota, o mapa e a previsão passam a valer para o novo endereço */
+function setLocalEvento(id, campo, valor){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev[campo] = String(valor||'').trim() || '—';
+  ev.geo = null; ev.ponteRota = undefined; ev.minPonte = null;
+  salvar(); renderQuadro(); verEvento(id);
+  if(CONFIG.galpao && ((ev.local && ev.local!=='—') || (ev.cidade && ev.cidade!=='—'))){
+    toast('📍 Endereço salvo. Calculando a distância do galpão...');
+    calcularKm(id, false);
+  }
+  if(campo === 'cidade') setTimeout(()=>atualizarClima(false), 500);
 }
 function setCampo(id, campo, valor){
   const ev = eventos.find(e=>e.id===id);
@@ -5240,7 +5457,7 @@ function renderCadastros(){
 
   const ge = document.getElementById('galpao-end');
   if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
-  { const c = cfgSaida(); [['cfg-carga',c.carga],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
+  { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
   const qs = document.getElementById('quem-sou');
@@ -6288,6 +6505,142 @@ function imprimirRelatorio(){
   w.document.close();
 }
 
+/* ================= RELATÓRIO PARA A DIRETORIA =================
+   Mesmas operações marcadas, em formato de apresentação: números, gráfico
+   por dia, equipes, frota, agenda em linha do tempo e pontos de atenção. */
+function imprimirDiretoria(){
+  const linhas = REL.linhas.filter(l=>l.marcado);
+  if(!linhas.length) return toast('Marque pelo menos uma operação.');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const AZ = '#1c4fa0', LA = '#f0851e';
+  const ini = REL.ini, fim = REL.fim;
+  /* ---- números ---- */
+  const evs = new Set(), eqs = {}, frota = {}, porDia = {}, atencao = [];
+  let viagens = 0, km = 0, diarias = 0;
+  linhas.forEach(l=>{
+    const ev = l.ev, fase = l.tipo === 'Montagem' ? 'mont' : 'desm';
+    evs.add(ev.id);
+    const diasFase = fase === 'mont' ? diasEntre(ev.mont, fimMont(ev)) : diasEntre(ev.desm, fimDesm(ev));
+    diasFase.forEach(d=>{ const x = porDia[d] = porDia[d] || {m:0, d:0}; if(fase==='mont') x.m++; else x.d++; });
+    const e = eqs[l.eq] = eqs[l.eq] || {m:0, d:0, dias:new Set(), evs:new Set()};
+    if(fase==='mont') e.m++; else e.d++;
+    diasFase.forEach(d=>e.dias.add(d)); e.evs.add(ev.nome);
+    /* pessoas × dias da fase */
+    pessoasNaEscala(ev).filter(pp=>!pp.prod).forEach(pp=>{ diarias += diasDe(ev, pp.nome).filter(d=>diasFase.includes(d)).length; });
+    /* caminhões: cada viagem conta ida e volta; desmontagem com caminhão no local só volta */
+    const jaLocal = fase==='desm' && ev.permanece && !temFrotaDesm(ev);
+    escalaDo(ev, fase).forEach(x=>{
+      const v = veiculos.find(y=>y.id===x.v); if(!v) return;
+      viagens++;
+      const k = (+ev.km||0) * (jaLocal ? 1 : 2);
+      km += k;
+      const f = frota[v.id] = frota[v.id] || {v, n:0, km:0, mot:new Set()};
+      f.n++; f.km += k; if(x.motorista) f.mot.add(x.motorista);
+    });
+    plano(ev).conflitos.forEach(c=>atencao.push(ev.nome + ': ' + c.msg));
+    diasFase.forEach(d=>{ const c = cidadeClima(ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[d];
+      if(w && riscoClima(w)) atencao.push(ev.nome + ' (' + fmtD(d).slice(0,5) + '): previsão de ' + txtClima(w).replace(/[☔⛈💨☀]/g,'').trim()); });
+  });
+  const nM = linhas.filter(l=>l.tipo==='Montagem').length, nD = linhas.length - nM;
+  const tiles = [
+    [evs.size, 'eventos atendidos'],
+    [nM, 'montagens'],
+    [nD, 'desmontagens'],
+    [viagens, 'viagens de caminhão'],
+    ['≈ ' + Math.round(km).toLocaleString('pt-BR'), 'km rodados'],
+    [diarias, 'diárias de equipe']
+  ];
+  /* ---- gráfico: operações em campo por dia (montagem e desmontagem empilhadas) ---- */
+  const dias = Object.keys(porDia).sort();
+  let grafico = '';
+  if(dias.length){
+    const W = 700, H = 190, pl = 28, pb = 34, pt = 14;
+    const max = Math.max(1, ...dias.map(d=>porDia[d].m + porDia[d].d));
+    const passo = (W - pl) / dias.length, bw = Math.max(6, Math.min(34, passo * 0.62));
+    const y = v => pt + (H - pt - pb) * (1 - v / max);
+    const marcas = [];
+    const ticks = max <= 5 ? [...Array(max+1).keys()] : [0, Math.round(max/2), max];
+    ticks.forEach(t=>marcas.push('<line x1="'+pl+'" x2="'+W+'" y1="'+y(t)+'" y2="'+y(t)+'" stroke="#e8ecf3" stroke-width="1"/><text x="'+(pl-6)+'" y="'+(y(t)+4)+'" font-size="10" fill="#8892a4" text-anchor="end">'+t+'</text>'));
+    dias.forEach((d,i)=>{
+      const x = pl + passo*i + (passo-bw)/2, m = porDia[d].m, dd = porDia[d].d;
+      const yM = y(m), yT = y(m+dd);
+      if(m) marcas.push('<rect x="'+x+'" y="'+yM+'" width="'+bw+'" height="'+(y(0)-yM)+'" rx="3" fill="'+AZ+'"><title>'+fmtD(d)+': '+m+' em montagem</title></rect>');
+      if(dd) marcas.push('<rect x="'+x+'" y="'+yT+'" width="'+bw+'" height="'+Math.max(0, yM-yT-(m?2:0))+'" rx="3" fill="'+LA+'"><title>'+fmtD(d)+': '+dd+' em desmontagem</title></rect>');
+      marcas.push('<text x="'+(x+bw/2)+'" y="'+(yT-4)+'" font-size="10" font-weight="700" fill="#1c2740" text-anchor="middle">'+(m+dd)+'</text>');
+      if(dias.length <= 20 || i % Math.ceil(dias.length/20) === 0)
+        marcas.push('<text x="'+(x+bw/2)+'" y="'+(H-pb+14)+'" font-size="9.5" fill="#5a6478" text-anchor="middle">'+fmtD(d).slice(0,5)+'</text>');
+    });
+    grafico = '<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Operações em campo por dia">'+marcas.join('')+'</svg>'+
+      '<div class="leg"><span><i style="background:'+AZ+'"></i>Montagem</span><span><i style="background:'+LA+'"></i>Desmontagem</span><span class="obs">número em cima = operações em campo no dia</span></div>';
+  }
+  /* ---- equipes ---- */
+  const eqL = Object.keys(eqs).sort((a,b)=>eqs[b].dias.size - eqs[a].dias.size);
+  const maxDias = Math.max(1, ...eqL.map(n=>eqs[n].dias.size));
+  const tabEq = '<table><thead><tr><th>Equipe</th><th class="n">Montagens</th><th class="n">Desmontagens</th><th style="width:38%">Dias em campo</th></tr></thead><tbody>'+
+    eqL.map(n=>'<tr><td><b>'+esc(n)+'</b><br><small>'+eqs[n].evs.size+' evento(s)</small></td><td class="n">'+eqs[n].m+'</td><td class="n">'+eqs[n].d+'</td>'+
+      '<td><div class="barra"><span style="width:'+Math.round(eqs[n].dias.size/maxDias*100)+'%"></span><b>'+eqs[n].dias.size+'</b></div></td></tr>').join('')+'</tbody></table>';
+  /* ---- frota ---- */
+  const frL = Object.values(frota).sort((a,b)=>b.n - a.n || b.km - a.km);
+  const tabFr = frL.length ? '<table><thead><tr><th>Veículo</th><th>Motorista(s)</th><th class="n">Viagens</th><th class="n">≈ km</th></tr></thead><tbody>'+
+    frL.map(f=>'<tr><td><b>'+esc(f.v.tipo+' '+f.v.placa)+'</b>'+(f.v.agregado?' <small>agregado</small>':'')+'</td><td>'+esc([...f.mot].join(', ')||'—')+'</td><td class="n">'+f.n+'</td><td class="n">'+Math.round(f.km).toLocaleString('pt-BR')+'</td></tr>').join('')+'</tbody></table>'
+    : '<p class="obs">Nenhum caminhão lançado nas operações selecionadas.</p>';
+  /* ---- agenda em linha do tempo ---- */
+  const porIni = {};
+  linhas.forEach(l=>{ (porIni[dia(l.ini)] = porIni[dia(l.ini)] || []).push(l); });
+  const agenda = Object.keys(porIni).sort().map(d=>{
+    const dt = new Date(d+'T12:00');
+    return '<div class="tl"><div class="tl-d"><b>'+fmtD(d).slice(0,5)+'</b><span>'+['DOM','SEG','TER','QUA','QUI','SEX','SÁB'][dt.getDay()]+'</span></div><div class="tl-c">'+
+      porIni[d].map(l=>{
+        const fase = l.tipo==='Montagem' ? 'mont' : 'desm';
+        const cam = escalaDo(l.ev, fase).map(x=>{ const v = veiculos.find(y=>y.id===x.v); return v ? v.tipo+' '+v.placa : null; }).filter(Boolean);
+        const loc = [l.ev.local!=='—'?l.ev.local:'', l.ev.cidade!=='—'?l.ev.cidade:''].filter(Boolean).join(' — ');
+        return '<div class="tl-i"><span class="fase '+(fase==='mont'?'m':'d')+'">'+l.tipo.toUpperCase()+'</span> <b>'+esc(l.ev.nome)+'</b>'+
+          (String(l.ini).slice(11,16) ? ' <small>às '+String(l.ini).slice(11,16)+'</small>' : '')+
+          (dia(l.ini)!==dia(l.fimD) ? ' <small>até '+fmtD(l.fimD).slice(0,5)+'</small>' : '')+
+          '<br><small>'+esc(loc||'—')+((+l.ev.km)?' · '+l.ev.km+' km':'')+' · equipe '+esc(l.eq)+(cam.length?' · '+esc(cam.join(', ')):'')+'</small></div>';
+      }).join('')+'</div></div>';
+  }).join('');
+  const aten = [...new Set(atencao)];
+  const titulo = 'Relatório de operações';
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>'+titulo+' '+fmtD(ini)+' a '+fmtD(fim)+'</title><style>'+
+    '@page{size:A4;margin:12mm}'+
+    'body{font-family:Segoe UI,Arial,sans-serif;color:#1c2740;margin:26px;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.topo{display:flex;align-items:center;gap:18px;padding-bottom:12px;border-bottom:4px solid '+LA+'}'+
+    '.topo img{max-height:58px;max-width:200px}'+
+    '.topo h1{margin:0;font-size:22px;color:'+AZ+';letter-spacing:.3px;text-transform:uppercase}'+
+    '.topo .per{margin-left:auto;text-align:right;font-size:12px;color:#5a6478}.topo .per b{display:block;font-size:15px;color:#1c2740}'+
+    '.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0 6px}'+
+    '.kpi{border:1px solid #e3e8f0;border-top:3px solid '+AZ+';border-radius:6px;padding:9px 10px}'+
+    '.kpi b{display:block;font-size:22px;color:'+AZ+';line-height:1.1}.kpi span{font-size:10.5px;color:#5a6478;text-transform:uppercase;letter-spacing:.3px}'+
+    'h2{font-size:13px;color:'+AZ+';text-transform:uppercase;letter-spacing:.6px;margin:20px 0 8px;padding-left:9px;border-left:4px solid '+LA+'}'+
+    '.leg{display:flex;gap:16px;font-size:11px;color:#5a6478;margin-top:2px}.leg i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}'+
+    '.obs{color:#8892a4;font-size:11px}'+
+    'table{width:100%;border-collapse:collapse}th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#8892a4;text-align:left;padding:5px 7px;border-bottom:1px solid #e3e8f0}'+
+    'td{padding:6px 7px;border-bottom:1px solid #eef1f6;vertical-align:top}.n{text-align:right;white-space:nowrap}small{color:#5a6478}'+
+    '.barra{display:flex;align-items:center;gap:6px}.barra span{display:block;height:9px;border-radius:0 4px 4px 0;background:'+AZ+';min-width:3px}.barra b{font-size:11px}'+
+    '.duas{display:grid;grid-template-columns:1fr 1fr;gap:18px}'+
+    '.tl{display:flex;gap:0;page-break-inside:avoid}'+
+    '.tl-d{width:62px;flex:none;text-align:center;background:'+AZ+';color:#fff;border-radius:6px;padding:6px 0;align-self:flex-start}.tl-d b{display:block;font-size:14px}.tl-d span{font-size:10px;letter-spacing:.5px}'+
+    '.tl-c{flex:1;border-left:3px solid '+LA+';margin-left:12px;padding:0 0 12px 12px}'+
+    '.tl-i{margin-bottom:7px;line-height:1.45}'+
+    '.fase{font-size:9.5px;font-weight:800;letter-spacing:.4px;border-radius:4px;padding:1px 6px;color:#fff}.fase.m{background:'+AZ+'}.fase.d{background:'+LA+'}'+
+    '.aten{background:#fdf3ea;border:1px solid #f6d7b8;border-radius:6px;padding:9px 12px;line-height:1.6}'+
+    '.rod{margin-top:22px;padding-top:8px;border-top:1px solid #e3e8f0;font-size:10px;color:#8892a4;display:flex;justify-content:space-between}'+
+    'h2,.kpis{page-break-after:avoid} tr{page-break-inside:avoid}'+
+    '@media print{body{margin:0}}'+
+  '</style></head><body>'+
+    '<div class="topo">'+(CONFIG.logo?'<img src="'+CONFIG.logo+'">':'')+'<h1>'+titulo+'</h1><div class="per"><b>'+fmtD(ini)+' a '+fmtD(fim)+'</b>montagens e desmontagens com equipe própria</div></div>'+
+    '<div class="kpis">'+tiles.map(t=>'<div class="kpi"><b>'+t[0]+'</b><span>'+t[1]+'</span></div>').join('')+'</div>'+
+    (grafico ? '<h2>Operações em campo por dia</h2>'+grafico : '')+
+    '<div class="duas"><div><h2>Equipes</h2>'+tabEq+'</div><div><h2>Frota</h2>'+tabFr+'</div></div>'+
+    '<h2>Pontos de atenção</h2>'+(aten.length ? '<div class="aten">'+aten.map(a=>'• '+esc(a)).join('<br>')+'</div>' : '<p class="obs">Nenhum conflito ou alerta de tempo nas operações selecionadas.</p>')+
+    '<h2>Agenda das operações</h2>'+agenda+
+    '<div class="rod"><span>Gerado em '+new Date().toLocaleDateString('pt-BR')+' às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</span><span>'+linhas.length+' operação(ões) · km estimados pela distância do galpão (ida e volta)</span></div>'+
+  '<'+'script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>');
+  w.document.close();
+}
+
 function relatorioCal(){
   const ano = calRef.getFullYear(), mes = calRef.getMonth();
   const titulo = calRef.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
@@ -6729,8 +7082,7 @@ function relogioTV(){
   if(tvRelogio && iso !== HOJE && !window.__tvRecarregou){ window.__tvRecarregou = true; try{ location.reload(); }catch(e){} }
 }
 function rolarTV(){
-  ['tv-hoje','tv-amanha'].forEach(id=>{
-    const el2 = document.getElementById(id); if(!el2) return;
+  document.querySelectorAll('#tv .tv-lista').forEach(el2=>{
     if(el2.scrollHeight <= el2.clientHeight + 4){ el2.scrollTop = 0; return; }
     const prox = el2.scrollTop + el2.clientHeight * 0.8;
     const alvo = prox >= el2.scrollHeight - el2.clientHeight + 4 && el2.scrollTop >= el2.scrollHeight - el2.clientHeight - 4 ? 0 : prox;
@@ -6738,66 +7090,97 @@ function rolarTV(){
   });
 }
 /* status da saída de hoje: SAIU, CARREGANDO (ou quase), PRÓXIMA */
-function statusTV(hs, D){
-  if(!hs || D !== HOJE) return null;
+function statusTV(hs, D, o){
+  /* a tela do galpão só trabalha com a hora de início da montagem/desmontagem */
+  if(D !== HOJE || !o || o.fora || !o.hora) return null;
+  { const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes(), ini = minDe(o.hora);
+    return m >= ini ? {cls:'', txt:'EM ANDAMENTO'} : (ini - m <= 60 ? {cls:'agora', txt:'COMEÇA EM ' + (ini - m) + ' MIN'} : null); }
   const agora = new Date(), m = agora.getHours()*60 + agora.getMinutes();
-  const sai = hs.vespera ? -1 : minDe(hs.saida), car = hs.vesperaCarga ? -1 : minDe(hs.carregar);
-  if(sai >= 0 && m >= sai + 10) return {cls:'saiu', txt:'SAIU'};
-  if(car >= 0 && m >= car - 30) return {cls:'agora', txt: m >= car ? 'CARREGANDO' : 'CARREGAR JÁ'};
+  const sai = hs.vespera ? -1 : minDe(hs.saida);
   if(sai < 0) return {cls:'saiu', txt:'SAIU (VÉSPERA)'};
+  if(m >= sai + 10) return {cls:'saiu', txt:'SAIU'};
+  if(m >= sai - 60) return {cls:'agora', txt: m >= sai ? 'SAINDO' : 'SAI EM ' + (sai - m) + ' MIN'};
   return {cls:'', txt:'AGUARDANDO'};
 }
 function cardTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const hs = saidaDaOp(o, D);
-  const st = statusTV(hs, D);
+  const st = statusTV(hs, D, o);
   const semLider = o.pessoas.filter(pp=>!pp.prod);
   const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
   const al = [];
   const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
-  if(w && riscoClima(w)) al.push(txtClima(w));
+  if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
+  const tempo = w ? '<div class="tv-lin" style="'+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>' : '';
   const f = fichaLocal(o.ev); if(f && resumoFicha(f)) al.push('🚧 ' + resumoFicha(f));
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
     '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
-    '<div class="tv-sub">'+(o.fase==='desm'?'Desmontagem':'Montagem')+(o.tot>1?' · dia '+o.n+' de '+o.tot:'')+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
-    (hs ? '<div class="tv-hor">'+(hs.parada===2
+    '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
+    (false ? '<div class="tv-hor">'+(hs.parada===2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
-        : '<span>carregar <b>'+hs.carregar+'</b>'+(hs.vesperaCarga?' <small>(véspera)</small>':'')+'</span><span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span><span>chega '+hs.chegada+'</span>')+'</div>'
-       : (o.hora ? '<div class="tv-hor"><span>início <b>'+o.hora+'</b></span></div>' : ''))+
+        : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
+       : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
+    tempo+
     al.map(a=>'<div class="tv-alerta">'+esc(a)+'</div>').join('')+
   '</div>';
+}
+/* previsão resumida para a tela: ícone, máxima, chuva e vento */
+function iconeClima(cod){
+  if([95,96,99].includes(cod)) return '⛈';
+  if(cod >= 80) return '🌦';
+  if(cod >= 51) return '🌧';
+  if(cod === 45 || cod === 48) return '🌫';
+  if(cod >= 2) return '⛅';
+  return '☀';
+}
+function climaCurto(w){
+  const p = [iconeClima(w.cod) + ' ' + Math.round(w.max) + '°'];
+  p.push('chuva ' + (w.chuva >= 1 ? Math.round(w.chuva) + ' mm' : '0 mm') + ' (' + w.prob + '%)');
+  if(w.rajada >= 40) p.push('💨 ' + Math.round(w.rajada) + ' km/h');
+  if([95,96,99].includes(w.cod)) p.push('trovoada');
+  return p.join(' · ');
+}
+function carregarTV(){
+  const l = carregarNoDia(HOJE);
+  if(!l.length) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="tv-op" style="border-left-color:#17a05e;background:#15402c"><div class="tv-nome">📦 CARREGAR HOJE</div>'+
+    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomeDo(c.x.junto)):'')+
+      ' — monta <b style="color:#ffb25e">'+(c.D===HOJE?'hoje':rotDia(c.D).toLowerCase())+' às '+(c.o.hora||'—')+'</b></div>').join('')+'</div>';
 }
 function listaTV(D){
   const r = opsDoDia(D);
   /* em ordem de saída do caminhão; sem caminhão, pela hora de início */
-  const chave = o => { const hs = saidaDaOp(o, D); return hs ? (hs.vespera ? '00:00' : hs.saida) : (o.hora || '99:99'); };
+  const chave = o => o.hora || '99:99';
   r.ops.sort((a,b)=> chave(a).localeCompare(chave(b)) || a.ev.nome.localeCompare(b.ev.nome));
   return r;
 }
 function renderTV(){
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
   try{ if(typeof replanejar === 'function') replanejar(); }catch(e){}
-  const AM = diaSeguinte();
-  const H = listaTV(HOJE), A = listaTV(AM);
+  const DIAS_TV = 4;   /* hoje + 4 dias pra frente */
+  const dias = [0,1,2,3,4].slice(0, DIAS_TV + 1).map(n=>somaDias(HOJE, n));
+  const listas = dias.map(D=>({D, r: listaTV(D)}));
   document.getElementById('tv-logo').innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'">' : '';
   const dt = new Date(HOJE+'T12:00');
   document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES DO GALPÃO<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+'</small>';
   const nS = r => r.ops.reduce((s,o)=>s + o.viagens.filter(x=>!x.jaLocal).length, 0);
-  document.getElementById('tv-hoje-sub').textContent = rotDia(HOJE) + ' · ' + H.ops.length + ' operação(ões) · ' + nS(H) + ' caminhão(ões)';
-  document.getElementById('tv-am-sub').textContent = rotDia(AM) + ' · ' + A.ops.length + ' operação(ões) · ' + nS(A) + ' caminhão(ões)';
   const vazio = txt => '<div class="tv-vazio">'+txt+'</div>';
-  const guardaH = document.getElementById('tv-hoje').scrollTop, guardaA = document.getElementById('tv-amanha').scrollTop;
-  document.getElementById('tv-hoje').innerHTML = H.ops.length ? H.ops.map(o=>cardTV(o, HOJE)).join('') : vazio('Nada na rua hoje.');
-  document.getElementById('tv-amanha').innerHTML = A.ops.length ? A.ops.map(o=>cardTV(o, AM)).join('') : vazio('Nada programado para amanhã.');
-  document.getElementById('tv-hoje').scrollTop = guardaH; document.getElementById('tv-amanha').scrollTop = guardaA;
+  const guarda = [...document.querySelectorAll('#tv .tv-lista')].map(e2=>e2.scrollTop);
+  document.getElementById('tv-cols').innerHTML = listas.map(({D, r}, i)=>
+    '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
+      ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length ? r.ops.map(o=>cardTV(o, D)).join('') : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>').join('');
+  document.querySelectorAll('#tv .tv-lista').forEach((e2,i)=>{ e2.scrollTop = guarda[i] || 0; });
   /* rodapé: o que precisa de atenção */
   const al = [];
-  [[H, 'Hoje'], [A, 'Amanhã']].forEach(([r, q])=>{
+  listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
     r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
     r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
+    r.ops.filter(o=>o.fora).forEach(o=>al.push(q + ': ' + o.ev.nome + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'));
     r.ops.forEach(o=>o.viagens.forEach(x=>{
       if(x.manut) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção');
       else if(!x.motorista && !x.jaLocal) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + o.ev.nome + ')');
@@ -7142,10 +7525,7 @@ async function salvar(){
 <div id="tv" ondblclick="fecharTV()">
   <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
   <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-rel" id="tv-rel"></div></div>
-  <div class="tv-cols">
-    <div class="tv-col"><h2>HOJE <span id="tv-hoje-sub"></span></h2><div class="tv-lista" id="tv-hoje"></div></div>
-    <div class="tv-col"><h2>AMANHÃ <span id="tv-am-sub"></span></h2><div class="tv-lista" id="tv-amanha"></div></div>
-  </div>
+  <div class="tv-cols" id="tv-cols"></div>
   <div class="tv-rod" id="tv-rod"></div>
 </div>
 </body>
