@@ -430,6 +430,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
       <button class="pill" id="btn-meu" onclick="abrirMeuDia()" title="Seus eventos, recados, lembretes e pendências">🙋 Meu dia</button>
       <button class="pill" id="btn-pend" onclick="abrirPendencias()" title="Tudo o que precisa de ação, do mais urgente para o menos">🚨 Pendências</button>
+      <button class="pill" onclick="abrirSemaforo()" title="Para o comercial: antes de fechar um evento novo, veja se a data tem gente, caminhão e estrutura livres">🚦 Pode vender?</button>
       <button class="pill" onclick="abrirPico()" title="Previsão das próximas semanas pelo histórico: onde vai faltar equipe ou caminhão">📈 Previsão de pico</button>
       <button class="pill" onclick="abrirBuscaEstr()" title="Em quais eventos está uma estrutura (palco 12x10, grid...) e se está livre numa data">🔎 Estruturas</button>
       <button class="pill" onclick="abrirTV()" title="Tela grande para a TV do galpão: o que sai hoje e amanhã, atualiza sozinha">📺 Tela do galpão</button>
@@ -576,6 +577,12 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <div id="km-status" style="margin-top:8px;font-size:12.5px;color:var(--muted)"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
+        <b>🗺 Google Maps (opcional — é pago)</b>
+        <input id="cfg-google" placeholder="Chave de API do Google Maps" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.googleKey=this.value.trim();salvar();TRANSITO={};eventos.forEach(e=>{e.pedagioG=null});">
+        <button class="mini" onclick="testarGoogle()">Testar</button>
+        <div id="gg-status" style="font-size:11.5px;color:var(--muted);width:100%"><b>Sem chave nenhuma a Central já faz tudo de graça:</b> a rota vem do mapa aberto e o pedágio vem da tabela de praças logo abaixo, que já vem preenchida com as praças da região. O Google é só para quem quiser o valor exato de pedágio de qualquer rota do Brasil sem manter a tabela — exige cartão no Google Cloud (console.cloud.google.com → ativar Routes API e Places API (New) → criar chave; tem cota grátis por mês, mas pode gerar cobrança).</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🚦 Trânsito ao vivo</b>
         <input id="cfg-tomtom" placeholder="Chave TomTom (grátis em developer.tomtom.com)" style="flex:1;min-width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.tomtomKey=this.value.trim();salvar();TRANSITO={};conferirTransitoProximas(true)">
         <button class="mini" onclick="testarTransito()">Testar</button>
@@ -615,7 +622,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <input id="cfg-url" placeholder="Endereço da Central na internet (ex.: https://…/central-planejamento.html)" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.urlCentral=this.value.trim();salvar()">
         <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a Tela do galpão mostra onde está o caminhão e quando chega. Precisa ser o endereço onde a Central fica publicada (um arquivo aberto só no computador não abre no celular).</small>
       </div>
-      <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com a chave, a Central confere engarrafamento, acidente e interdição na rota de cada caminhão nas 3 horas antes da saída, e avisa quanto tempo antecipar. Sem a chave, cada operação tem os botões para abrir a rota no Waze ou no Google Maps.</div>
+      <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com o Google ligado, o TomTom fica só para o que o Google não dá: o detalhe dos acidentes e interdições na rota, o mapa da TV e a ordem das paradas na viagem combinada. Pode deixar as duas chaves.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
         <label>🌉 Ponte Rio-Niterói: caminhão atravessa até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
@@ -807,6 +814,33 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="perguntar('quantos km rodamos este mês?')">km deste mês</button>
         <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-semaforo" onclick="if(event.target===this)fechar('ov-semaforo')">
+  <div class="modal" style="max-width:840px">
+    <header><div><h2>🚦 Pode vender?</h2><div class="os">para o comercial: confere gente, caminhão e estrutura livres antes de fechar um evento novo</div></div><button class="x" onclick="fechar('ov-semaforo')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+        <label class="f"><i>Ocupa de</i><input type="date" id="sf-ini" onchange="renderSemaforo()" title="Primeiro dia que o evento novo ocupa equipe/caminhão (comeco da montagem)"></label>
+        <label class="f"><i>até</i><input type="date" id="sf-fim" onchange="renderSemaforo()" title="Último dia (fim da desmontagem)"></label>
+        <label class="f" style="width:120px"><i>Montadores</i><input type="number" id="sf-mont" min="0" value="5" oninput="renderSemaforo()"></label>
+        <label class="f" style="width:110px"><i>Caminhões</i><input type="number" id="sf-cam" min="0" value="1" oninput="renderSemaforo()"></label>
+        <label class="f" style="flex:1;min-width:190px"><i>Estrutura (opcional)</i><input id="sf-estr" placeholder="ex.: tenda 10x10, palco 12x10" oninput="renderSemaforo()"></label>
+      </div>
+      <div id="sf-res"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-imp-quant" onclick="if(event.target===this)fechar('ov-imp-quant')">
+  <div class="modal" style="max-width:640px">
+    <header><div><h2>📥 Colar material da quantificação</h2><div class="os">cole o "Total de peças" do quantificador (ou qualquer lista item + quantidade) — nomes iguais somam no evento</div></div><button class="x" onclick="fechar('ov-imp-quant')">✕</button></header>
+    <div class="mbody">
+      <textarea id="iq-txt" rows="10" placeholder="GRAU — 24&#10;CUBO — 8&#10;CINTA 9M — 6&#10;SAPATA: 12&#10;12x SLEEVE" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:13px;resize:vertical"></textarea>
+      <div id="iq-res" style="margin-top:8px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="mini" onclick="fechar('ov-imp-quant')">Cancelar</button><button class="btn-orange" onclick="importarQuant()">Importar</button></div>
     </div>
   </div>
 </div>
@@ -1662,6 +1696,7 @@ let motoristas = [
 ];
 
 /* A partir de quantos km a IA prioriza o agregado */
+const semelhantePraca = (a, b) => { const n = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,''); return n(a).includes(n(b).slice(0,14)) || n(b).includes(n(a).slice(0,14)); };
 /* padrões da empresa: valem quando a nuvem vier sem o campo (ou com ele vazio) */
 function padroesConfig(c){
   c = c || {};
@@ -1672,7 +1707,23 @@ function padroesConfig(c){
     {nome:'Centro Expandido do Rio', cidade:'Rio de Janeiro', bairros:'Centro, Saúde, Gamboa, Lapa, Praça Mauá, Castelo', dias:'uteis', faixas:'06:00-21:00', vucLivre:true, ativo:false},
     {nome:'Zona de restrição do Rio (Zona Sul, Tijuca, Centro)', cidade:'Rio de Janeiro', bairros:'Copacabana, Ipanema, Leblon, Leme, Botafogo, Flamengo, Glória, Catete, Laranjeiras, Cosme Velho, Humaitá, Urca, Lagoa, Gávea, Jardim Botânico, Tijuca, Maracanã, Vila Isabel, Grajaú, Andaraí, Rio Comprido, Santa Teresa, São Cristóvão', dias:'uteis', faixas:'06:00-10:00, 17:00-21:00', vucLivre:true, ativo:false}];
   if(!Array.isArray(c.datasEspeciais)) c.datasEspeciais = [];
-  if(!Array.isArray(c.pracas)) c.pracas = [{nome:'Ponte Rio-Niterói', valorEixo:0, ponte:true, vezes:1}];
+  if(!Array.isArray(c.excluidos)) c.excluidos = [];   /* eventos excluídos: não voltam pela planilha nem pelo Pipefy */
+  if(!Array.isArray(c.pracas)) c.pracas = [];
+  /* praças conhecidas da região, já com ponto no mapa e valor de REFERÊNCIA (confira e ajuste) */
+  const PRACAS_PADRAO = [
+    {nome:'Ponte Rio-Niterói (Ecoponte)', valorEixo:4.9, ponte:true, vezes:1},
+    {nome:'Via Lagos — praça Rio Bonito (RJ-124)', valorEixo:15.9, vezes:2, lat:-22.7440, lon:-42.5150, raio:2.5},
+    {nome:'Via Lagos — praça Araruama (RJ-124)', valorEixo:15.9, vezes:2, lat:-22.8210, lon:-42.2180, raio:2.5},
+    {nome:'BR-101 Niterói–Campos — praça Silva Jardim', valorEixo:5.8, vezes:2, lat:-22.6220, lon:-42.4290, raio:2.5},
+    {nome:'BR-040 Rio–Petrópolis — praça Duque de Caxias', valorEixo:13.5, vezes:2, lat:-22.5960, lon:-43.2830, raio:2.5},
+    {nome:'BR-116 Dutra — praça Viúva Graça (Seropédica)', valorEixo:9.3, vezes:2, lat:-22.7280, lon:-43.7150, raio:2.5},
+    {nome:'BR-116 Rio–Teresópolis — praça Magé', valorEixo:7.3, vezes:2, lat:-22.5560, lon:-43.0110, raio:2.5}
+  ];
+  PRACAS_PADRAO.forEach(pp=>{
+    const ja = c.pracas.find(x=> (pp.ponte && x.ponte) || semelhantePraca(x.nome, pp.nome));
+    if(!ja) c.pracas.push(Object.assign({ref:true}, pp));
+    else if(!(+ja.valorEixo) && pp.valorEixo){ ja.valorEixo = pp.valorEixo; ja.ref = true; if(ja.lat == null && pp.lat != null){ ja.lat = pp.lat; ja.lon = pp.lon; ja.raio = pp.raio; } }
+  });
   /* ponto do galpão na Av. Antônio Carlos Guadelupe (o mapa não acha o lote); ajustável em Integrações */
   if(!c.galpaoCoord && /Guadalupe|Guadelupe/i.test(c.galpao) && /Rio Bonito/i.test(c.galpao))
     c.galpaoCoord = {q:c.galpao, lat:-22.7057, lon:-42.6573, nome:'Av. Antônio Carlos Guadelupe — Rio Bonito (ponto aproximado)', manual:true};
@@ -2921,9 +2972,15 @@ async function geocodTomTom(q){
   return {lat:x.position.lat, lon:x.position.lon, nome:(x.poi && x.poi.name ? x.poi.name + ' — ' : '') + ((x.address && x.address.freeformAddress) || ''), fonte:'tomtom', bairro:(x.address && x.address.municipalitySubdivision) || null};
 }
 const TT_TENTOU = {};
+const GG_TENTOU = {};
 async function geocodEndereco(q){
   const k = semAcentoSimples(q).trim();
   const c0 = GEO[k];
+  if(c0 && c0.fonte === 'google') return c0;
+  if(CONFIG.googleKey && !GG_TENTOU[k]){
+    GG_TENTOU[k] = 1;
+    try{ const g = await geocodGoogle(q); if(g){ GEO[k] = g; try{ localStorage.setItem('cpl:geo', JSON.stringify(GEO)); }catch(e){} return g; } }catch(e){}
+  }
   if(c0 && c0.fonte === 'tomtom') return c0;
   /* com a chave TomTom, tenta primeiro por ele (acha melhor número, condomínio e ponto de referência) */
   if(CONFIG.tomtomKey && !TT_TENTOU[k]){
@@ -3019,6 +3076,7 @@ async function rotaTomTom(a, b, v, extra){
   return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1, pts, rt};
 }
 async function rotaKm(a, b, v){
+  if(CONFIG.googleKey){ try{ const g = await rotaGoogle(a, b, v, null); if(g) return g; }catch(e){} }
   if(CONFIG.tomtomKey){ try{ const t = await rotaTomTom(a, b, v); if(t) return t; }catch(e){} }
   const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson');
   if(!r.ok) throw new Error('rota ' + r.status);
@@ -3035,7 +3093,7 @@ async function rotaKm(a, b, v){
     if(PONTE_PTS.some(pp => distLinha(pp, q) < 1.2)){ fracPonte = acum; break; }
   }
   const tot = rt.distance / 1000;
-  return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1};
+  return {km: tot, min, ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1, pts: pts.map(p2=>[p2[1], p2[0]])};
 }
 /* calcula e grava o km do evento; devolve {km, fonte} ou null */
 async function calcularKm(id, silencioso){
@@ -3054,6 +3112,7 @@ async function calcularKm(id, silencioso){
     const rt = await rotaKm(orig, dest, cam);
     if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
     if(rt.pts){ ROTAS[ev.id] = rt.pts; ev.pracas = pracasNaRota(rt.pts); }
+    if(rt.fonte === 'google') ev.pedagioG = rt.pedagio != null ? {carro: Math.round(rt.pedagio*100)/100, t: Date.now()} : null;
     ev.rotaCaminhao = cam && rt.pts ? cam.tipo + ' ' + cam.placa : null;
     ev.km = Math.round(rt.km); ev.kmFonte = fonte; ev.kmMin = Math.round(rt.min) || null;
     if(rt.comGeo){ ev.ponteRota = rt.ponte; ev.minPonte = rt.minPonte; }
@@ -3232,6 +3291,101 @@ function htmlCarregarNoDia(Dc){
     l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomesJunto(c.o.ev.id, c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
 }
 
+/* ================= GOOGLE MAPS: ROTA, TRÂNSITO E PEDÁGIO =================
+   Com a chave do Google, a rota, o tempo com trânsito e o VALOR DO PEDÁGIO vêm do Google Maps.
+   O pedágio vem no preço de carro; caminhão paga a tarifa × número de eixos (regra das praças). */
+function decodePolyline(str){
+  const pts = []; let i = 0, lat = 0, lon = 0;
+  while(i < str.length){
+    for(const qual of [0, 1]){
+      let res = 0, shift = 0, b;
+      do{ b = str.charCodeAt(i++) - 63; res |= (b & 0x1f) << shift; shift += 5; } while(b >= 0x20);
+      const d = (res & 1) ? ~(res >> 1) : (res >> 1);
+      if(qual === 0) lat += d; else lon += d;
+    }
+    pts.push([lat / 1e5, lon / 1e5]);
+  }
+  return pts;
+}
+async function rotaGoogle(a, b, v, quando){
+  if(!CONFIG.googleKey) return null;
+  const corpo = {
+    origin: {location:{latLng:{latitude:a.lat, longitude:a.lon}}},
+    destination: {location:{latLng:{latitude:b.lat, longitude:b.lon}}},
+    travelMode: 'DRIVE', routingPreference: 'TRAFFIC_AWARE',
+    extraComputations: ['TOLLS'], languageCode: 'pt-BR', units: 'METRIC'
+  };
+  if(quando && new Date(quando) - Date.now() > 60000) corpo.departureTime = new Date(quando).toISOString();
+  const r = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'X-Goog-Api-Key': CONFIG.googleKey,
+      'X-Goog-FieldMask':'routes.duration,routes.staticDuration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.travelAdvisory.tollInfo'},
+    body: JSON.stringify(corpo)
+  });
+  if(!r.ok){
+    let msg = 'erro ' + r.status;
+    try{ const je = await r.json(); if(je.error && je.error.message) msg = je.error.message.slice(0, 140); }catch(e){}
+    throw new Error(r.status === 403 || r.status === 401 ? 'chave sem acesso — ative a Routes API e a cobrança no Google Cloud (' + msg + ')' : msg);
+  }
+  const j = await r.json(), rt = j.routes && j.routes[0];
+  if(!rt) return null;
+  const seg = x => parseFloat(String(x||'0').replace('s','')) || 0;
+  /* o Google calcula para carro: caminhão leva uns 20% a mais */
+  const fator = v ? 1.2 : 1;
+  const min = seg(rt.duration) / 60 * fator, minSem = seg(rt.staticDuration || rt.duration) / 60 * fator;
+  const pts = rt.polyline && rt.polyline.encodedPolyline ? decodePolyline(rt.polyline.encodedPolyline) : [];
+  let acum = 0, fracPonte = null;
+  for(let i = 0; i < pts.length; i++){
+    if(i) acum += distLinha({lat:pts[i-1][0], lon:pts[i-1][1]}, {lat:pts[i][0], lon:pts[i][1]});
+    if(fracPonte == null && PONTE_PTS.some(pp => distLinha(pp, {lat:pts[i][0], lon:pts[i][1]}) < 1.2)) fracPonte = acum;
+  }
+  const tot = (rt.distanceMeters || 0) / 1000;
+  let pedagio = null;
+  const ti = rt.travelAdvisory && rt.travelAdvisory.tollInfo;
+  const pr = ti && ti.estimatedPrice && ti.estimatedPrice[0];
+  if(pr) pedagio = (+pr.units || 0) + (+pr.nanos || 0) / 1e9;
+  else if(ti) pedagio = 0;   /* rota sem pedágio */
+  return {km: tot, min, minSem, atraso: Math.max(0, Math.round(min - minSem)), pedagio,
+    ponte: fracPonte != null, minPonte: fracPonte != null && tot ? Math.round(min * fracPonte / tot) : null, comGeo: pts.length > 1, pts, fonte:'google'};
+}
+/* endereço pelo Google (Places) — acha melhor número, condomínio e nome de lugar */
+async function geocodGoogle(q){
+  if(!CONFIG.googleKey) return null;
+  const r = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method:'POST',
+    headers:{'Content-Type':'application/json', 'X-Goog-Api-Key': CONFIG.googleKey,
+      'X-Goog-FieldMask':'places.location,places.formattedAddress,places.displayName'},
+    body: JSON.stringify({textQuery: q, regionCode:'BR', languageCode:'pt-BR', pageSize: 3})
+  });
+  if(!r.ok) return null;
+  const j = await r.json();
+  const qn = semAcentoSimples(q);
+  const cand = (j.places || []).find(x=>{
+    const end = semAcentoSimples((x.formattedAddress || ''));
+    /* com a cidade no texto, o resultado precisa ser nessa cidade */
+    const cid = qn.split(',').map(s=>s.trim()).filter(s=>s && s !== 'brasil');
+    return cid.length < 2 || end.includes(cid[cid.length - 1]) || qn.includes(semAcentoSimples((x.formattedAddress||'').split(',').slice(-3, -2).join('')));
+  }) || (j.places || [])[0];
+  if(!cand || !cand.location) return null;
+  return {lat: cand.location.latitude, lon: cand.location.longitude,
+    nome: ((cand.displayName && cand.displayName.text) ? cand.displayName.text + ' — ' : '') + (cand.formattedAddress || ''), fonte:'google'};
+}
+async function testarGoogle(){
+  const st = document.getElementById('gg-status');
+  if(!CONFIG.googleKey){ if(st) st.innerHTML = '<b style="color:#b0483c">Cole a chave primeiro.</b>'; return; }
+  if(st) st.textContent = 'testando...';
+  try{
+    const o = await coordGalpao();
+    if(!o){ if(st) st.innerHTML = '<b style="color:#b0483c">Não achei o galpão no mapa.</b>'; return; }
+    const g = await rotaGoogle(o, {lat:-22.8870, lon:-43.1150}, null, null);
+    if(!g) throw new Error('sem rota');
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">Funcionando.</b> Galpão → centro de Niterói agora: ' + Math.round(g.min) + ' min, ' + Math.round(g.km) + ' km' +
+      (g.atraso ? ', +' + g.atraso + ' min de trânsito' : ', sem trânsito') +
+      (g.pedagio != null ? ' · pedágio (carro): ' + (g.pedagio ? 'R$ ' + g.pedagio.toFixed(2).replace('.', ',') : 'não tem na rota') : ' · <b style="color:#a86412">sem o valor do pedágio — ative também a opção de pedágio (Routes API) no Google Cloud</b>') + '.';
+  }catch(e){ if(st) st.innerHTML = '<b style="color:#b0483c">Não funcionou:</b> ' + String(e.message).replace(/</g,'&lt;') + '.'; }
+}
+const reais2 = v => 'R$ ' + (Math.round(v*100)/100).toFixed(2).replace('.', ',');
+
 /* ================= TRÂNSITO NA ROTA =================
    TomTom (chave grátis): rota de caminhão com trânsito ao vivo — atraso,
    engarrafamento, acidente, obra, interdição. Confere sozinho as saídas
@@ -3259,7 +3413,7 @@ async function consultarTransito(ev, fase, D, forcar){
   const k = ev.id + '|' + fase + '|' + D;
   const velho = TRANSITO[k];
   if(!forcar && velho && Date.now() - velho.t < 10*60*1000) return velho;
-  if(!CONFIG.tomtomKey) return null;
+  if(!CONFIG.googleKey && !CONFIG.tomtomKey) return null;
   const o = await coordGalpao();
   let dst = evGeo(ev);
   if(!dst){ const q = destinoTexto(ev); if(q) dst = await geocodEndereco(q + ', Brasil'); }
@@ -3271,52 +3425,64 @@ async function consultarTransito(ev, fase, D, forcar){
     const sai = new Date((hs.diaSaida || D) + 'T' + hs.saida + ':00-03:00');
     if(sai - Date.now() > 20*60*1000) dep = sai.toISOString().replace(/\.\d+Z$/,'Z');
   }
-  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':' + dst.lat + ',' + dst.lon + '/json' +
-    '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep) + paramsCaminhao(maiorCaminhao(ev, fase));
   try{
-    const r = await fetch(u);
-    if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
-    const j = await r.json(), rt = j.routes && j.routes[0];
-    if(!rt) throw new Error('sem rota');
-    ROTAS[ev.id] = (rt.legs||[]).flatMap(l=>l.points||[]).map(p=>[p.latitude, p.longitude]);
-    const s = rt.summary || {};
-    const evs = (rt.sections || []).filter(x=>x.sectionType === 'TRAFFIC').map(x=>{
-      const causa = (x.tec && x.tec.causes && x.tec.causes[0] && TEC[x.tec.causes[0].mainCauseCode]) ||
-        ({JAM:'engarrafamento', ROAD_WORK:'obras', ROAD_CLOSURE:'via interditada'}[x.simpleCategory] || 'lentidão');
-      return {tipo: causa, atraso: Math.round((x.delayInSeconds||0)/60), vel: x.effectiveSpeedInKmh, grave: x.simpleCategory==='ROAD_CLOSURE' || /acidente|interdit/.test(causa)};
-    }).filter(x=>x.atraso >= 2 || x.grave);
-    /* incidentes ao redor da rota (descrição do acidente, via e trecho) */
+    let atraso = 0, minTot = 0, kmTot = 0, evs = [], pts2 = null;
+    if(CONFIG.googleKey){
+      const g = await rotaGoogle(o, dst, maiorCaminhao(ev, fase), dep === 'now' ? null : dep);
+      if(!g) throw new Error('sem rota');
+      atraso = g.atraso; minTot = Math.round(g.min); kmTot = Math.round(g.km);
+      pts2 = g.pts.map(p2=>({latitude:p2[0], longitude:p2[1]}));
+      if(g.pts.length) ROTAS[ev.id] = g.pts;
+      if(g.pedagio != null && !ev.pedagioG) { ev.pedagioG = {carro: Math.round(g.pedagio*100)/100, t: Date.now()}; try{ salvar(); }catch(e){} }
+    } else {
+      const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':' + dst.lat + ',' + dst.lon + '/json' +
+        '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep) + paramsCaminhao(maiorCaminhao(ev, fase));
+      const r = await fetch(u);
+      if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
+      const j = await r.json(), rt = j.routes && j.routes[0];
+      if(!rt) throw new Error('sem rota');
+      pts2 = (rt.legs||[]).flatMap(l=>l.points||[]);
+      ROTAS[ev.id] = pts2.map(p2=>[p2.latitude, p2.longitude]);
+      const s = rt.summary || {};
+      atraso = Math.round((s.trafficDelayInSeconds || 0) / 60);
+      minTot = Math.round((s.travelTimeInSeconds||0)/60*1.1);
+      kmTot = Math.round((s.lengthInMeters||0)/1000);
+      evs = (rt.sections || []).filter(x=>x.sectionType === 'TRAFFIC').map(x=>{
+        const causa = (x.tec && x.tec.causes && x.tec.causes[0] && TEC[x.tec.causes[0].mainCauseCode]) ||
+          ({JAM:'engarrafamento', ROAD_WORK:'obras', ROAD_CLOSURE:'via interditada'}[x.simpleCategory] || 'lentidão');
+        return {tipo: causa, atraso: Math.round((x.delayInSeconds||0)/60), vel: x.effectiveSpeedInKmh, grave: x.simpleCategory==='ROAD_CLOSURE' || /acidente|interdit/.test(causa)};
+      }).filter(x=>x.atraso >= 2 || x.grave);
+    }
+    /* incidentes ao redor da rota (descrição do acidente, via e trecho) — vem do TomTom */
     let inc = [];
-    try{
-      const pts = (rt.legs||[]).flatMap(l=>l.points||[]);
-      if(pts.length){
-        const la = pts.map(p=>p.latitude), lo = pts.map(p=>p.longitude);
-        const bb = [Math.min(...lo)-0.02, Math.min(...la)-0.02, Math.max(...lo)+0.02, Math.max(...la)+0.02].map(x=>x.toFixed(4)).join(',');
-        const ui = 'https://api.tomtom.com/traffic/services/5/incidentDetails?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&bbox=' + bb +
-          '&language=pt-PT&timeValidityFilter=present&fields=' + encodeURIComponent('{incidents{geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,delay,from,to,roadNumbers,events{description}}}}');
-        const ri = await fetch(ui);
-        if(ri.ok){
-          const ji = await ri.json();
-          const passo = Math.max(1, Math.floor(pts.length / 400));
-          const perto = (c) => pts.some((p,i)=> i % passo === 0 && distLinha({lat:p.latitude, lon:p.longitude}, {lat:c[1], lon:c[0]}) < 0.6);
-          inc = (ji.incidents||[]).filter(x=>{
-            const g = x.geometry || {}, cs = g.type === 'Point' ? [g.coordinates] : (g.coordinates || []);
-            return cs.length && (perto(cs[0]) || perto(cs[cs.length-1]));
-          }).map(x=>{ const pr = x.properties || {};
-            return {tipo: ICON_TT[pr.iconCategory] || 'ocorrência', grave: [1,8].includes(pr.iconCategory) || pr.magnitudeOfDelay >= 3,
-              txt: [ (pr.events && pr.events[0] && pr.events[0].description) || '', (pr.roadNumbers||[]).join('/'), pr.from ? 'em ' + pr.from : '' ].filter(Boolean).join(' · '),
-              atraso: Math.round((pr.delay||0)/60)}; })
-            .filter(x=>x.grave || x.atraso >= 2 || ['acidente','via interditada','faixa fechada','obras','alagamento'].includes(x.tipo)).slice(0, 6);
-        }
+    if(CONFIG.tomtomKey && pts2 && pts2.length) try{
+      const pts = pts2;
+      const la = pts.map(p=>p.latitude), lo = pts.map(p=>p.longitude);
+      const bb = [Math.min(...lo)-0.02, Math.min(...la)-0.02, Math.max(...lo)+0.02, Math.max(...la)+0.02].map(x=>x.toFixed(4)).join(',');
+      const ui = 'https://api.tomtom.com/traffic/services/5/incidentDetails?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&bbox=' + bb +
+        '&language=pt-PT&timeValidityFilter=present&fields=' + encodeURIComponent('{incidents{geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,delay,from,to,roadNumbers,events{description}}}}');
+      const ri = await fetch(ui);
+      if(ri.ok){
+        const ji = await ri.json();
+        const passo = Math.max(1, Math.floor(pts.length / 400));
+        const perto = (c) => pts.some((p,i)=> i % passo === 0 && distLinha({lat:p.latitude, lon:p.longitude}, {lat:c[1], lon:c[0]}) < 0.6);
+        inc = (ji.incidents||[]).filter(x=>{
+          const g = x.geometry || {}, cs = g.type === 'Point' ? [g.coordinates] : (g.coordinates || []);
+          return cs.length && (perto(cs[0]) || perto(cs[cs.length-1]));
+        }).map(x=>{ const pr = x.properties || {};
+          return {tipo: ICON_TT[pr.iconCategory] || 'ocorrência', grave: [1,8].includes(pr.iconCategory) || pr.magnitudeOfDelay >= 3,
+            txt: [ (pr.events && pr.events[0] && pr.events[0].description) || '', (pr.roadNumbers||[]).join('/'), pr.from ? 'em ' + pr.from : '' ].filter(Boolean).join(' · '),
+            atraso: Math.round((pr.delay||0)/60)}; })
+          .filter(x=>x.grave || x.atraso >= 2 || ['acidente','via interditada','faixa fechada','obras','alagamento'].includes(x.tipo)).slice(0, 6);
       }
     }catch(e){}
-    const atraso = Math.round((s.trafficDelayInSeconds || 0) / 60);
-    const res = {t:Date.now(), dep, min: Math.round((s.travelTimeInSeconds||0)/60*1.1), atraso, km: Math.round((s.lengthInMeters||0)/1000),
+    const res = {t:Date.now(), dep, min: minTot, atraso, km: kmTot,
       eventos: evs, incidentes: inc, grave: evs.some(x=>x.grave) || inc.some(x=>x.grave)};
     TRANSITO[k] = res;
     return res;
   }catch(e){ return (TRANSITO[k] = {t:Date.now(), erro: e.message || 'sem conexão'}); }
 }
+
 /* texto curto do trânsito, com o ajuste na saída */
 function resumoTransito(ev, fase, D){
   const r = TRANSITO[ev.id + '|' + fase + '|' + D];
@@ -3332,7 +3498,7 @@ function resumoTransito(ev, fase, D){
 /* confere sozinho as saídas das próximas 3 horas (e de amanhã cedo, quando já é noite) */
 let trRodando = false;
 async function conferirTransitoProximas(forcar){
-  if(trRodando || !CONFIG.tomtomKey) return; trRodando = true;
+  if(trRodando || (!CONFIG.tomtomKey && !CONFIG.googleKey)) return; trRodando = true;
   try{
     const agora = Date.now(), avisos = [];
     for(const D of [HOJE, somaDiaISO(HOJE, 1)]){
@@ -3355,7 +3521,7 @@ async function conferirTransitoProximas(forcar){
 }
 async function conferirTransitoEv(id, fase, D){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
-  if(!CONFIG.tomtomKey){ window.open(linkGoogleRota(ev), '_blank'); return; }
+  if(!CONFIG.tomtomKey && !CONFIG.googleKey){ window.open(linkGoogleRota(ev), '_blank'); return; }
   toast('🚦 Conferindo o trânsito na rota...');
   const r0 = await consultarTransito(ev, fase, D, true);
   if(r0 && r0.erro) return toast('Não consegui conferir o trânsito (' + r0.erro + ').');
@@ -3388,10 +3554,10 @@ function blocoTransito(ev){
     lin.push('<b>'+(fase==='desm'?'📤':'🔨')+' '+rotDia(D)+'</b> — '+
       (r ? '<span style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+';font-weight:600">'+r.txt+'</span> <small style="color:var(--muted)">('+r.quando+', '+new Date(raw.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+')</small> '
          : (raw && raw.erro ? '<small style="color:#b0483c">'+raw.erro+'</small> ' : ''))+
-      '<button class="mini" onclick="conferirTransitoEv(\''+ev.id+'\',\''+fase+'\',\''+D+'\')">🚦 '+(CONFIG.tomtomKey?'Conferir trânsito':'Ver trânsito no mapa')+'</button>');
+      '<button class="mini" onclick="conferirTransitoEv(\''+ev.id+'\',\''+fase+'\',\''+D+'\')">🚦 '+((CONFIG.googleKey||CONFIG.tomtomKey)?'Conferir trânsito':'Ver trânsito no mapa')+'</button>');
   });
   return '<div style="grid-column:1/-1"><i>🚦 Trânsito na rota</i><div style="font-size:12.5px;line-height:2">'+lin.join('<br>')+'</div>'+
-    '<div style="margin-top:4px">'+botoesRota(ev)+(CONFIG.tomtomKey?'':' <small style="color:var(--muted)">— para a Central conferir sozinha antes da saída, coloque a chave TomTom em Integrações</small>')+'</div></div>';
+    '<div style="margin-top:4px">'+botoesRota(ev)+((CONFIG.googleKey||CONFIG.tomtomKey)?'':' <small style="color:var(--muted)">— para a Central conferir sozinha antes da saída, coloque a chave do Google Maps em Integrações</small>')+'</div></div>';
 }
 if(typeof window !== 'undefined' && !window.__semClimaAuto){
   setInterval(()=>{ try{ conferirTransitoProximas(false); }catch(e){} }, 10*60*1000);
@@ -3405,7 +3571,8 @@ const eixosDe = v => +v.eixos || EIXOS_TIPO[String(v.tipo||'').toUpperCase()] ||
 const reais = n => 'R$ ' + (Math.round(n)).toLocaleString('pt-BR');
 /* praças cadastradas por onde a rota passa (a 400 m do ponto) */
 function pracasNaRota(pts){
-  return (CONFIG.pracas||[]).filter(p=>!p.ponte && p.lat != null && pts.some((q,i)=> i % 2 === 0 && distLinha({lat:q[0], lon:q[1]}, p) < 0.4)).map(p=>p.nome);
+  const passo = Math.max(1, Math.floor(pts.length / 800));
+  return (CONFIG.pracas||[]).filter(p=>!p.ponte && p.lat != null && pts.some((q,i)=> i % passo === 0 && distLinha({lat:q[0], lon:q[1]}, p) < (+p.raio || 0.4))).map(p=>p.nome);
 }
 function pedagiosDe(ev){
   return (CONFIG.pracas||[]).filter(p=> p.ponte ? passaPonte(ev) : (ev.pracas||[]).includes(p.nome));
@@ -3424,9 +3591,30 @@ function custoFase(ev, fase, D){
     }
     const l = k / consumoDe(v) / div;
     litros += l; diesel += l * (+CONFIG.precoDiesel || 0); km += k / div;
-    pedagiosDe(ev).forEach(pr=>{ const val = (+pr.valorEixo||0) * eixosDe(v) * (+pr.vezes || 1) / div; pedagio += val; itens.push(pr.nome + (val ? ' ' + reais(val) : ' (sem valor)')); });
+    const pg = ev.pedagioG && ev.pedagioG.carro;
+    if(pg != null && pg !== undefined){
+      const val = pg * eixosDe(v) * (jaLocal ? 1 : 2) / div;
+      if(val){ pedagio += val; itens.push('pedágio Google ' + reais2(val) + ' (' + eixosDe(v) + ' eixos' + (jaLocal ? '' : ', ida e volta') + ')'); }
+    } else pedagiosDe(ev).forEach(pr=>{ const val = (+pr.valorEixo||0) * eixosDe(v) * (+pr.vezes || 1) / div; pedagio += val; itens.push(pr.nome.replace(/\s*\(.*\)$/,'') + (val ? ' ' + reais2(val) + ' (' + eixosDe(v) + ' eixos)' : ' (sem valor)')); });
   });
-  return {litros: Math.round(litros), diesel, pedagio, total: diesel + pedagio, km: Math.round(km), itens:[...new Set(itens)]};
+  /* carro da equipe: vai e volta todo dia da fase — pedágio pelo valor de carro do Google */
+  let carro = null;
+  const pgC = ev.pedagioG && ev.pedagioG.carro;
+  /* por dia do carro da equipe (ida e volta): valor do Google, ou a soma das praças da rota (tarifa de carro) */
+  let carroDia = pgC ? pgC * 2 : null;
+  if(carroDia == null){
+    const prs = pedagiosDe(ev).filter(x=>+x.valorEixo);
+    if(prs.length) carroDia = prs.reduce((s,x)=>s + (+x.valorEixo) * (+x.vezes || 1), 0);
+  }
+  if(carroDia){
+    const eqN = ev.equipe || plano(ev).equipe;
+    const eqCad = equipes.find(x=>x.nome===eqN);
+    if(eqCad && eqCad.carro){
+      const nd = (fase==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev))).length;
+      if(nd){ carro = {placa: eqCad.carro, dias: nd, porDia: carroDia, val: carroDia * nd}; pedagio += carro.val; }
+    }
+  }
+  return {litros: Math.round(litros), diesel, pedagio, carro, total: diesel + pedagio, km: Math.round(km), itens:[...new Set(itens)]};
 }
 function custoEvento(ev){
   const m = custoFase(ev, 'mont'), d = ev.desm ? custoFase(ev, 'desm') : {litros:0, diesel:0, pedagio:0, total:0, km:0, itens:[]};
@@ -3436,22 +3624,26 @@ function blocoCusto(ev){
   if(!(+ev.km)) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância para a Central calcular o custo da viagem.</div>';
   const c = custoEvento(ev);
   const lin = (rot, x) => x.km ? '<div><b>'+rot+'</b> — ≈'+x.km+' km · '+x.litros+' L de diesel · <b>'+reais(x.diesel)+'</b>'+(x.pedagio || x.itens.length ? ' + pedágio <b>'+reais(x.pedagio)+'</b> <small style="color:var(--muted)">('+x.itens.join(', ')+')</small>' : '')+'</div>' : '';
-  const semValor = pedagiosDe(ev).some(p=>!+p.valorEixo);
-  return '<div style="font-size:13px;line-height:1.8">'+lin('🔨 Montagem', c.m)+lin('📤 Desmontagem', c.d)+
+  const temG = !!(ev.pedagioG && ev.pedagioG.carro != null);
+  const semValor = !temG && pedagiosDe(ev).some(p=>!+p.valorEixo);
+  const linCarro = x => x && x.carro ? '<div>🚗 <b>Carro da equipe ('+x.carro.placa+')</b> — pedágio '+reais2(x.carro.porDia)+' por dia (ida e volta) × '+x.carro.dias+' dia(s) = <b>'+reais2(x.carro.val)+'</b></div>' : '';
+  return '<div style="font-size:13px;line-height:1.8">'+lin('🔨 Montagem', c.m)+linCarro(c.m)+lin('📤 Desmontagem', c.d)+linCarro(c.d)+
     '<div style="font-size:14px"><b>Total de frota ≈ '+reais(c.total)+'</b></div></div>'+
-    '<div style="font-size:11px;color:var(--muted)">diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' o litro'+(semValor ? ' · <b style="color:#a86412">tem pedágio sem valor — preencha em Integrações</b>' : '')+(ev.kmPedagio ? '' : '')+'</div>';
+    '<div style="font-size:11px;color:var(--muted)">diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' o litro'+
+    (temG ? ' · 🗺 pedágio do Google Maps (tarifa de carro; caminhão paga a tarifa × eixos)' : (pedagiosDe(ev).some(x=>x.ref) ? ' · pedágio pelas praças cadastradas — <b style="color:#a86412">valores de referência, confira em Integrações</b>' : ''))+
+    (semValor ? ' · <b style="color:#a86412">tem pedágio sem valor — preencha em Integrações ou ligue o Google Maps</b>' : '')+'</div>';
 }
 function htmlPracas(){
   const P = CONFIG.pracas || [];
   const inp = 'border:1px solid var(--line);border-radius:6px;padding:5px 7px;font:inherit;font-size:12px';
-  return '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:4px">Praça de pedágio</th><th>R$ por eixo</th><th>Cobra</th><th>Ponto no mapa</th><th></th></tr></thead><tbody>'+
+  return '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted);font-size:10.5px;text-transform:uppercase;text-align:left"><th style="padding:4px">Praça de pedágio</th><th>Tarifa (carro / por eixo)</th><th>Cobra</th><th>Ponto no mapa</th><th></th></tr></thead><tbody>'+
     P.map((p,i)=>'<tr><td style="padding:3px 4px"><input style="'+inp+';width:170px" value="'+String(p.nome||'').replace(/"/g,'&quot;')+'" onchange="CONFIG.pracas['+i+'].nome=this.value.trim();salvar()"></td>'+
       '<td><input style="'+inp+';width:70px" type="number" step="0.1" value="'+(p.valorEixo||'')+'" placeholder="0,00" onchange="CONFIG.pracas['+i+'].valorEixo=+this.value||0;salvar()"></td>'+
       '<td><select style="'+inp+'" onchange="CONFIG.pracas['+i+'].vezes=+this.value;salvar()"><option value="1"'+((+p.vezes||1)===1?' selected':'')+'>só num sentido</option><option value="2"'+(+p.vezes===2?' selected':'')+'>ida e volta</option></select></td>'+
       '<td>'+(p.ponte ? '<small>detectada pela rota</small>' : '<input style="'+inp+';width:170px" value="'+(p.lat!=null?p.lat+', '+p.lon:'')+'" placeholder="cole o link do Google Maps" onchange="setPracaPonto('+i+',this.value)">')+'</td>'+
       '<td>'+(p.ponte?'':'<button class="mini danger" onclick="CONFIG.pracas.splice('+i+',1);salvar();renderCadastros()">✕</button>')+'</td></tr>').join('')+
     '</tbody></table><button class="mini" style="margin-top:6px" onclick="CONFIG.pracas.push({nome:\'Nova praça\', valorEixo:0, vezes:1});salvar();renderCadastros()">+ Praça de pedágio</button>'+
-    ' <small style="color:var(--muted)">depois de cadastrar, use "Calcular os eventos sem km" ou 📍 Calcular no evento para a Central ver por quais praças a rota passa</small>';
+    ' <small style="color:var(--muted)">as praças da região já vêm preenchidas com <b>valores de referência — confira nas concessionárias e ajuste</b>. O caminhão paga o valor × eixos; o carro da equipe paga o valor de carro. Use "Calcular os eventos sem km" ou 📍 Calcular no evento para a Central ver por quais praças a rota passa. Se o ponto no mapa estiver errado, cole o link do Google Maps da praça.</small>';
 }
 function setPracaPonto(i, v){
   const c = coordDoTexto(v);
@@ -3543,6 +3735,141 @@ function renderBuscaEstr(){
       : '<div class="panel empty"><b>Nada encontrado</b>Nenhum evento com "'+esc(q)+'" nas estruturas ou nos materiais.</div>');
 }
 
+/* ================= SEMÁFORO PRO COMERCIAL (PODE VENDER?) =================
+   Antes de fechar um evento novo: por dia, quantos montadores e caminhões sobram
+   descontando tudo o que já está no quadro. Verde vende, amarelo aperta, vermelho não fecha. */
+function abrirSemaforo(){
+  const i = document.getElementById('sf-ini'); if(i && !i.value) i.value = HOJE;
+  const f = document.getElementById('sf-fim'); if(f && !f.value) f.value = (i && i.value) || HOJE;
+  renderSemaforo();
+  document.getElementById('ov-semaforo').classList.add('on');
+}
+function renderSemaforo(){
+  const g = id => (document.getElementById(id)||{}).value || '';
+  const box = document.getElementById('sf-res'); if(!box) return;
+  let ini = dia(g('sf-ini')), fim = dia(g('sf-fim')) || ini;
+  if(!ini){ box.innerHTML = '<div class="panel empty"><b>Escolha as datas</b>o período que o evento novo vai ocupar equipe e caminhão (da montagem até a desmontagem).</div>'; return; }
+  if(fim < ini){ const t = ini; ini = fim; fim = t; }
+  let dias = diasEntre(ini, fim), cortou = false;
+  if(dias.length > 21){ dias = dias.slice(0, 21); cortou = true; }
+  const needM = Math.max(0, parseInt(g('sf-mont')) || 0), needC = Math.max(0, parseInt(g('sf-cam')) || 0);
+  const tods = todosMontadores(), frota = veiculos.filter(v=>!v.manut);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  /* quem/qual já está tomado em cada dia, pelo que está lançado na Central (mesma conta do ocupadoEm) */
+  const ocupM = {}, ocupV = {};
+  eventos.forEach(e=>{
+    if(e.esp || !e.mont) return;
+    pessoasNaEscala(e).forEach(p=>{ if(p.prod) return; diasDe(e, p.nome).forEach(d=>{ (ocupM[d] = ocupM[d] || new Set()).add(p.nome); }); });
+    ['mont','desm'].forEach(fase=>{
+      if(fase==='desm' && !e.desm) return;
+      const padrao = fase==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
+      escalaDo(e, fase).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ (ocupV[d] = ocupV[d] || new Set()).add(x.v); }); });
+    });
+  });
+  const linhas = dias.map(d=>{
+    const lm = tods.filter(t=>!(ocupM[d] && ocupM[d].has(t.nome)));
+    const lv = frota.filter(v=>!(ocupV[d] && ocupV[d].has(v.id)));
+    const evs = eventos.filter(e=>{ if(e.esp || !e.mont) return false; const i0 = dia(e.mont), f0 = dia(fimDesm(e)) || dia(e.desm) || dia(fimMont(e)) || i0; return d >= i0 && d <= f0; });
+    const espc = datasEspeciais(d, '');
+    const cor = (lm.length < needM || lv.length < needC) ? 'verm' : (lm.length - needM <= 1 || lv.length - needC <= 0) ? 'amar' : 'verde';
+    return {d, lm, lv, evs, espc, cor};
+  });
+  const geral = linhas.some(l=>l.cor==='verm') ? 'verm' : linhas.some(l=>l.cor==='amar') ? 'amar' : 'verde';
+  const pior = linhas.find(l=>l.cor===geral);
+  let estrHtml = '';
+  const qE = semAcentoSimples(g('sf-estr')).trim();
+  if(qE){
+    const toks = qE.split(/\s+/).map(t=>t.replace(/,/g,'.'));
+    const bate = t => { const s = semAcentoSimples(t).replace(/,/g,'.').replace(/\s*x\s*/g,'x'); return toks.every(k=>s.includes(k.replace(/\s*x\s*/g,'x'))); };
+    const usam = eventos.filter(e=>{
+      if(e.esp==='cancelado' || !e.mont) return false;
+      const i0 = dia(e.mont), f0 = dia(fimDesm(e)) || dia(e.desm) || i0;
+      if(f0 < ini || i0 > fim) return false;
+      return [...(e.estruturas||[]), ...(e.itens||[]).map(i=>i.nome)].some(bate);
+    });
+    estrHtml = usam.length
+      ? '<div class="alert amber" style="margin:10px 0 0">🏗 "'+esc(g('sf-estr'))+'" também sai em <b>'+usam.map(e=>esc(e.nome)).join(', ')+'</b> nesse período — confira no estoque se sobra para mais um.</div>'
+      : '<div class="alert green" style="margin:10px 0 0">🏗 Nenhum evento do período usa "'+esc(g('sf-estr'))+'".</div>';
+  }
+  const eqLivres = equipes.filter(e=>e.nome !== EQUIPE_TERC && !ocupadoEm('eq', e.nome, dias, null)).map(e=>e.nome);
+  const COR = {verde:['#0f8a4d','#e8f6ee','🟢 PODE VENDER — tem gente e caminhão livres em todos os dias'],
+               amar:['#a86412','#fdf4e4','🟡 DÁ, MAS FICA APERTADO — a folga é pequena em alguns dias'],
+               verm:['#b0483c','#fbeeec','🔴 NÃO FECHA SEM MEXER NO QUADRO — falta gente ou caminhão']};
+  box.innerHTML =
+    '<div style="border-radius:10px;padding:13px 16px;background:'+COR[geral][1]+';border:1px solid '+COR[geral][0]+'44;margin-bottom:12px"><b style="color:'+COR[geral][0]+';font-size:15.5px">'+COR[geral][2]+'</b>'+
+      (geral!=='verde' && pior ? '<div style="font-size:12.5px;color:var(--ink2);margin-top:4px">Pior dia: <b>'+rotDia(pior.d)+'</b> — '+pior.lm.length+' montador(es) e '+pior.lv.length+' caminhão(ões) livres (precisa de '+needM+' e '+needC+').</div>' : '')+'</div>'+
+    '<div class="rolar"><table><thead><tr><th></th><th>Dia</th><th>Montadores livres</th><th>Caminhões livres</th><th>Eventos no dia</th></tr></thead><tbody>'+
+      linhas.map(l=>'<tr><td>'+(l.cor==='verde'?'🟢':l.cor==='amar'?'🟡':'🔴')+'</td>'+
+        '<td style="white-space:nowrap"><b>'+rotDia(l.d)+'</b>'+(l.espc.length ? '<br><small style="color:#a86412">'+l.espc.map(x=>(x.tipo==='feriado'?'📅 ':'🏟 ')+esc(x.nome)).join('<br>')+'</small>' : '')+'</td>'+
+        '<td><b>'+l.lm.length+'</b> de '+tods.length+(l.lm.length && l.lm.length<=6 ? '<br><small style="color:var(--muted)">'+l.lm.map(t=>esc(t.nome)).join(', ')+'</small>' : '')+'</td>'+
+        '<td><b>'+l.lv.length+'</b> de '+frota.length+(l.lv.length && l.lv.length<=4 ? '<br><small style="color:var(--muted)">'+l.lv.map(v=>esc((v.tipo||'')+' '+(v.placa||''))).join('<br>')+'</small>' : '')+'</td>'+
+        '<td>'+(l.evs.length ? l.evs.map(e=>esc(e.nome)).join('<br>') : '<small style="color:var(--muted)">livre</small>')+'</td></tr>').join('')+
+    '</tbody></table></div>'+
+    (cortou ? '<div style="font-size:12px;color:var(--muted);margin-top:6px">Mostrando só os primeiros 21 dias do período.</div>' : '')+
+    '<div class="alert" style="margin-top:10px">👥 Equipes inteiras livres no período: '+(eqLivres.length ? '<b>'+eqLivres.map(esc).join(', ')+'</b>' : '<b>nenhuma</b> — teria que remontar time ou terceirizar')+'.</div>'+
+    estrHtml+
+    '<div style="font-size:12px;color:var(--muted);margin-top:8px">Conta só o que está lançado na Central — evento que ainda não entrou aqui não é descontado. Montadores = líderes + equipes + piloto; caminhão em manutenção fica de fora.</div>';
+}
+
+/* ================= COLAR MATERIAL DA QUANTIFICAÇÃO ================= */
+let IMPQ_EV = null;
+function abrirImpQuant(evId){
+  IMPQ_EV = evId;
+  const t = document.getElementById('iq-txt'); if(t) t.value = '';
+  const r = document.getElementById('iq-res'); if(r) r.innerHTML = '';
+  document.getElementById('ov-imp-quant').classList.add('on');
+  setTimeout(()=>{ if(t) t.focus(); }, 50);
+}
+/* aceita: NOME — 12 · NOME - 12 · NOME: 12 · NOME;12 · NOME<tab>12 · 12x NOME · 12 NOME · NOME 12 */
+function parseMaterialColado(txt){
+  const itens = [], resto = [];
+  String(txt||'').split(/\n/).forEach(l0=>{
+    let l = l0.replace(/[•·▪]/g,' ').replace(/–/g,'-').replace(/\s+/g,' ').trim();
+    if(!l) return;
+    if(!/\d/.test(l)){ if(!/^(total|item|material|qtd|quantidade|separado|checklist|pe[cç]as?)\b/i.test(l)) resto.push(l0.trim()); return; }
+    let m, nome = null, qtd = null;
+    if(m = l.match(/^(.+?)\s*(?:[;\t]|[-—:]{1,2}|\.{3,})\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unid|p(?:ç|c)s?|x)?\.?$/i)){ nome = m[1]; qtd = m[2]; }
+    else if(m = l.match(/^(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unid|p(?:ç|c)s?)?\s*[-—:]?\s+(.+)$/i)){ qtd = m[1]; nome = m[2]; }
+    else if(m = l.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)$/)){ nome = m[1]; qtd = m[2]; }
+    if(nome != null){
+      nome = nome.replace(/^[-—:.\s]+|[-—:.\s]+$/g,'').trim();
+      const q = parseFloat(String(qtd).replace(',', '.'));
+      if(nome && q > 0){ itens.push({nome, qtd: q}); return; }
+    }
+    resto.push(l0.trim());
+  });
+  return {itens, resto};
+}
+function importarQuant(){
+  const ev = eventos.find(e=>e.id===IMPQ_EV); if(!ev) return fechar('ov-imp-quant');
+  const r = parseMaterialColado((document.getElementById('iq-txt')||{}).value);
+  const box = document.getElementById('iq-res');
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!r.itens.length){
+    if(box) box.innerHTML = '<div class="alert amber" style="margin:0">Não entendi nenhuma linha — cole um item por linha no formato <b>NOME — QUANTIDADE</b> (ex.: GRAU — 24).</div>';
+    return;
+  }
+  ev.itens = ev.itens || [];
+  let novos = 0, somados = 0;
+  r.itens.forEach(it=>{
+    const k = semAcentoSimples(it.nome);
+    const ja = ev.itens.find(x=>semAcentoSimples(x.nome)===k);
+    if(ja){ ja.qtd = (+ja.qtd || 0) + it.qtd; ja.presumido = false; somados++; return; }
+    const c = catalogo.find(x=>semAcentoSimples(x.nome)===k);
+    ev.itens.push(c ? {nome:c.nome, qtd:it.qtd, peso:c.peso, vol:c.vol, un:c.un} : {nome:it.nome, qtd:it.qtd});
+    novos++;
+  });
+  salvar(); renderQuadro();
+  toast('📥 ' + r.itens.length + ' item(ns) importado(s): ' + novos + ' novo(s), ' + somados + ' somado(s) ao que o evento já tinha.');
+  if(r.resto.length){
+    const t = document.getElementById('iq-txt'); if(t) t.value = r.resto.join('\n');
+    if(box) box.innerHTML = '<div class="alert amber" style="margin:0"><b>' + r.resto.length + ' linha(s) ficaram de fora</b> (deixei elas aí em cima) — arrume no formato NOME — QUANTIDADE e importe de novo, ou feche se for só cabeçalho.</div>';
+  } else {
+    fechar('ov-imp-quant');
+  }
+  verEvento(ev.id);
+}
+
 /* ================= MOTORISTA NO MAPA =================
    O motorista abre o link no celular, toca em "Iniciar viagem" e a posição vai para a nuvem
    (plan_config, chave loc:<evento>|<fase>|<dia>|<vaga>). A Tela do galpão mostra onde está e quando chega. */
@@ -3583,7 +3910,8 @@ async function atualizarETA(chave, l, dest){
   const e0 = ETA[chave];
   if(e0 && Date.now() - e0.t < 2*60*1000 && e0.lt === l.t) return e0;
   let min = null;
-  if(CONFIG.tomtomKey){
+  if(CONFIG.googleKey){ try{ const g = await rotaGoogle(l, dest, null, null); if(g) min = Math.round(g.min); }catch(e){} }
+  if(min == null && CONFIG.tomtomKey){
     try{
       const r = await fetch('https://api.tomtom.com/routing/1/calculateRoute/' + l.lat + ',' + l.lon + ':' + dest.lat + ',' + dest.lon + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck');
       if(r.ok){ const j = await r.json(); min = Math.round(j.routes[0].summary.travelTimeInSeconds / 60); }
@@ -3897,7 +4225,8 @@ async function puxarPipefy(manual){
     /* só o que mudou desde a última vez (na primeira vez, o que ainda vai acontecer) */
     const alvo = cards.filter(c=>!ultimo || String(c.updated_at||'') > ultimo).map(c=>cardParaLote(c, pendentes))
       .filter(e=>e.mont || e.desm)
-      .filter(e=>eventoExistente(e) || (dia(fimDesmLote(e)) || dia(e.mont) || '9999') >= somaDiaISO(HOJE, -3));
+      .filter(e=>eventoExistente(e) || (dia(fimDesmLote(e)) || dia(e.mont) || '9999') >= somaDiaISO(HOJE, -3))
+      .filter(e=>eventoExistente(e) || !foiExcluido(e));   /* excluído da Central não volta pelo pipe */
     pendentes.forEach(n => { if(!catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
     const maxUp = cards.reduce((m,c)=>String(c.updated_at||'') > m ? String(c.updated_at) : m, ultimo);
     CONFIG.pipefyUltimo = maxUp; CONFIG.pipefyQuando = new Date().toISOString();
@@ -4610,6 +4939,7 @@ function blocoRecados(ev){
     (RASCUNHO_ANEXO[ev.id] ? '<div style="font-size:12px;color:var(--ink2);margin-bottom:5px">📎 ' + esc(RASCUNHO_ANEXO[ev.id].nome) + ' pronto para enviar <button class="mini danger" onclick="delete RASCUNHO_ANEXO[\'' + ev.id + '\'];verEvento(\'' + ev.id + '\')">tirar</button></div>' : '')+
     '<div style="display:flex;gap:8px;align-items:flex-end">'+
       '<button class="mini" title="Anexar foto ou PDF" style="padding:9px 11px" onclick="pegarAnexo(\'' + ev.id + '\')">📎</button>'+
+      '<button class="mini" id="btn-voz-' + ev.id + '" title="Gravar recado de voz — toque, fale e toque de novo para parar" style="padding:9px 11px" onclick="gravarVoz(\'' + ev.id + '\')">🎤</button>'+
       '<textarea id="rec-txt-' + ev.id + '" rows="2" placeholder="Escreva um recado… (Ctrl+Enter envia)" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13.5px;resize:vertical" onkeydown="if(event.key===\'Enter\'&&(event.ctrlKey||event.metaKey)){event.preventDefault();enviarRecado(\'' + ev.id + '\')}"></textarea>'+
       '<button class="btn-orange" onclick="enviarRecado(\'' + ev.id + '\')">Enviar</button></div>'+
     '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;align-items:center"><small style="color:var(--muted)">Marcar:</small>'+
@@ -4663,10 +4993,63 @@ function encolherImagem(f, maxLado, q){
 function anexoHtml(r){
   if(!r.anexo || !r.anexo.dado) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  if(r.anexo.tipo === 'aud')
+    return '<div style="margin-top:6px"><audio controls preload="metadata" src="'+r.anexo.dado+'" style="display:block;max-width:250px;height:36px"></audio><small style="color:var(--muted);font-size:11px">🎤 '+esc(r.anexo.nome||'recado de voz')+'</small></div>';
   if(r.anexo.tipo === 'img')
     return '<a href="'+r.anexo.dado+'" target="_blank" download="'+esc(r.anexo.nome||'foto.jpg')+'"><img src="'+r.anexo.dado+'" style="max-width:230px;max-height:170px;border-radius:8px;margin-top:6px;display:block" alt="'+esc(r.anexo.nome)+'"></a>';
   return '<a href="'+r.anexo.dado+'" download="'+esc(r.anexo.nome||'arquivo.pdf')+'" style="display:inline-block;margin-top:6px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:5px 10px;text-decoration:none;color:#1c4fa0">📎 '+esc(r.anexo.nome||'arquivo.pdf')+'</a>';
 }
+
+/* ================= RECADO DE VOZ =================
+   Toca no microfone, fala, toca de novo: o áudio vira anexo do recado (até ~60 s).
+   Vai como os outros anexos — base64 no plan_config — e toca direto na conversa. */
+let GRAV = null;
+async function gravarVoz(evId){
+  if(GRAV){ if(GRAV.ev === evId) return pararVoz(); pararVoz(); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined')
+    return toast('🎤 Este navegador não grava áudio — tente o Chrome no celular ou no computador.');
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const tipo = (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) ? 'audio/webm;codecs=opus'
+               : (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4')) ? 'audio/mp4' : '';
+    const rec = tipo ? new MediaRecorder(stream, {mimeType: tipo, audioBitsPerSecond: 32000}) : new MediaRecorder(stream);
+    const pedacos = [];
+    rec.ondataavailable = e => { if(e.data && e.data.size) pedacos.push(e.data); };
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t=>t.stop());
+      const g = GRAV; GRAV = null;
+      if(g) clearInterval(g.timer);
+      atualizarBtnVoz(evId);
+      const seg = g ? Math.round((Date.now() - g.t0) / 1000) : 0;
+      const blob = new Blob(pedacos, {type: rec.mimeType || 'audio/webm'});
+      if(seg < 1 || blob.size < 1200) return toast('🎤 Gravação muito curta — toque no microfone, fale e toque de novo para parar.');
+      if(blob.size > 480 * 1024) return toast('🎤 Áudio muito comprido para o recado — grave até uns 60 segundos.');
+      try{
+        const dado = await lerBase64(blob);
+        RASCUNHO_ANEXO[evId] = {nome: 'Recado de voz (' + seg + 's)', tipo: 'aud', dado, seg};
+        const ta = document.getElementById('rec-txt-' + evId); const rasc = ta ? ta.value : '';
+        verEvento(evId);
+        const t2 = document.getElementById('rec-txt-' + evId); if(t2) t2.value = rasc;
+        toast('🎤 Recado de voz pronto — é só Enviar.');
+      }catch(e){ toast('🎤 Não consegui guardar o áudio (' + e.message + ').'); }
+    };
+    GRAV = {rec, ev: evId, t0: Date.now(), timer: setInterval(()=>{
+      if(!GRAV) return;
+      const s = Math.round((Date.now() - GRAV.t0) / 1000);
+      const b = document.getElementById('btn-voz-' + GRAV.ev);
+      if(b){ b.textContent = '⏺ ' + s + 's'; b.style.background = '#c0392b'; b.style.color = '#fff'; b.style.borderColor = '#c0392b'; b.title = 'Gravando — toque para parar e anexar'; }
+      if(s >= 60) pararVoz();
+    }, 400)};
+    rec.start();
+    const b = document.getElementById('btn-voz-' + evId);
+    if(b){ b.textContent = '⏺ 0s'; b.style.background = '#c0392b'; b.style.color = '#fff'; b.style.borderColor = '#c0392b'; }
+  }catch(e){
+    GRAV = null;
+    toast('🎤 Não consegui usar o microfone (' + (e && e.name === 'NotAllowedError' ? 'permissão negada — libere o microfone para o site nas configurações do navegador' : (e && e.message) || e) + ').');
+  }
+}
+function pararVoz(){ if(GRAV && GRAV.rec && GRAV.rec.state !== 'inactive'){ try{ GRAV.rec.stop(); }catch(e){ GRAV = null; } } }
+function atualizarBtnVoz(evId){ const b = document.getElementById('btn-voz-' + evId); if(b){ b.textContent = '🎤'; b.style.background = ''; b.style.color = ''; b.style.borderColor = ''; b.title = 'Gravar recado de voz — toque, fale e toque de novo para parar'; } }
 
 /* ================= LEMBRETES DO EVENTO ================= */
 function avisadosLemb(){ try{ return JSON.parse(localStorage.getItem('cpl:lembAv') || '{}'); }catch(e){ return {}; } }
@@ -5862,7 +6245,8 @@ function verEvento(id){
     '</div>'+
 
     '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">MATERIAIS DO EVENTO'+
-      '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button></h4>'+
+      '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button>'+
+      '<button class="mini" style="font-weight:600" onclick="abrirImpQuant(\''+ev.id+'\')" title="Cole o Total de peças que sai do quantificador — os itens entram no evento com o mesmo nome, e nomes iguais somam">📥 Colar da quantificação</button></h4>'+
       '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
       '<div class="tot"><div><i>Peso total</i><b>'+num(c.peso)+' kg</b></div>'+
       '<div><i>Volume total</i><b>'+num(c.vol)+' m³</b></div>'+
@@ -6022,7 +6406,7 @@ function setRespTel(id, valor){
   salvar(); renderQuadro();
 }
 function setKmEvento(id, valor){
-  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; e0.minPonte = null; } }
+  { const e0 = eventos.find(e=>e.id===id); if(e0){ e0.kmFonte = null; e0.kmMin = null; e0.minPonte = null; e0.pedagioG = null; } }
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.km = Math.max(0, parseFloat(String(valor).replace(',','.')) || 0);
   salvar(); renderQuadro(); verEvento(id); /* recalcula frota (regra do agregado usa o km) */
@@ -6031,7 +6415,7 @@ function setKmEvento(id, valor){
 function setLocalEvento(id, campo, valor){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev[campo] = String(valor||'').trim() || '—';
-  ev.geo = null; ev.ponteRota = undefined; ev.minPonte = null;
+  ev.geo = null; ev.ponteRota = undefined; ev.minPonte = null; ev.pedagioG = null;
   salvar(); renderQuadro(); verEvento(id);
   if(CONFIG.galpao && ((ev.local && ev.local!=='—') || (ev.cidade && ev.cidade!=='—'))){
     toast('📍 Endereço salvo. Calculando a distância do galpão...');
@@ -6266,14 +6650,28 @@ function confirmar(id){
   if(!(ev.escala||[]).length) ev.escala = a.escala.map(x=>({v:x.v, motorista:x.motorista}));
   ev.estado='confirmado'; salvar(); renderQuadro(); fechar('ov-ev'); toast('Planejamento confirmado.');
 }
+/* lembrança de quem foi excluído: casa pela OS ou pelo nome-base,
+   para a planilha e o Pipefy não trazerem o evento de volta */
+function foiExcluido(e){
+  const od = osDigitos(e), nb = nomeBase(e.nome);
+  return (CONFIG.excluidos || []).find(x => (od && x.os && x.os === od) || (nb && x.nome && x.nome === nb)) || null;
+}
+function tirarExcluido(e){
+  const f = foiExcluido(e);
+  if(f) CONFIG.excluidos = (CONFIG.excluidos || []).filter(x=>x !== f);
+  return !!f;
+}
 function excluirEvento(id){
   const i = eventos.findIndex(e=>e.id===id); if(i < 0) return;
   const ev = eventos[i];
-  if(!confirm('Excluir o evento "' + ev.nome + '"?\n\nEle sai do quadro e libera a equipe, o caminhão e o motorista para outros eventos.')) return;
+  if(!confirm('Excluir o evento "' + ev.nome + '"?\n\nEle sai do quadro, libera equipe, caminhão e motorista, e NÃO volta quando você importar a planilha ou o Pipefy de novo.')) return;
   const copia = JSON.parse(JSON.stringify(ev));
+  const marca = {os: osDigitos(ev) || null, nome: nomeBase(ev.nome) || null, rot: ev.nome, q: HOJE};
+  CONFIG.excluidos = [...(CONFIG.excluidos || []), marca].slice(-300);
   eventos.splice(i,1);
   salvar(); renderQuadro(); renderCadastros(); fechar('ov-ev');
-  toast('"' + ev.nome + '" foi excluído.', 'Desfazer', () => {
+  toast('"' + ev.nome + '" foi excluído — não volta pela planilha nem pelo Pipefy.', 'Desfazer', () => {
+    CONFIG.excluidos = (CONFIG.excluidos || []).filter(x=>x !== marca);
     eventos.splice(Math.min(i, eventos.length), 0, copia);
     salvar(); renderQuadro(); renderCadastros(); toast('Evento restaurado.');
   });
@@ -6321,6 +6719,7 @@ function salvarNovo(){
   const mont = document.getElementById('f-mont').value;
   const desm = document.getElementById('f-desm').value;
   if(!nome || !mont || !desm) return toast('Preencha ao menos o nome, a montagem e a desmontagem.');
+  tirarExcluido({nome, os: document.getElementById('f-os').value.trim()});   /* criou na mão: volta a valer nas importações */
   eventos.push({
     id:'e'+Date.now(), nome,
     os: document.getElementById('f-os').value.trim() || '—',
@@ -7324,6 +7723,7 @@ async function lerLote(files){
     lote.map(e=>e).sort((a,b)=> (osDigitos(b)?1:0) - (osDigitos(a)?1:0)).forEach(e=>{
       const od = osDigitos(e), nb = nomeBase(e.nome);
       e.duplicado = !!eventoExistente(e);
+      e.excluido = !e.duplicado && !!foiExcluido(e);
       e.repetido = (od && vistOs.has(od)) || (!od && nb && vistNome.has(nb));
       e.cancelado = faseCancelada(e.fase);
       /* fora do funil só vale para evento NOVO; quem já está no quadro
@@ -7331,14 +7731,16 @@ async function lerLote(files){
       e.foraFunil = !fasesLote.has(e.fase || 'Sem fase');
       if(od) vistOs.add(od);
       if(nb) vistNome.add(nb);
-      if(e.repetido || e.cancelado || e.foraFunil) e.marcado = false;
+      if(e.repetido || e.cancelado || e.foraFunil || e.duplicado || e.excluido) e.marcado = false;
     });
     const jaNoQuadro = lote.filter(e=>e.duplicado && !e.repetido).length;
+    const excluidos = lote.filter(e=>e.excluido && !e.repetido).length;
     const repetidos = lote.filter(e=>e.repetido).length;
     const cancelados = lote.filter(e=>e.cancelado).length;
     const foraFunil = lote.filter(e=>e.foraFunil).length;
     st.innerHTML = '<div class="alert green">' + novos.length + ' evento(s) lido(s). Confira antes de gravar.</div>' +
-      (jaNoQuadro ? '<div class="alert green">' + jaNoQuadro + ' evento(s) já estão no quadro: serão ATUALIZADOS com os dados da planilha, sem duplicar. Desmarque os que não quiser mexer.</div>' : '') +
+      (jaNoQuadro ? '<div class="alert green">' + jaNoQuadro + ' evento(s) já estão no quadro e entraram DESMARCADOS — a planilha só acrescenta evento novo. Marque um deles só se quiser ATUALIZAR o que está na Central com os dados da planilha.</div>' : '') +
+      (excluidos ? '<div class="alert amber">' + excluidos + ' evento(s) foram EXCLUÍDOS da Central e não voltam sozinhos. Marque só se quiser trazê-los de volta.</div>' : '') +
       (repetidos ? '<div class="alert amber">' + repetidos + ' linha(s) repetida(s) na própria planilha foram desmarcadas.</div>' : '') +
       (cancelados ? '<div class="alert amber">' + cancelados + ' evento(s) com fase de cancelamento/perda entraram desmarcados. Marque só se quiser mesmo trazê-los para o quadro.</div>' : '') +
       (foraFunil ? '<div class="alert amber">' + foraFunil + ' evento(s) ficaram de fora pelo filtro de fases (começa em BACKLOG e ALINHAMENTO DOS RESPONSÁVEIS). Ligue a fase que quiser puxar nos botões abaixo.</div>' : '') +
@@ -7383,7 +7785,8 @@ function renderLote(){
           (e.repetido ? ' · <span class="tag" style="color:#b0483c">linha repetida na planilha</span>'
            : e.cancelado ? ' · <span class="tag" style="color:#b0483c">fase de cancelamento na planilha</span>'
            : e.foraFunil ? ' · <span class="tag" style="color:#b47f08">fase desligada no filtro</span>'
-           : e.duplicado ? ' · <span class="tag" style="color:#0f8a4d">já está no quadro — vai atualizar o existente</span>' : '')+
+           : e.duplicado ? ' · <span class="tag" style="color:#0f8a4d">já está no quadro — fica como está; marque para atualizar</span>'
+           : e.excluido ? ' · <span class="tag" style="color:#b0483c">excluído da Central — só volta se você marcar</span>' : '')+
           (function(){ const est = faseParaEstado(e.fase);
             const rot = est==='confirmado' ? ['Planejado','b-green'] : est==='alinhamento' ? ['Em alinhamento','b-blue'] : ['Sugestão da IA','b-amber'];
             return ' · <span class="badge '+rot[1]+'" title="Status que o evento vai assumir no quadro, puxado da fase">'+rot[0]+'</span>'; })()+'</div>'+
@@ -7551,6 +7954,7 @@ function gravarLote(){
       atualizados++;
       return;
     }
+    tirarExcluido(e);   /* marcou de propósito: sai da lista de excluídos e volta a valer */
     eventos.push({
       id:'e'+Date.now()+'_'+(n++), nome:e.nome, os: osDigitos(e) || e.os, produtor:e.produtor || null, cidade:e.cidade,
       local:e.local, km:e.km,
@@ -7740,6 +8144,7 @@ function renderCadastros(){
   const ge = document.getElementById('galpao-end');
   if(ge && document.activeElement !== ge) ge.value = CONFIG.galpao || '';
   { const tk = document.getElementById('cfg-tomtom'); if(tk && document.activeElement !== tk) tk.value = CONFIG.tomtomKey || ''; }
+  { const gk = document.getElementById('cfg-google'); if(gk && document.activeElement !== gk) gk.value = CONFIG.googleKey || ''; }
   { const di = document.getElementById('cfg-diesel'); if(di && document.activeElement !== di) di.value = CONFIG.precoDiesel || ''; }
   { const M = CONFIG.metas || {}; [['mt-km',M.kmEvento],['mt-custo',M.custoEvento],['mt-faltas',M.faltasMes],['mt-diarias',M.diariasEvento]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v || ''; }); }
   { const ur = document.getElementById('cfg-url'); if(ur && document.activeElement !== ur) ur.value = CONFIG.urlCentral || ''; }
