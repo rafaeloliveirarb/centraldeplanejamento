@@ -625,13 +625,15 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com o Google ligado, o TomTom fica só para o que o Google não dá: o detalhe dos acidentes e interdições na rota, o mapa da TV e a ordem das paradas na viagem combinada. Pode deixar as duas chaves.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
-        <label>🌉 Ponte Rio-Niterói: caminhão atravessa até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
-        <label>e depois das <input id="cfg-ponte2" type="time" title="Deixe vazio se não pode atravessar à noite" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteDepois=this.value||'';salvar();renderQuadro()"></label>
+        <label title="Sentido Rio: 2 eixos proibido das 4h às 10h em dia útil; 3 eixos ou mais proibido das 4h ao meio-dia, todos os dias" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cfg-ponte0" onchange="CONFIG.ponteManual=!this.checked;salvar();renderQuadro();renderCadastros()"> 🌉 Ponte: regra da Ecovias pelos eixos do caminhão</label>
+        <label>Pegou horário de ponte, sai às <input id="cfg-ponte3" type="time" title="Padrão dos motoristas quando precisa atravessar antes do fechamento" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteSaida=this.value||'02:30';salvar();renderQuadro()"></label>
+        <label style="color:var(--muted)">manual: até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
+        <label style="color:var(--muted)">e depois das <input id="cfg-ponte2" type="time" title="Deixe vazio se não pode atravessar à noite. Só vale com a regra da Ecovias desligada" onchange="CONFIG.ponteDepois=this.value||'';salvar();renderQuadro()" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px"></label>
         <label>Margem de trânsito <input id="cfg-margem" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.margemSaida=+this.value||0;salvar()"> min</label>
         <label>Descarga em cada parada <input id="cfg-desc" type="number" min="0" step="5" style="width:70px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.tempoDescarga=+this.value||0;salvar()"> min</label>
         <label>Juntar viagens até <input id="cfg-raio" type="number" min="0" step="1" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.raioJuntar=+this.value||0;salvar()"> km entre eventos</label>
       </div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">O carregamento é sempre no dia anterior à saída. A chegada é a hora de início da montagem (ou da desmontagem). Se a rota passa pela Ponte Rio-Niterói, a saída é antecipada para atravessar dentro do horário. Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px">O carregamento é sempre no dia anterior à saída. A chegada é a hora de início da montagem (ou da desmontagem). Se a rota pega a Ponte Rio-Niterói fora do horário permitido (Ecovias: 2 eixos proibido 4h–10h em dia útil; 3+ eixos proibido 4h–12h todos os dias), os caminhões saem de madrugada — padrão 02:30 — e esperam no local. Sem rota calculada, a Central estima a estrada a 45 km/h de média.</div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2 style="margin:0">🖼 Logo para documentos</h2>
@@ -1708,6 +1710,7 @@ function padroesConfig(c){
     {nome:'Zona de restrição do Rio (Zona Sul, Tijuca, Centro)', cidade:'Rio de Janeiro', bairros:'Copacabana, Ipanema, Leblon, Leme, Botafogo, Flamengo, Glória, Catete, Laranjeiras, Cosme Velho, Humaitá, Urca, Lagoa, Gávea, Jardim Botânico, Tijuca, Maracanã, Vila Isabel, Grajaú, Andaraí, Rio Comprido, Santa Teresa, São Cristóvão', dias:'uteis', faixas:'06:00-10:00, 17:00-21:00', vucLivre:true, ativo:false}];
   if(!Array.isArray(c.datasEspeciais)) c.datasEspeciais = [];
   if(!Array.isArray(c.excluidos)) c.excluidos = [];   /* eventos excluídos: não voltam pela planilha nem pelo Pipefy */
+  if(!c.urlCentral) c.urlCentral = 'https://conferenciagtp.vercel.app/central-planejamento.html';   /* mesmo site da Conferência — só funciona depois de subir o arquivo lá */
   if(!Array.isArray(c.pracas)) c.pracas = [];
   /* praças conhecidas da região, já com ponto no mapa e valor de REFERÊNCIA (confira e ajuste) */
   const PRACAS_PADRAO = [
@@ -3164,7 +3167,9 @@ const PONTE_PTS = [{lat:-22.8725, lon:-43.1480}, {lat:-22.8665, lon:-43.1790}]; 
 function cfgSaida(){
   const n = (v, pad) => (v === undefined || v === null || v === '' || isNaN(+v)) ? pad : +v;
   return {margem:n(CONFIG.margemSaida,30), descarga:n(CONFIG.tempoDescarga,60), vel:n(CONFIG.velCaminhao,45) || 45, raio:n(CONFIG.raioJuntar,20),
-    ponteAte: CONFIG.ponteAte || '06:00', ponteDepois: CONFIG.ponteDepois || ''};
+    ponteAte: CONFIG.ponteAte || '06:00', ponteDepois: CONFIG.ponteDepois || '',
+    ponteSaida: /^\d{1,2}:\d{2}$/.test(CONFIG.ponteSaida || '') ? CONFIG.ponteSaida : '02:30',
+    ponteManual: !!CONFIG.ponteManual};
 }
 /* passa pela ponte: escolha manual > rota calculada > cidade do Rio com galpão do outro lado */
 function passaPonte(ev){
@@ -3181,6 +3186,22 @@ function minAtePonte(ev){
   const vi = minViagem(ev) || 0;
   return Math.max(0, vi - 25);   /* sem rota: a ponte fica perto do fim do caminho */
 }
+/* regra da Ecovias na Ponte Rio-Niterói (sentido Rio): 2 eixos proibido das 4h às 10h em dia útil;
+   3 eixos ou mais proibido das 4h ao meio-dia, todos os dias. No modo manual valem os horários digitados. */
+function eixosPonte(ev, fase){
+  let e = 0;
+  try{ escalaDo(ev, fase==='desm' ? 'desm' : 'mont').forEach(x=>{ const v = veiculos.find(y=>y.id===x.v); if(v) e = Math.max(e, eixosDe(v)); }); }catch(err){}
+  return e || 3; /* sem caminhão definido ainda: assume 3+ eixos (regra mais apertada) */
+}
+function janelaPonte(ev, fase, baseISO){
+  const c = cfgSaida();
+  if(c.ponteManual) return {ate: c.ponteAte, dep: c.ponteDepois, rot: 'horário manual: atravessa até ' + c.ponteAte + (c.ponteDepois ? ' ou depois das ' + c.ponteDepois : '')};
+  const e = eixosPonte(ev, fase);
+  if(e >= 3) return {ate:'04:00', dep:'12:00', rot: e + ' eixos: proibido das 4h ao meio-dia, todos os dias'};
+  const dw = new Date((baseISO || HOJE) + 'T12:00').getDay();
+  if(dw >= 1 && dw <= 5) return {ate:'04:00', dep:'10:00', rot:'2 eixos: proibido das 4h às 10h em dia útil'};
+  return {livre:true, rot:'2 eixos: livre no fim de semana'};
+}
 const somaDiaISO = (iso, n) => { const d = new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 function minViagem(ev){
   if(+ev.kmMin) return Math.round(+ev.kmMin);
@@ -3196,25 +3217,31 @@ function horariosSaida(ev, fase, D){
   const vi = minViagem(ev);
   if(ch == null || vi == null || !base) return null;
   const c = cfgSaida();
-  let sai = ch - vi - c.margem, ponte = null, ponteAjustou = false;
+  let sai = ch - vi - c.margem, ponte = null, ponteAjustou = false, jp = null;
   if(passaPonte(ev)){
     const mp = minAtePonte(ev);
-    const ate = minDe(c.ponteAte), dep = minDe(c.ponteDepois);
-    const cruza = sai + mp;                       /* minuto do dia (pode ser negativo = véspera) */
-    const cruzaDia = ((cruza % 1440) + 1440) % 1440;
-    const ok = cruzaDia <= ate || (dep != null && cruzaDia >= dep);
-    if(!ok){
-      /* à noite (se liberado) e ainda chegando a tempo; senão antecipa para a manhã (10 min de folga) */
-      const noite = dep != null ? dep + 5 - mp : null;
-      sai = (noite != null && noite + vi <= ch && noite > sai) ? noite : ate - 10 - mp;
-      ponteAjustou = true;
+    jp = janelaPonte(ev, fase, base);
+    if(!jp.livre){
+      const ate = minDe(jp.ate), dep = minDe(jp.dep);
+      const cruza = sai + mp;                     /* minuto do dia (pode ser negativo = véspera) */
+      const cruzaDia = ((cruza % 1440) + 1440) % 1440;
+      const ok = cruzaDia <= ate || (dep != null && cruzaDia >= dep);
+      if(!ok){
+        /* depois da janela (se der tempo de chegar); senão sai de madrugada — padrão dos motoristas (02:30),
+           ou mais cedo ainda se precisar para atravessar antes do fechamento */
+        const noite = dep != null ? dep + 5 - mp : null;
+        const cedo = ate - 10 - mp;
+        const madruga = minDe(c.ponteSaida);
+        sai = (noite != null && noite + vi <= ch && noite > sai) ? noite : Math.min(cedo, madruga == null ? cedo : madruga);
+        ponteAjustou = true;
+      }
     }
     ponte = hm(sai + mp);
   }
   const chegaMin = sai + vi;
   const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
   return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0,
-    diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou,
+    diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou, jRot: jp && jp.rot,
     espera: ch - chegaMin > c.margem + 5 ? ch - chegaMin : 0};
 }
 /* horário de uma operação do dia: numa viagem combinada vale a saída da rota */
@@ -3254,7 +3281,7 @@ function blocoSaida(ev){
   const c = cfgSaida();
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' +
     ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
-      ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (caminhão só atravessa até ' + c.ponteAte + (c.ponteDepois ? ' ou depois das ' + c.ponteDepois : '') + ') — o caminhão chega antes e espera no local.</div>' : '') +
+      ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (' + ((hM && hM.ponteAjustou && hM.jRot) || (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.jRot; })() || 'fora do horário permitido') + ') — os caminhões saem de madrugada (padrão ' + c.ponteSaida + '), chegam antes e esperam no local.</div>' : '') +
     '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
       ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
         '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
@@ -8153,7 +8180,8 @@ function renderCadastros(){
   { const db = document.getElementById('cfg-datas'); if(db) db.innerHTML = htmlDatasEspeciais(); }
   { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || ''; }
   { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
-  { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; }); }
+  { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-ponte3',c.ponteSaida],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; });
+    const p0 = document.getElementById('cfg-ponte0'); if(p0) p0.checked = !c.ponteManual; }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
   const qs = document.getElementById('quem-sou');
