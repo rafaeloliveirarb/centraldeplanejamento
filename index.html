@@ -4919,6 +4919,7 @@ function levantarPendencias(nDias, leves){
   const vistos = new Set();
   return P.filter(x=>{ const k = x.ev + '|' + x.tipo + '|' + (x.nome||'') + '|' + (x.vaga!=null?x.vaga:'') + '|' + x.txt; if(vistos.has(k)) return false; vistos.add(k); return true; })
     .filter(x=>leves || x.sev >= 2)
+    .filter(x=>!x.dia || x.dia >= HOJE)   /* só de hoje pra frente — dia que já passou não entra */
     .sort((a,b)=> (a.dia||'9').localeCompare(b.dia||'9') || b.sev - a.sev);
 }
 let PEND_OPC = [];
