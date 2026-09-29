@@ -6137,7 +6137,7 @@ function cardEvento(ev, soSetorJC, papel){
       '</div>'+
       '<div class="selo">'+
         (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
-        chipClima(ev)+chipRecados(ev)+
+        chipClima(ev)+
         (ev.datasMudaram ? '<span class="fase" style="background:'+(ev.datasMudaram.avisar?'#b0483c':'#b47f08')+'" title="'+String(ev.datasMudaram.o_que.join(' · ')).replace(/"/g,'&quot;')+'">📅 DATAS MUDARAM'+(ev.datasMudaram.avisar?' — AVISAR':'')+'</span>' : '')+
         '<span class="badge '+s.classe+'">'+s.texto+'</span>'+
         opChip(ev)+
@@ -6172,9 +6172,10 @@ function verEvento(id){
     const semPeso = !i.peso && !i.vol;
     return '<tr'+(semPeso?' style="background:#fdf7ee"':'')+'><td><b>'+i.nome+'</b>'+
       (semPeso?'<div style="color:#b47f08;font-size:11px;margin-top:2px">falta peso e volume no catálogo</div>':'')+
-      (i.presumido?'<div style="color:#b47f08;font-size:11px;margin-top:2px">quantidade presumida, confira</div>':'')+'</td>'+
+      (i.presumido?'<div style="color:#b47f08;font-size:11px;margin-top:2px">quantidade presumida, confira</div>':'')+
+      '<div style="margin-top:4px"><button class="mini" style="font-size:10.5px;padding:2px 8px;'+(i.terc?'border-color:#6b5bb5;color:#6b5bb5;background:#f3f0fb':'border-color:#bfe3cf;color:#0f8a4d')+'" title="Material nosso ou terceirizado (locado de fora) — clique para alternar; o terceirizado entra em COMPRAS E LOCAÇÕES" onclick="toggleTercItem(\''+ev.id+'\','+ix+')">'+(i.terc?'🤝 TERCEIRIZADO':'🏠 NOSSO')+'</button></div></td>'+
       '<td><input type="number" min="1" value="'+i.qtd+'" style="width:78px;border:1px solid var(--line);border-radius:6px;padding:6px 8px" onchange="setQtdItem(\''+ev.id+'\','+ix+',this.value)"> '+(i.un||'un')+'</td>'+
-      '<td>'+num(i.peso*i.qtd)+' kg</td><td>'+num(i.vol*i.qtd)+' m³</td>'+
+      '<td>'+num((+i.peso||0)*i.qtd)+' kg</td><td>'+num((+i.vol||0)*i.qtd)+' m³</td>'+
       '<td style="text-align:right"><button class="mini danger" onclick="removerItemEvento(\''+ev.id+'\','+ix+')">Remover</button></td></tr>';
   }).join('')
     || '<tr><td colspan="5" style="color:var(--muted)">Nenhum material lançado. Sem isso a IA não consegue calcular o caminhão.</td></tr>';
@@ -6196,24 +6197,7 @@ function verEvento(id){
       opChip(ev)+faseChip(ev.fase)+'</div></div>'+
     '<button class="x" onclick="fechar(\'ov-ev\')">✕</button></header>'+
   '<div class="mbody">'+
-    '<div class="sec"><div class="info">'+
-      '<div><i>Produtor</i><select class="sel-fase" onchange="setProdutor(\''+ev.id+'\',this.value,true)">'+
-        (ev.produtor?'':'<option value="" selected>'+(a.produtor||'A definir')+' — sugestão da IA</option>')+
-        [...new Set([...produtores.map(p=>p.nome), ...(ev.produtor && ev.produtor!==SEM_PRODUTOR ? [ev.produtor] : [])])]
-          .map(p=>'<option '+(p===ev.produtor?'selected':'')+'>'+p+'</option>').join('')+
-        '<option '+(ev.produtor===SEM_PRODUTOR?'selected':'')+'>'+SEM_PRODUTOR+'</option>'+
-        '</select>'+
-        (ev.produtor && ev.produtor!==SEM_PRODUTOR
-          ? '<div style="font-size:12px;margin-top:5px"><button class="mini" onclick="abreDiasPessoa(\''+ev.id+'\',\''+String(produtorDo(ev)).replace(/'/g,"\\'")+'\')">📅 Dias do produtor no evento</button>'+
-            (((ev.diasPessoa||{})[produtorDo(ev)]) ? ' <small style="color:#a86412;font-weight:700">📅 '+resumoDias(diasDe(ev, produtorDo(ev)))+'</small>' : '')+'</div>'
-          : '<div style="font-size:12px;color:var(--muted);margin-top:5px">Sugerido pela IA. Aceite a sugestão do evento ou escolha acima para fixar.</div>')+
-        '</div>'+
-      '<div><i>Nome do Responsável</i><input value="'+String(ev.respNome||'').replace(/"/g,'&quot;')+'" placeholder="quem responde no local" '+
-        'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
-        'onchange="setCampo(\''+ev.id+'\',\'respNome\',this.value.trim())"></div>'+
-      '<div><i>Telefone do Responsável no local</i><input value="'+String(ev.respTel||'').replace(/"/g,'&quot;')+'" placeholder="(21) 99000-0000" '+
-        'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
-        'onchange="setRespTel(\''+ev.id+'\',this.value.trim())"></div>'+
+  '<div class="sec"><h4>📅 DATAS</h4><div class="info">'+
       '<div><i>Fase atual</i><select class="sel-fase" onchange="setFase(\''+ev.id+'\',this.value)">'+
         '<option value="">— sem fase —</option>'+
         [...new Set([...FASES_PADRAO, ...(ev.fase ? [ev.fase] : [])])]
@@ -6247,69 +6231,15 @@ function verEvento(id){
         'onchange="setKmEvento(\''+ev.id+'\',this.value)"><b>km</b>'+
         '<button class="mini" onclick="calcularKm(\''+ev.id+'\')" title="Distância por estrada do galpão até o local do evento">📍 Calcular</button></div>'+
         (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+(ev.rotaCaminhao?' · rota de caminhão ('+ev.rotaCaminhao+')':'')+'</small>' : '')+'</div>'+
-      '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
-      '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
-      blocoTransito(ev)+
-      '<div style="grid-column:1/-1"><i>⛽ Custo da viagem</i>'+blocoCusto(ev)+'</div>'+
-      '<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
-      '<div style="grid-column:1/-1"><i>🏷 Ficha do local</i>'+blocoFicha(ev)+'</div>'+
-      blocoJuntarEv(ev)+blocoPermanencia(ev)+blocoDiasFora(ev)+
-    '</div></div>'+
+      '</div></div>'+
 
-    blocoRecados(ev)+
-    blocoLembretes(ev)+
-    blocoEtapas(ev)+
-    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
-      ((ev.estruturas||[]).length ? '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>' : '')+'</h4>'+
-      ((ev.estruturas||[]).length
-        ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
-            '<button class="mini danger" onclick="removerEstrutura(\''+ev.id+'\','+ix+')">✕</button></div>').join('')
-        : '<div style="font-size:12.5px;color:var(--muted);margin:4px 0 8px">Nada lançado — use o 📄 Ler material da OS ou escreva abaixo.</div>')+
-      '<div style="display:flex;gap:8px;margin-top:10px">'+
-        '<input id="estr-nova" placeholder="ex.: 01 PÓRTICO 8,80x2,60x5,60h COM TESTEIRA" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px" onkeydown="if(event.key===\'Enter\')addEstrutura(\''+ev.id+'\')">'+
-        '<button class="mini" onclick="addEstrutura(\''+ev.id+'\')">+ Adicionar</button>'+
+    '<div class="sec"><h4>👥 EQUIPES</h4>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
+        '<button class="mini" style="font-weight:800;padding:9px 16px;'+(eq!==EQUIPE_TERC?'background:#1c4fa0;border-color:#1c4fa0;color:#fff':'')+'" onclick="defEquipeTipo(\''+ev.id+'\',\'nossa\')">🏠 EQUIPE NOSSA</button>'+
+        '<button class="mini" style="font-weight:800;padding:9px 16px;'+(eq===EQUIPE_TERC?'background:#6b5bb5;border-color:#6b5bb5;color:#fff':'')+'" onclick="defEquipeTipo(\''+ev.id+'\',\'terc\')">🤝 TERCEIRIZADA</button>'+
+        (eq===EQUIPE_TERC ? '<input value="'+String(ev.tercEmpresa||'').replace(/"/g,'&quot;')+'" placeholder="empresa terceirizada — quem vai montar" style="flex:1;min-width:210px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setCampo(\''+ev.id+'\',\'tercEmpresa\',this.value.trim())">' : '')+
       '</div>'+
-    '</div>'+
-
-    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">MATERIAIS DO EVENTO'+
-      '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button>'+
-      '<button class="mini" style="font-weight:600" onclick="abrirImpQuant(\''+ev.id+'\')" title="Cole o Total de peças que sai do quantificador — os itens entram no evento com o mesmo nome, e nomes iguais somam">📥 Colar da quantificação</button></h4>'+
-      '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
-      '<div class="tot"><div><i>Peso total</i><b>'+num(c.peso)+' kg</b></div>'+
-      '<div><i>Volume total</i><b>'+num(c.vol)+' m³</b></div>'+
-      '<div><i>Com 15% de folga</i><b>'+num(c.pesoF)+' kg / '+num(c.volF)+' m³</b></div></div>'+
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:16px">'+
-        '<label class="f" style="flex:2 1 220px"><i>Acrescentar material</i><select id="ev-mat">'+
-          catalogo.map(m=>'<option>'+m.nome+'</option>').join('')+'</select></label>'+
-        '<label class="f" style="flex:1 1 100px"><i>Quantidade</i><input id="ev-qtd" type="number" min="1" value="1"></label>'+
-        '<button class="mini" style="padding:11px 16px" onclick="addItemEvento(\''+ev.id+'\')">Adicionar</button>'+
-      '</div>'+
-    '</div>'+
-
-    '<div class="sec"><details'+((ev.hist||[]).length?'':' open')+'><summary style="cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase">🕘 Histórico de alterações'+
-      ((ev.hist||[]).length ? ' <span style="text-transform:none;letter-spacing:0;font-weight:600">· '+ev.hist.length+' registro(s), último '+
-        new Date(ev.hist[0].q).toLocaleDateString('pt-BR')+' por '+ev.hist[0].quem+'</span>' : '')+'</summary>'+
-      ((ev.hist||[]).length
-        ? '<div style="margin-top:10px;max-height:260px;overflow:auto">'+ev.hist.map(hh=>
-            '<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:12.5px">'+
-              '<div style="min-width:118px;color:var(--muted)">'+new Date(hh.q).toLocaleDateString('pt-BR')+' '+new Date(hh.q).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+
-                '<br><b style="color:var(--ink2)">'+String(hh.quem).replace(/</g,'&lt;')+'</b></div>'+
-              '<div style="flex:1">'+hh.o.map(x=>String(x).replace(/</g,'&lt;')).join('<br>')+'</div>'+
-            '</div>').join('')+'</div>'
-        : '<div style="font-size:12.5px;color:var(--muted);margin-top:8px">Nenhuma alteração registrada ainda. A partir de agora, toda mudança neste evento fica anotada aqui, com data e quem fez.</div>')+
-    '</details></div>'+
-
-    '<div class="sec"><h4>ANÁLISE DA IA</h4>'+alertas+
-      '<div class="ia">'+
-        '<p><b>EQUIPE</b>'+a.just.equipe+'</p>'+
-        (a.just.produtor ? '<p><b>PRODUTOR</b>'+a.just.produtor+'</p>' : '')+
-        '<p><b>CAMINHÃO</b>'+a.just.veiculo+'</p>'+
-        '<p><b>DISPONIBILIDADE</b>'+a.just.disp+'</p>'+
-        '<p><b>CONFIANÇA</b>'+a.confianca+'</p>'+
-      '</div>'+
-    '</div>'+
-
-    '<div class="sec"><h4>ALOCAÇÃO</h4><div class="fgrid">'+
+      '<div class="fgrid">'+
       '<label class="f"><i>Equipe (montagem e desmontagem)</i><select onchange="setCampo(\''+ev.id+'\',\'equipe\',this.value)">'+
         equipes.map(e=>'<option '+(e.nome===eq?'selected':'')+'>'+e.nome+'</option>').join('')+
         '<option '+(eq===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option></select></label>'+
@@ -6359,6 +6289,18 @@ function verEvento(id){
         editorDiasPessoa(ev, eq)+
         blocoEquipeDesm(ev, eq)+
       '</div>'+
+    '</div></div>'+
+
+    '<div class="sec"><h4>🚚 CAMINHÕES</h4>'+
+      '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Frete fechado por fora: lance no quadro de fretes aqui embaixo.</div>'+
+      '<div class="info">'+
+      '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
+      '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
+      blocoTransito(ev)+
+      '<div style="grid-column:1/-1"><i>⛽ Custo da viagem</i>'+blocoCusto(ev)+'</div>'+
+      '</div>'+
+      '<div class="fgrid">'+
+
       '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<b style="font-size:13px">🔨 Caminhões da montagem</b>'+
         '<span style="color:var(--muted);font-size:12px">levam o material'+
@@ -6377,13 +6319,157 @@ function verEvento(id){
            if(distintos===1) return total+' viagens do mesmo caminhão';
            return total+' viagens · '+distintos+' veículo'+(distintos>1?'s':'');
          })()+'</b></div></div>' : '')+
+    blocoFretes(ev)+
+    blocoJuntarEv(ev)+blocoPermanencia(ev)+''+
+    '</div>'+
+  
+    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
+      ((ev.estruturas||[]).length ? '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>' : '')+'</h4>'+
+      ((ev.estruturas||[]).length
+        ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
+            '<button class="mini danger" onclick="removerEstrutura(\''+ev.id+'\','+ix+')">✕</button></div>').join('')
+        : '<div style="font-size:12.5px;color:var(--muted);margin:4px 0 8px">Nada lançado — use o 📄 Ler material da OS ou escreva abaixo.</div>')+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<input id="estr-nova" placeholder="ex.: 01 PÓRTICO 8,80x2,60x5,60h COM TESTEIRA" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 11px;font:inherit;font-size:13px" onkeydown="if(event.key===\'Enter\')addEstrutura(\''+ev.id+'\')">'+
+        '<button class="mini" onclick="addEstrutura(\''+ev.id+'\')">+ Adicionar</button>'+
+      '</div>'+
     '</div>'+
 
+    
+    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">✅ CHECKLIST DO MATERIAL <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">nosso ou terceirizado — clique na etiqueta do item para alternar</span>'+
+      '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button>'+
+      '<button class="mini" style="font-weight:600" onclick="abrirImpQuant(\''+ev.id+'\')" title="Cole o Total de peças que sai do quantificador — os itens entram no evento com o mesmo nome, e nomes iguais somam">📥 Colar da quantificação</button></h4>'+
+      '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
+      '<div class="tot"><div><i>Peso total</i><b>'+num(c.peso)+' kg</b></div>'+
+      '<div><i>Volume total</i><b>'+num(c.vol)+' m³</b></div>'+
+      '<div><i>Com 15% de folga</i><b>'+num(c.pesoF)+' kg / '+num(c.volF)+' m³</b></div></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:16px">'+
+        '<label class="f" style="flex:2 1 220px"><i>Acrescentar material</i><select id="ev-mat">'+
+          catalogo.map(m=>'<option>'+m.nome+'</option>').join('')+'</select></label>'+
+        '<label class="f" style="flex:1 1 100px"><i>Quantidade</i><input id="ev-qtd" type="number" min="1" value="1"></label>'+
+        '<button class="mini" style="padding:11px 16px" onclick="addItemEvento(\''+ev.id+'\')">Adicionar</button>'+
+      '</div>'+
+    '</div>'+
+
+    
+    '<div class="sec"><h4>⚠️ RISCOS</h4>'+alertas+
+      '<div class="info" style="margin-top:10px">'+'<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
+      blocoDiasFora(ev)+'</div>'+
+      '<div class="ia">'+
+        '<p><b>EQUIPE</b>'+a.just.equipe+'</p>'+
+        (a.just.produtor ? '<p><b>PRODUTOR</b>'+a.just.produtor+'</p>' : '')+
+        '<p><b>CAMINHÃO</b>'+a.just.veiculo+'</p>'+
+        '<p><b>DISPONIBILIDADE</b>'+a.just.disp+'</p>'+
+        '<p><b>CONFIANÇA</b>'+a.confianca+'</p>'+
+      '</div>'+
+    '</div>'+
+
+    
+    '<div class="sec"><h4>🎬 PRODUÇÃO</h4><div class="info">'+
+      '<div><i>Produtor</i><select class="sel-fase" onchange="setProdutor(\''+ev.id+'\',this.value,true)">'+
+        (ev.produtor?'':'<option value="" selected>'+(a.produtor||'A definir')+' — sugestão da IA</option>')+
+        [...new Set([...produtores.map(p=>p.nome), ...(ev.produtor && ev.produtor!==SEM_PRODUTOR ? [ev.produtor] : [])])]
+          .map(p=>'<option '+(p===ev.produtor?'selected':'')+'>'+p+'</option>').join('')+
+        '<option '+(ev.produtor===SEM_PRODUTOR?'selected':'')+'>'+SEM_PRODUTOR+'</option>'+
+        '</select>'+
+        (ev.produtor && ev.produtor!==SEM_PRODUTOR
+          ? '<div style="font-size:12px;margin-top:5px"><button class="mini" onclick="abreDiasPessoa(\''+ev.id+'\',\''+String(produtorDo(ev)).replace(/'/g,"\\'")+'\')">📅 Dias do produtor no evento</button>'+
+            (((ev.diasPessoa||{})[produtorDo(ev)]) ? ' <small style="color:#a86412;font-weight:700">📅 '+resumoDias(diasDe(ev, produtorDo(ev)))+'</small>' : '')+'</div>'
+          : '<div style="font-size:12px;color:var(--muted);margin-top:5px">Sugerido pela IA. Aceite a sugestão do evento ou escolha acima para fixar.</div>')+
+        '</div>'+
+      '<div><i>Nome do Responsável</i><input value="'+String(ev.respNome||'').replace(/"/g,'&quot;')+'" placeholder="quem responde no local" '+
+        'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
+        'onchange="setCampo(\''+ev.id+'\',\'respNome\',this.value.trim())"></div>'+
+      '<div><i>Telefone do Responsável no local</i><input value="'+String(ev.respTel||'').replace(/"/g,'&quot;')+'" placeholder="(21) 99000-0000" '+
+        'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
+        'onchange="setRespTel(\''+ev.id+'\',this.value.trim())"></div>'+
+      '</div></div>'+
+
+    '<div class="sec"><h4>🛒 COMPRAS E LOCAÇÕES</h4>'+blocoCompras(ev)+'</div>'+
+
+    '<div class="sec"><details'+((ev.hist||[]).length?'':' open')+'><summary style="cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase">🕘 Histórico de alterações'+
+      ((ev.hist||[]).length ? ' <span style="text-transform:none;letter-spacing:0;font-weight:600">· '+ev.hist.length+' registro(s), último '+
+        new Date(ev.hist[0].q).toLocaleDateString('pt-BR')+' por '+ev.hist[0].quem+'</span>' : '')+'</summary>'+
+      ((ev.hist||[]).length
+        ? '<div style="margin-top:10px;max-height:260px;overflow:auto">'+ev.hist.map(hh=>
+            '<div style="display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:12.5px">'+
+              '<div style="min-width:118px;color:var(--muted)">'+new Date(hh.q).toLocaleDateString('pt-BR')+' '+new Date(hh.q).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+
+                '<br><b style="color:var(--ink2)">'+String(hh.quem).replace(/</g,'&lt;')+'</b></div>'+
+              '<div style="flex:1">'+hh.o.map(x=>String(x).replace(/</g,'&lt;')).join('<br>')+'</div>'+
+            '</div>').join('')+'</div>'
+        : '<div style="font-size:12.5px;color:var(--muted);margin-top:8px">Nenhuma alteração registrada ainda. A partir de agora, toda mudança neste evento fica anotada aqui, com data e quem fez.</div>')+
+    '</details></div>'+
+
+    
   '</div>'+
   '<div class="mfoot">'+acoes+'</div>';
   document.getElementById('ov-ev').classList.add('on');
 }
 
+/* ===== EQUIPE NOSSA x TERCEIRIZADA / FRETE / COMPRAS E LOCAÇÕES ===== */
+function defEquipeTipo(id, t){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.equipe = t==='terc' ? EQUIPE_TERC : null;   /* nossa: volta para a sugestão da IA (troque na lista se quiser) */
+  salvar(); renderQuadro(); verEvento(id);
+  toast(t==='terc' ? '🤝 Montagem por equipe terceirizada — escreva o nome da empresa.' : '🏠 Equipe da casa — a IA sugere a equipe; troque na lista se quiser outra.');
+}
+function toggleTercItem(id, ix){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !ev.itens || !ev.itens[ix]) return;
+  ev.itens[ix].terc = !ev.itens[ix].terc;
+  salvar(); verEvento(id);
+}
+function addFrete(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const emp = (document.getElementById('fr-emp')||{}).value || '';
+  if(!emp.trim()) return toast('Escreva quem faz o frete.');
+  ev.fretes = ev.fretes || [];
+  ev.fretes.push({emp: emp.trim(), fase: (document.getElementById('fr-fase')||{}).value || 'mont', val: +((document.getElementById('fr-val')||{}).value) || 0});
+  salvar(); verEvento(id);
+}
+function rmFrete(id, ix){ const ev = eventos.find(e=>e.id===id); if(!ev || !ev.fretes) return; ev.fretes.splice(ix,1); if(!ev.fretes.length) ev.fretes = null; salvar(); verEvento(id); }
+function blocoFretes(ev){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = ev.fretes || [];
+  const inp = 'border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px';
+  return '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
+    '<b style="font-size:13px">🚛 Frete contratado</b> <small style="color:var(--muted)">caminhão de fora fechado por viagem — não é da frota nem agregado</small>'+
+    (L.length ? L.map((f,ix)=>'<div class="row"><span style="flex:1"><b>'+esc(f.emp)+'</b> · '+(f.fase==='desm'?'desmontagem':'montagem')+(+f.val?' · '+reais(+f.val):'')+'</span><button class="mini danger" onclick="rmFrete(\''+ev.id+'\','+ix+')">✕</button></div>').join('') : '')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
+      '<input id="fr-emp" placeholder="transportadora / caminhoneiro" style="flex:2;min-width:180px;'+inp+'">'+
+      '<select id="fr-fase" style="'+inp+'"><option value="mont">montagem</option><option value="desm">desmontagem</option></select>'+
+      '<input id="fr-val" type="number" min="0" placeholder="R$" style="width:100px;'+inp+'">'+
+      '<button class="mini" onclick="addFrete(\''+ev.id+'\')">+ Frete</button>'+
+    '</div></div>';
+}
+function addCompra(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const oque = (document.getElementById('cp-oque')||{}).value || '';
+  if(!oque.trim()) return toast('Escreva o que precisa comprar ou alugar.');
+  ev.compras = ev.compras || [];
+  ev.compras.push({tipo:(document.getElementById('cp-tipo')||{}).value || 'locacao', oque: oque.trim(),
+    forn: ((document.getElementById('cp-forn')||{}).value || '').trim(), val: +((document.getElementById('cp-val')||{}).value) || 0, ok:false});
+  salvar(); verEvento(id);
+}
+function rmCompra(id, ix){ const ev = eventos.find(e=>e.id===id); if(!ev || !ev.compras) return; ev.compras.splice(ix,1); if(!ev.compras.length) ev.compras = null; salvar(); verEvento(id); }
+function toggleCompraOk(id, ix){ const ev = eventos.find(e=>e.id===id); if(!ev || !ev.compras || !ev.compras[ix]) return; ev.compras[ix].ok = !ev.compras[ix].ok; salvar(); verEvento(id); }
+function blocoCompras(ev){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const inp = 'border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px';
+  const L = ev.compras || [], autos = [];
+  (ev.itens||[]).filter(i=>i.terc).forEach(i=>autos.push('🤝 <b>LOCAÇÃO DE MATERIAL</b> — '+esc(i.nome)+' ('+num(i.qtd)+' '+(i.un||'un')+') <small style="color:var(--muted)">marcado no checklist</small>'));
+  if(ev.equipe===EQUIPE_TERC) autos.push('🤝 <b>EQUIPE TERCEIRIZADA</b> — '+(ev.tercEmpresa ? esc(ev.tercEmpresa) : '<b style="color:#b47f08">definir fornecedor</b>'));
+  (ev.fretes||[]).forEach(f=>autos.push('🚛 <b>FRETE</b> — '+esc(f.emp)+(+f.val?' ('+reais(+f.val)+')':'')));
+  return (autos.length ? '<div class="alert" style="margin:0 0 10px;line-height:1.8">'+autos.join('<br>')+'</div>'
+      : '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">O que precisa comprar ou alugar para este evento. Material 🤝 do checklist, equipe terceirizada e frete entram aqui sozinhos.</div>')+
+    (L.length ? L.map((x,ix)=>'<div class="row"><input type="checkbox" '+(x.ok?'checked':'')+' title="Resolvido?" onchange="toggleCompraOk(\''+ev.id+'\','+ix+')"><span style="flex:1;'+(x.ok?'text-decoration:line-through;color:var(--muted)':'')+'"><b>'+(x.tipo==='compra'?'🛒 COMPRA':'📄 LOCAÇÃO')+'</b> — '+esc(x.oque)+(x.forn?' · '+esc(x.forn):'')+(+x.val?' · '+reais(+x.val):'')+'</span><button class="mini danger" onclick="rmCompra(\''+ev.id+'\','+ix+')">✕</button></div>').join('') : '')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+
+      '<select id="cp-tipo" style="'+inp+'"><option value="locacao">LOCAÇÃO</option><option value="compra">COMPRA</option></select>'+
+      '<input id="cp-oque" placeholder="o que — ex.: gerador 40 kVA, banheiro químico, empilhadeira" style="flex:2;min-width:200px;'+inp+'" onkeydown="if(event.key===\'Enter\')addCompra(\''+ev.id+'\')">'+
+      '<input id="cp-forn" placeholder="fornecedor" style="flex:1;min-width:130px;'+inp+'">'+
+      '<input id="cp-val" type="number" min="0" placeholder="R$" style="width:100px;'+inp+'">'+
+      '<button class="mini" onclick="addCompra(\''+ev.id+'\')">+ Adicionar</button>'+
+    '</div>';
+}
 function setFase(id, valor){
   const ev = eventos.find(e=>e.id===id);
   ev.fase = valor.trim() || null;
