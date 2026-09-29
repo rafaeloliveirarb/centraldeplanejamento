@@ -71,6 +71,25 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .semcard{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:10px 0 2px}
 .semcard .sdot{cursor:pointer;width:13px;height:13px;flex-basis:13px}
 .semcard b{font-size:12px;margin-left:4px}
+.lt-wrap{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:10px}
+.lt{border-collapse:separate;border-spacing:0;font-size:12px}
+.lt th,.lt td{padding:0;height:30px;border-bottom:1px solid var(--line)}
+.lt thead th{position:sticky;top:0;background:var(--card);z-index:3;font-weight:600;color:var(--muted);font-size:10.5px;text-align:center;min-width:30px;width:30px;line-height:1.15}
+.lt .nm{position:sticky;left:0;background:var(--card);z-index:2;min-width:230px;max-width:230px;padding:4px 10px;text-align:left;border-right:1px solid var(--line);cursor:pointer}
+.lt thead .nm{z-index:4}
+.lt .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;color:var(--ink)}
+.lt .nm small{color:var(--muted);font-size:10.5px}
+.lt td.dc{min-width:30px;width:30px;text-align:center;cursor:pointer}
+.lt .fds{background:rgba(28,79,160,.05)}
+.lt .hj{box-shadow:inset 2px 0 #c0392b,inset -2px 0 #c0392b}
+.lt .bm,.lt .be,.lt .bd,.lt .bl{display:block;height:16px;margin:0 -1px}
+.lt .bm{background:#1c4fa0}.lt .bm.tc{background:#6b5bb5}
+.lt .be{background:#0f8a4d}
+.lt .bd{background:#f0851e}.lt .bd.tc{background:#b98be0}
+.lt .bl{background:#dfe6f2;height:6px}
+.lt tfoot td{position:sticky;bottom:0;background:var(--card);font-weight:800;text-align:center;font-size:11px;border-top:2px solid var(--line)}
+.lt-leg{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-bottom:10px;align-items:center}
+.lt-leg i{display:inline-block;width:18px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
 .periods{display:flex;gap:8px;flex-wrap:wrap}
 .pill{
   border:1px solid var(--line);background:#fff;color:var(--ink2);
@@ -426,6 +445,23 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <option value="mont">🔨 Só montagens</option>
         <option value="desm">📤 Só desmontagens</option>
       </select>
+      <select class="pill" id="filtro-sem" style="padding:9px 14px" onchange="semFiltro=this.value;renderQuadro()" title="Filtra os cards pelo semáforo das seções e pelo tipo de equipe, caminhão e material">
+        <option value="">🚦 Semáforo: todos</option>
+        <optgroup label="Situação">
+          <option value="verm">🔴 Com algo no vermelho</option>
+          <option value="amar">🟡 Com atenção (amarelo)</option>
+          <option value="verde">🟢 Tudo pronto</option>
+        </optgroup>
+        <optgroup label="Seção no vermelho">
+          <option value="sec:datas">🔴 DATAS</option><option value="sec:equipes">🔴 EQUIPES</option><option value="sec:caminhoes">🔴 CAMINHÕES</option><option value="sec:estruturas">🔴 ESTRUTURAS</option>
+          <option value="sec:checklist">🔴 CHECKLIST</option><option value="sec:riscos">🔴 RISCOS</option><option value="sec:producao">🔴 PRODUÇÃO</option><option value="sec:compras">🔴 COMPRAS</option>
+        </optgroup>
+        <optgroup label="Tipo">
+          <option value="eqnossa">🏠 Equipe nossa</option><option value="eqterc">🤝 Equipe terceirizada</option>
+          <option value="proprio">🚚 Caminhão próprio</option><option value="agreg">🚚 Caminhão agregado</option><option value="frete">🚛 Com frete</option>
+          <option value="mattc">🤝 Com material terceirizado</option><option value="compras">🛒 Compras em aberto</option>
+        </optgroup>
+      </select>
       <select class="pill" id="filtro-esp" style="padding:9px 14px" onchange="espFiltro=this.value;renderQuadro()">
         <option value="ativos">Esconder encerrados</option>
         <option value="todos">Mostrar tudo</option>
@@ -442,6 +478,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <input class="search" id="busca" placeholder="Pesquisar evento...">
       <input class="search" id="pergunta-in" placeholder="💬 Pergunte: o que sai sábado?" title="Perguntas em português sobre a agenda, pessoas, estruturas, km e custos" onkeydown="if(event.key==='Enter')perguntar()" style="min-width:230px">
       <button class="pill" id="btn-pend" onclick="abrirPendencias()" title="Tudo o que precisa de ação, do mais urgente para o menos">🚨 Pendências</button>
+      <button class="pill" onclick="abrirLinha()" title="Os próximos dias na horizontal, cada evento numa barra: montagem, evento e desmontagem">🗓 Linha do tempo</button>
+      <button class="pill" onclick="abrirSetor()" title="O que cada setor tem para resolver: só as seções de que ele cuida, no vermelho ou amarelo">👤 Por setor</button>
       <button class="pill" id="btn-risco" onclick="abrirRisco()" title="Eventos com alguma seção no vermelho, do mais perto para o mais longe">⚠️ Em risco</button>
       <button class="pill" onclick="abrirSemaforo()" title="Para o comercial: antes de fechar um evento novo, veja se a data tem gente, caminhão e estrutura livres">🚦 Pode vender?</button>
       <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
@@ -839,6 +877,33 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="perguntar('quantos km rodamos este mês?')">km deste mês</button>
         <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-linha" onclick="if(event.target===this)fechar('ov-linha')">
+  <div class="modal" style="max-width:1320px">
+    <header><div><h2>🗓 Linha do tempo</h2><div class="os">cada evento numa barra — onde os eventos se encavalam salta aos olhos</div></div><button class="x" onclick="fechar('ov-linha')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <label style="font-size:13px">A partir de <input type="date" id="lt-ini" onchange="renderLinha()" style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit"></label>
+        <select id="lt-dias" onchange="renderLinha()" style="border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit"><option value="15">15 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option></select>
+        <button class="mini" onclick="moverLinha(-7)">◀ semana</button><button class="mini" onclick="moverLinha(7)">semana ▶</button><button class="mini" onclick="document.getElementById('lt-ini').value=somaDiaISO(HOJE,-2);renderLinha()">Hoje</button>
+        <label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="lt-terc" checked onchange="renderLinha()"> mostrar terceirizados</label>
+      </div>
+      <div class="lt-leg"><span><i style="background:#1c4fa0"></i>montagem</span><span><i style="background:#0f8a4d"></i>evento</span><span><i style="background:#f0851e"></i>desmontagem</span><span><i style="background:#6b5bb5"></i>equipe terceirizada</span><span><i style="background:#dfe6f2;height:5px"></i>estrutura no local</span><span><i style="background:transparent;box-shadow:inset 2px 0 #c0392b,inset -2px 0 #c0392b"></i>hoje</span></div>
+      <div id="lt-res"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-setor" onclick="if(event.target===this)fechar('ov-setor')">
+  <div class="modal" style="max-width:900px">
+    <header><div><h2>👤 Por setor</h2><div class="os">cada setor vê só o que é dele para resolver</div></div><button class="x" onclick="fechar('ov-setor')">✕</button></header>
+    <div class="mbody">
+      <div id="st-abas" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="st-res"></div>
+      <details style="margin-top:18px;border-top:1px solid var(--line);padding-top:12px"><summary style="cursor:pointer;font-weight:700;font-size:13px">⚙️ Quem cuida e prazo de cada seção</summary><div id="st-cfg" style="margin-top:10px"></div></details>
     </div>
   </div>
 </div>
@@ -5994,7 +6059,7 @@ const descFrota = ids => ids.map(id=>{const v=veiculos.find(x=>x.id===id); retur
 /* =========================================================
    QUADRO
    ========================================================= */
-let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '', espFiltro = 'ativos';
+let periodo = 15, busca = '', faseFiltro = '', dataIni = '', dataFim = '', espFiltro = 'ativos', semFiltro = '';
 let opFiltro = ''; /* '', 'mont', 'desm' — qual operação mostrar nas colunas */
 let tipoFiltro = ''; /* '', 'conflito', 'alinhamento', 'sugestao' — vem dos indicadores */
 function filtrarPorTipo(t){
@@ -6049,6 +6114,7 @@ function filtrados(){
       : e.esp === espFiltro)
     .filter(noIntervaloData)
     .filter(e => !faseFiltro || (e.fase||'sem fase') === faseFiltro)
+    .filter(e => !semFiltro || semFiltroOk(e))
     .filter(e => !busca || (e.nome+' '+e.os+' '+(produtorDo(e)||'')+' '+e.cidade+' '+(e.fase||'')+' '+(e.respNome||'')+' '+(e.respTel||'')).toLowerCase().includes(busca.toLowerCase()))
     .sort((a,b)=> a.mont.localeCompare(b.mont));
 }
@@ -6063,6 +6129,7 @@ function renderFases(){
 
 let climaUltimoLote = 0, pendBotaoT = 0;
 function renderQuadro(){
+  limparSecCache();
   try{ setTimeout(atualizarBtnRisco, 0); }catch(e){}
   if(Date.now() - pendBotaoT > 20000){ pendBotaoT = Date.now(); setTimeout(()=>{ try{ atualizarBotaoPend(); }catch(e){} }, 300); }
   if(typeof window !== 'undefined' && !window.__semClimaAuto && Date.now() - climaUltimoLote > 60000){
@@ -6201,6 +6268,7 @@ function cardEvento(ev, soSetorJC, papel){
    ========================================================= */
 let evAberto = null;
 function verEvento(id){
+  limparSecCache();
   evAberto = id;
   const ev = eventos.find(e=>e.id===id);
   const s = situacao(ev), a = s.a, c = a.carga;
@@ -6461,7 +6529,33 @@ function verEvento(id){
    verde = pronto · amarelo = falta detalhe · vermelho = trava a operação */
 const SECOES = [['datas','DATAS'],['equipes','EQUIPES'],['caminhoes','CAMINHÕES'],['estruturas','ESTRUTURAS'],
   ['checklist','CHECKLIST'],['riscos','RISCOS'],['producao','PRODUÇÃO'],['compras','COMPRAS']];
+const DONOS_PADRAO = {datas:'Comercial', equipes:'Operação', caminhoes:'Logística', estruturas:'Projetos', checklist:'Logística', riscos:'Operação', producao:'Produção', compras:'Compras'};
+const PRAZOS_PADRAO = {datas:10, equipes:7, caminhoes:3, estruturas:7, checklist:5, riscos:0, producao:5, compras:5};
+function donoSec(k){ const d = (CONFIG.donosSec||{})[k]; return (d && String(d).trim()) || DONOS_PADRAO[k] || ''; }
+function prazoSec(k){ const p = (CONFIG.prazosSec||{})[k]; return (p === undefined || p === null || p === '') ? PRAZOS_PADRAO[k] : (+p || 0); }
+let SEC_CACHE = new Map();
+function limparSecCache(){ SEC_CACHE = new Map(); }
 function secoesStatus(ev){
+  const ck = ev.id + '|' + HOJE;
+  if(SEC_CACHE.has(ck)) return SEC_CACHE.get(ck);
+  const out = secoesStatusCalc(ev);
+  /* prazo: amarelo que passou do prazo vira vermelho */
+  const dm = dia(ev.mont);
+  if(dm && !ev.esp){
+    const falta = difDias(HOJE, dm);
+    SECOES.forEach(([k])=>{
+      const p = prazoSec(k), o = out[k];
+      if(!(p > 0) || o.cor !== 'amar') return;
+      const lim = somaDiaISO(dm, -p);
+      if(falta <= p){ o.cor = 'verm'; o.prazo = true; o.txt += ' — PRAZO VENCIDO (era até ' + fmtD(lim).slice(0,5) + ')'; }
+      else o.txt += ' — prazo ' + fmtD(lim).slice(0,5);
+    });
+  }
+  SECOES.forEach(([k])=>{ out[k].dono = donoSec(k); });
+  SEC_CACHE.set(ck, out);
+  return out;
+}
+function secoesStatusCalc(ev){
   const out = {}, put = (k, cor, txt) => out[k] = {cor, txt};
   const a = plano(ev), terceiro = ev.esp === 'terceirizado';
   const semPesoC = (a.conflitos||[]).filter(c=>/peso e volume/i.test(c.msg||''));
@@ -6516,10 +6610,10 @@ function secoesStatus(ev){
   return out;
 }
 const COR_TXT = {verde:'pronto', amar:'atenção', verm:'trava'};
-function dotSec(ev, k){ const s = secoesStatus(ev)[k]; return s ? '<span class="sdot '+s.cor+'" title="'+COR_TXT[s.cor]+': '+String(s.txt).replace(/"/g,'&quot;')+'"></span>' : ''; }
+function dotSec(ev, k){ const s = secoesStatus(ev)[k]; return s ? '<span class="sdot '+s.cor+'" title="'+COR_TXT[s.cor]+': '+String(s.txt).replace(/"/g,'&quot;')+' · responsável: '+String(s.dono).replace(/"/g,'&quot;')+'"></span>' : ''; }
 function barraSecoes(ev){
   const st = secoesStatus(ev);
-  return '<div class="secbar">'+SECOES.map(([k,n])=>'<button title="'+COR_TXT[st[k].cor]+': '+String(st[k].txt).replace(/"/g,'&quot;')+'" onclick="irSecao(\''+k+'\')"><span class="sdot '+st[k].cor+'"></span>'+n+'</button>').join('')+'</div>';
+  return '<div class="secbar">'+SECOES.map(([k,n])=>'<button title="'+COR_TXT[st[k].cor]+': '+String(st[k].txt).replace(/"/g,'&quot;')+' · responsável: '+String(st[k].dono).replace(/"/g,'&quot;')+'" onclick="irSecao(\''+k+'\')"><span class="sdot '+st[k].cor+'"></span>'+n+'</button>').join('')+'</div>';
 }
 function irSecao(k){
   const el = document.getElementById('sec-' + k); if(!el) return;
@@ -6538,6 +6632,117 @@ function semaforoCard(ev){
   return '<div class="semcard">'+SECOES.map(([k,n])=>'<span class="sdot '+st[k].cor+'" title="'+n+' — '+COR_TXT[st[k].cor]+': '+String(st[k].txt).replace(/"/g,'&quot;')+'" onclick="abrirNaSecao(\''+ev.id+'\',\''+k+'\')"></span>').join('')+
     '<b style="color:'+(verm?'#c0392b':ok===8?'#0f8a4d':'#a86412')+'">'+ok+' de 8 prontos</b></div>';
 }
+
+/* ===== FILTRO DO QUADRO PELO SEMÁFORO ===== */
+function semFiltroOk(e){
+  const f = semFiltro; if(!f) return true;
+  const eq = e.equipe || plano(e).equipe;
+  if(f === 'eqterc') return eq === EQUIPE_TERC || e.esp === 'terceirizado';
+  if(f === 'eqnossa') return eq && eq !== EQUIPE_TERC && e.esp !== 'terceirizado';
+  if(f === 'frete') return (e.fretes||[]).length > 0;
+  if(f === 'mattc') return (e.itens||[]).some(i=>i.terc);
+  if(f === 'compras') return (e.compras||[]).some(c=>!c.ok);
+  if(f === 'proprio' || f === 'agreg'){ const vs = (frotaDo(e)||[]).map(id=>veiculos.find(v=>v.id===id)).filter(Boolean); return vs.some(v=> f==='agreg' ? !!v.agregado : !v.agregado); }
+  const st = secoesStatus(e);
+  if(f.startsWith('sec:')) return (st[f.slice(4)]||{}).cor === 'verm';
+  const cores = SECOES.map(([k])=>st[k].cor);
+  if(f === 'verm') return cores.includes('verm');
+  if(f === 'amar') return !cores.includes('verm') && cores.includes('amar');
+  if(f === 'verde') return cores.every(c=>c==='verde');
+  return true;
+}
+
+/* ===== LINHA DO TEMPO ===== */
+function abrirLinha(){ const i = document.getElementById('lt-ini'); if(i && !i.value) i.value = somaDiaISO(HOJE, -2); renderLinha(); document.getElementById('ov-linha').classList.add('on'); }
+function moverLinha(n){ const i = document.getElementById('lt-ini'); i.value = somaDiaISO(i.value || HOJE, n); renderLinha(); }
+function renderLinha(){
+  const box = document.getElementById('lt-res'); if(!box) return;
+  const ini = (document.getElementById('lt-ini')||{}).value || somaDiaISO(HOJE, -2);
+  const n = +((document.getElementById('lt-dias')||{}).value) || 30;
+  const comTerc = !!(document.getElementById('lt-terc')||{checked:true}).checked;
+  const fim = somaDiaISO(ini, n - 1), dias = diasEntre(ini, fim);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const SEM1 = ['D','S','T','Q','Q','S','S'];
+  const L = eventos.filter(ev=>{
+    if(ev.esp==='cancelado' || !ev.mont) return false;
+    if(!comTerc && ev.esp==='terceirizado') return false;
+    const a = dia(ev.mont), b = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.evtFim||ev.evt) || a;
+    return b >= ini && a <= fim;
+  }).sort((x,y)=>dia(x.mont).localeCompare(dia(y.mont)));
+  if(!L.length){ box.innerHTML = '<div class="panel empty" style="margin:0"><b>Nenhum evento nesse período</b>Mude a data ou o número de dias.</div>'; return; }
+  const nossasEq = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
+  const emCampo = {};
+  const linhas = L.map(ev=>{
+    const eq = ev.equipe || plano(ev).equipe;
+    const tc = eq === EQUIPE_TERC || ev.esp === 'terceirizado';
+    const M = new Set(diasEntre(ev.mont, fimMont(ev))), E = new Set(ev.evt ? diasEntre(ev.evt, ev.evtFim || ev.evt) : []), D = new Set(ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : []);
+    const a = dia(ev.mont), b = dia(fimDesm(ev)) || dia(ev.desm) || a;
+    if(!tc) [...M, ...D].forEach(d=>{ (emCampo[d] = emCampo[d] || new Set()).add(ev.id); });
+    const st = secoesStatus(ev), verm = SECOES.filter(([k])=>st[k].cor==='verm').length, ok = SECOES.filter(([k])=>st[k].cor==='verde').length;
+    const cel = dias.map(d=>{
+      const fds = [0,6].includes(new Date(d+'T12:00').getDay()), cls = (fds?'fds ':'') + (d===HOJE?'hj':'');
+      let bar = '', tit = '';
+      if(M.has(d)){ bar = '<span class="bm'+(tc?' tc':'')+'"></span>'; tit = 'montagem'; }
+      else if(D.has(d)){ bar = '<span class="bd'+(tc?' tc':'')+'"></span>'; tit = 'desmontagem'; }
+      else if(E.has(d)){ bar = '<span class="be"></span>'; tit = 'evento'; }
+      else if(d > a && d < b){ bar = '<span class="bl"></span>'; tit = 'estrutura no local'; }
+      return '<td class="dc '+cls+'"'+(tit?' title="'+esc(ev.nome)+' — '+tit+' '+fmtD(d).slice(0,5)+'"':'')+' onclick="fechar(\'ov-linha\');verEvento(\''+ev.id+'\')">'+bar+'</td>';
+    }).join('');
+    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');verEvento(\''+ev.id+'\')" title="'+esc(ev.nome)+'"><b>'+esc(ev.nome)+'</b><small>'+(tc?'🤝 '+esc(ev.tercEmpresa||'terceirizada'):'🏠 '+esc(eq||'—'))+(ev.cidade&&ev.cidade!=='—'?' · '+esc(ev.cidade):'')+' · <span style="color:'+(verm?'#c0392b':ok===8?'#0f8a4d':'#a86412')+';font-weight:700">'+ok+'/8</span></small></td>'+cel+'</tr>';
+  }).join('');
+  const cab = '<tr><th class="nm">Evento</th>'+dias.map(d=>{ const dt = new Date(d+'T12:00'), fds = [0,6].includes(dt.getDay()); return '<th class="'+(fds?'fds ':'')+(d===HOJE?'hj':'')+'">'+SEM1[dt.getDay()]+'<br>'+d.slice(8)+(d.slice(8)==='01'||d===dias[0]?'<br><span style="font-size:9px">'+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][dt.getMonth()]+'</span>':'')+'</th>'; }).join('')+'</tr>';
+  const rod = '<tr><td class="nm" style="font-size:11px;color:var(--muted);font-weight:600">Equipes nossas em campo<br><small>(de '+nossasEq+')</small></td>'+dias.map(d=>{ const q = (emCampo[d]||new Set()).size; return '<td class="'+(d===HOJE?'hj':'')+'" style="color:'+(q > nossasEq ? '#c0392b' : q === nossasEq && q ? '#a86412' : q ? 'var(--ink)' : 'var(--line)')+'" title="'+q+' operação(ões) da casa em '+fmtD(d).slice(0,5)+'">'+(q||'·')+'</td>'; }).join('')+'</tr>';
+  box.innerHTML = '<div class="lt-wrap"><table class="lt"><thead>'+cab+'</thead><tbody>'+linhas+'</tbody><tfoot>'+rod+'</tfoot></table></div>'+
+    '<div style="font-size:12px;color:var(--muted);margin-top:8px">A última linha conta montagens e desmontagens da casa no dia: <b style="color:#a86412">laranja</b> = todas as equipes ocupadas, <b style="color:#c0392b">vermelho</b> = mais operação que equipe. Clique numa barra para abrir o evento.</div>';
+}
+
+/* ===== POR SETOR (DONO DE CADA SEÇÃO) ===== */
+let SETOR_ATUAL = null;
+function setoresLista(){ return [...new Set(SECOES.map(([k])=>donoSec(k)))]; }
+function abrirSetor(){
+  try{ SETOR_ATUAL = localStorage.getItem('cpl:setor') || null; }catch(e){}
+  if(!setoresLista().includes(SETOR_ATUAL)) SETOR_ATUAL = setoresLista()[0];
+  renderSetor(); renderCfgSetor();
+  document.getElementById('ov-setor').classList.add('on');
+}
+function escolherSetor(s){ SETOR_ATUAL = s; try{ localStorage.setItem('cpl:setor', s); }catch(e){} renderSetor(); }
+function pendentesDoSetor(setor){
+  const ks = SECOES.filter(([k])=>donoSec(k) === setor).map(([k])=>k);
+  const out = [];
+  eventos.forEach(ev=>{
+    if(ev.esp==='cancelado' || ev.esp==='finalizado' || !ev.mont) return;
+    if((dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.mont)) < HOJE) return;
+    const st = secoesStatus(ev);
+    const probs = ks.filter(k=>st[k].cor !== 'verde').map(k=>({k, s:st[k]}));
+    if(probs.length) out.push({ev, probs, verm: probs.some(p=>p.s.cor==='verm')});
+  });
+  return out.sort((a,b)=>(b.verm?1:0)-(a.verm?1:0) || dia(a.ev.mont).localeCompare(dia(b.ev.mont)));
+}
+function renderSetor(){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const abas = document.getElementById('st-abas'), box = document.getElementById('st-res'); if(!abas || !box) return;
+  abas.innerHTML = setoresLista().map(s=>{ const p = pendentesDoSetor(s), v = p.filter(x=>x.verm).length;
+    return '<button class="mini" style="font-weight:700;'+(s===SETOR_ATUAL?'background:#1c4fa0;border-color:#1c4fa0;color:#fff':'')+'" onclick="escolherSetor(\''+esc(s).replace(/'/g,"\\'")+'\')">'+esc(s)+(p.length?' <span class="qtd" style="display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:'+(v?'#c0392b':'#e0a21b')+';color:#fff;font-size:11px">'+p.length+'</span>':' ✓')+'</button>'; }).join('');
+  const nomesSec = SECOES.filter(([k])=>donoSec(k)===SETOR_ATUAL).map(([,n])=>n);
+  const L = pendentesDoSetor(SETOR_ATUAL);
+  box.innerHTML = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px"><b style="color:var(--ink)">'+esc(SETOR_ATUAL)+'</b> cuida de: '+nomesSec.join(', ')+'</div>'+
+    (L.length ? L.map(x=>{ const dd = difDias(HOJE, dia(x.ev.mont));
+      return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:90px"><b style="color:'+(dd<=3?'#c0392b':'var(--ink)')+'">'+fmtD(x.ev.mont).slice(0,5)+'</b><br><small style="color:var(--muted)">'+(dd<0?'em andamento':dd===0?'HOJE':dd===1?'amanhã':'em '+dd+' dias')+'</small></span>'+
+        '<span style="flex:1;min-width:0"><b style="cursor:pointer" onclick="fechar(\'ov-setor\');verEvento(\''+x.ev.id+'\')">'+esc(x.ev.nome)+'</b> <small style="color:var(--muted)">'+(x.ev.cidade&&x.ev.cidade!=='—'?esc(x.ev.cidade):'')+'</small><br>'+
+        x.probs.map(p=>'<span onclick="fechar(\'ov-setor\');abrirNaSecao(\''+x.ev.id+'\',\''+p.k+'\')" style="display:inline-flex;align-items:center;gap:5px;margin:4px 6px 0 0;font-size:12px;border:1px solid var(--line);border-radius:14px;padding:2px 9px;cursor:pointer"><span class="sdot '+p.s.cor+'"></span><b>'+(SECOES.find(s=>s[0]===p.k)||[,''])[1]+'</b> '+esc(p.s.txt)+'</span>').join('')+'</span></div>'; }).join('')
+      : '<div class="alert green" style="margin:0">Nada pendente para '+esc(SETOR_ATUAL)+' daqui pra frente. 👍</div>');
+}
+function renderCfgSetor(){
+  const box = document.getElementById('st-cfg'); if(!box) return;
+  const inp = 'border:1px solid var(--line);border-radius:7px;padding:6px 9px;font:inherit;font-size:13px';
+  box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--muted);font-size:11.5px"><th style="padding:5px">Seção</th><th style="padding:5px">Quem cuida (setor)</th><th style="padding:5px">Prazo: resolver até quantos dias antes da montagem</th></tr></thead><tbody>'+
+    SECOES.map(([k,n])=>'<tr style="border-top:1px solid var(--line)"><td style="padding:5px"><b>'+n+'</b></td>'+
+      '<td style="padding:5px"><input style="'+inp+';width:160px" value="'+String(donoSec(k)).replace(/"/g,'&quot;')+'" onchange="setDonoSec(\''+k+'\',this.value)"></td>'+
+      '<td style="padding:5px"><input type="number" min="0" style="'+inp+';width:80px" value="'+prazoSec(k)+'" onchange="setPrazoSec(\''+k+'\',this.value)"> dias <small style="color:var(--muted)">(0 = sem prazo)</small></td></tr>').join('')+
+    '</tbody></table><div style="font-size:12px;color:var(--muted);margin-top:8px">Quando uma seção está amarela e chega no prazo, ela vira vermelha sozinha — e aparece em ⚠️ Em risco e no setor dono dela. Vale para todos que usam a Central.</div>';
+}
+function setDonoSec(k, v){ CONFIG.donosSec = Object.assign({}, CONFIG.donosSec||{}); CONFIG.donosSec[k] = String(v||'').trim() || DONOS_PADRAO[k]; salvar(); if(!setoresLista().includes(SETOR_ATUAL)) SETOR_ATUAL = setoresLista()[0]; renderSetor(); renderQuadro(); }
+function setPrazoSec(k, v){ CONFIG.prazosSec = Object.assign({}, CONFIG.prazosSec||{}); CONFIG.prazosSec[k] = Math.max(0, parseInt(v)||0); salvar(); renderSetor(); renderQuadro(); }
 
 /* ===== BARRA "MAIS" ===== */
 function toggleMais(e){ if(e) e.stopPropagation(); const m = document.getElementById('menu-mais'); if(m) m.classList.toggle('on'); }
@@ -10628,6 +10833,7 @@ function registrarHistorico(){
 }
 
 async function salvar(){
+  try{ limparSecCache(); }catch(e){}
   if(typeof window !== 'undefined' && window.__modoMotorista) return;   /* celular do motorista não mexe no planejamento */
   marcarPlanoSujo();
   try{ registrarHistorico(); }catch(e){ /* histórico nunca pode travar a gravação */ }
