@@ -55,6 +55,22 @@ input,select,textarea{font-family:inherit;font-size:14px}
   padding:20px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:18px;
 }
 .bar h1{font-size:22px;font-weight:600;margin:0;flex:0 0 auto;letter-spacing:-.2px}
+.mais-wrap{position:relative;display:inline-block}
+.menu-mais{display:none;position:absolute;left:0;top:calc(100% + 6px);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(10,20,45,.18);padding:8px;z-index:60;min-width:290px;flex-direction:column;gap:3px}
+.menu-mais.on{display:flex}
+.menu-mais button{text-align:left;width:100%;border:0;background:transparent;border-radius:8px;padding:9px 12px;font:inherit;font-size:13.5px;cursor:pointer;color:var(--ink)}
+.menu-mais button:hover{background:var(--bg)}
+.menu-mais small{display:block;color:var(--muted);font-size:11.5px;font-weight:400}
+.pill .qtd{display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:#b0483c;color:#fff;font-size:11px;font-weight:800;margin-left:4px}
+#ov-ev .modal{overflow:clip}
+.secbar{position:sticky;top:-40px;z-index:6;background:var(--card);display:flex;gap:6px;flex-wrap:wrap;padding:10px 28px;border-bottom:1px solid var(--line);margin:-24px -28px 18px}
+.secbar button{border:1px solid var(--line);background:var(--card);border-radius:18px;padding:5px 11px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:6px}
+.secbar button:hover{border-color:#1c4fa0;color:#1c4fa0}
+.sdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:0 0 10px}
+.sdot.verde{background:#0f8a4d}.sdot.amar{background:#e0a21b}.sdot.verm{background:#c0392b}
+.semcard{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:10px 0 2px}
+.semcard .sdot{cursor:pointer;width:13px;height:13px;flex-basis:13px}
+.semcard b{font-size:12px;margin-left:4px}
 .periods{display:flex;gap:8px;flex-wrap:wrap}
 .pill{
   border:1px solid var(--line);background:#fff;color:var(--ink2);
@@ -425,21 +441,28 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <input class="search" id="busca" placeholder="Pesquisar evento...">
       <input class="search" id="pergunta-in" placeholder="💬 Pergunte: o que sai sábado?" title="Perguntas em português sobre a agenda, pessoas, estruturas, km e custos" onkeydown="if(event.key==='Enter')perguntar()" style="min-width:230px">
-      <button class="pill" onclick="sincronizarAgenda()" title="A agenda já se atualiza sozinha; use só se quiser forçar agora">📋 Sincronizar agenda</button>
-      <button class="pill" onclick="relatorioOps()" title="Imprime as montagens e desmontagens do período, sem os terceirizados">🖨 Relatório de operações</button>
-      <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
-      <button class="pill" id="btn-meu" onclick="abrirMeuDia()" title="Seus eventos, recados, lembretes e pendências">🙋 Meu dia</button>
       <button class="pill" id="btn-pend" onclick="abrirPendencias()" title="Tudo o que precisa de ação, do mais urgente para o menos">🚨 Pendências</button>
+      <button class="pill" id="btn-risco" onclick="abrirRisco()" title="Eventos com alguma seção no vermelho, do mais perto para o mais longe">⚠️ Em risco</button>
       <button class="pill" onclick="abrirSemaforo()" title="Para o comercial: antes de fechar um evento novo, veja se a data tem gente, caminhão e estrutura livres">🚦 Pode vender?</button>
-      <button class="pill" onclick="abrirPico()" title="Previsão das próximas semanas pelo histórico: onde vai faltar equipe ou caminhão">📈 Previsão de pico</button>
-      <button class="pill" onclick="abrirBuscaEstr()" title="Em quais eventos está uma estrutura (palco 12x10, grid...) e se está livre numa data">🔎 Estruturas</button>
+      <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
       <button class="pill" onclick="abrirTV()" title="Tela grande para a TV do galpão: o que sai hoje e amanhã, atualiza sozinha">📺 Tela do galpão</button>
       <button class="pill" onclick="abrirSemana()" title="Resumo da semana para a diretoria: eventos, caminhões, riscos e a semana passada">📊 Semana</button>
-      <button class="pill" onclick="abrirAgenda()" title="O mês de uma pessoa: eventos, dias, folgas e faltas. E quem está livre num dia">👤 Agenda</button>
-      <button class="pill" onclick="abrirDiarias()" title="Dias trabalhados, faltas e manutenção de cada pessoa no mês">🧾 Fechamento de diárias</button>
-      <button class="pill" onclick="exportarBackup()" title="Baixa um arquivo com todo o quadro, cadastros e o aprendizado da IA">💾 Backup</button>
-      <button class="pill" onclick="redistribuirProdutores()" title="Solta os produtores fixados e deixa a IA sugerir de novo">⚖ Redistribuir produtores</button>
-      <button class="pill" onclick="abrirLote()">Importar XML</button>
+      <div class="mais-wrap">
+        <button class="pill" onclick="toggleMais(event)" title="Outras ferramentas">☰ Mais ▾</button>
+        <div class="menu-mais" id="menu-mais" onclick="fecharMais()">
+          <button onclick="abrirTerc()">🤝 Terceirizados do mês<small>equipe de fora, frete e locação — por evento e fornecedor</small></button>
+          <button id="btn-meu" onclick="abrirMeuDia()">🙋 Meu dia<small>seus eventos, lembretes e pendências</small></button>
+          <button onclick="abrirAgenda()">👤 Agenda<small>o mês de uma pessoa e quem está livre</small></button>
+          <button onclick="abrirDiarias()">🧾 Fechamento de diárias<small>dias, faltas e manutenção no mês</small></button>
+          <button onclick="abrirBuscaEstr()">🔎 Estruturas<small>em quais eventos está uma estrutura</small></button>
+          <button onclick="abrirPico()">📈 Previsão de pico<small>onde vai faltar equipe ou caminhão</small></button>
+          <button onclick="relatorioOps()">🖨 Relatório de operações<small>montagens e desmontagens do período</small></button>
+          <button onclick="sincronizarAgenda()">📋 Sincronizar agenda<small>a agenda já se atualiza sozinha</small></button>
+          <button onclick="redistribuirProdutores()">⚖ Redistribuir produtores<small>solta os fixados e a IA sugere de novo</small></button>
+          <button onclick="abrirLote()">📥 Importar planilha / XML<small>só acrescenta eventos novos</small></button>
+          <button onclick="exportarBackup()">💾 Backup<small>baixa o quadro inteiro num arquivo</small></button>
+        </div>
+      </div>
       <button class="btn-orange" onclick="abrirNovo()">+ Novo evento</button>
     </div>
     <div class="kpis">
@@ -816,6 +839,30 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="perguntar('quantos km rodamos este mês?')">km deste mês</button>
         <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-risco" onclick="if(event.target===this)fechar('ov-risco')">
+  <div class="modal" style="max-width:860px">
+    <header><div><h2>⚠️ Eventos em risco</h2><div class="os">o que tem seção no vermelho, do mais perto para o mais longe</div></div><button class="x" onclick="fechar('ov-risco')">✕</button></header>
+    <div class="mbody">
+      <label style="font-size:13px;display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" id="rk-amar" onchange="renderRisco()"> mostrar também os amarelos (atenção)</label>
+      <div id="rk-res"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-terc" onclick="if(event.target===this)fechar('ov-terc')">
+  <div class="modal" style="max-width:900px">
+    <header><div><h2>🤝 Terceirizados do mês</h2><div class="os">equipe de fora, frete e locação/compra — por evento e por fornecedor</div></div><button class="x" onclick="fechar('ov-terc')">✕</button></header>
+    <div class="mbody">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <label style="font-size:13px">Mês <input type="month" id="tc-mes" onchange="renderTerc()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit"></label>
+        <span style="flex:1"></span>
+        <button class="mini" onclick="imprimirTerc()">🖨 Imprimir para a diretoria</button>
+      </div>
+      <div id="tc-res"></div>
     </div>
   </div>
 </div>
@@ -6016,6 +6063,7 @@ function renderFases(){
 
 let climaUltimoLote = 0, pendBotaoT = 0;
 function renderQuadro(){
+  try{ setTimeout(atualizarBtnRisco, 0); }catch(e){}
   if(Date.now() - pendBotaoT > 20000){ pendBotaoT = Date.now(); setTimeout(()=>{ try{ atualizarBotaoPend(); }catch(e){} }, 300); }
   if(typeof window !== 'undefined' && !window.__semClimaAuto && Date.now() - climaUltimoLote > 60000){
     climaUltimoLote = Date.now(); setTimeout(()=>atualizarClima(false), 800);
@@ -6116,16 +6164,17 @@ function cardEvento(ev, soSetorJC, papel){
         '<div class="dchip"><i>DESMONT.</i><b>'+periodo2(ev.desm, fimDesm(ev))+'</b></div>'+
       '</div>'+
       '<div class="rows">'+
-        '<div class="row"><span>Equipe</span><b style="color:'+cor+'">'+eq+
+        '<div class="row"><span>Equipe</span><b style="color:'+cor+'">'+(eq===EQUIPE_TERC ? '🤝 '+(ev.tercEmpresa ? String(ev.tercEmpresa).replace(/</g,'&lt;') : 'Terceirizada') : '🏠 '+eq)+
           (eq===EQUIPE_TERC ? (montadoresOp(ev, eq).length ? ' + '+montadoresOp(ev, eq).length+' da casa' : '') : ' + '+montadoresOp(ev, eq).length)+
           (ev.montOp?' <span style="color:var(--blue);font-weight:500">com troca</span>':'')+'</b></div>'+
         (seloConfianca(ev, s.a) ? '<div class="row" style="border:none;padding-top:0"><span></span><b style="font-weight:500">'+seloConfianca(ev, s.a)+'</b></div>' : '')+
         '<div class="row"><span>Produtor</span><b>'+(produtorDo(ev)||'A definir')+(ev.produtor?'':' <span style="color:var(--amber);font-weight:500">sugerido</span>')+'</b></div>'+
-        '<div class="row"><span>Caminhão</span><b>'+(v ? v.tipo+' '+v.placa + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '') : 'A definir')+
-          (v && ev.mont ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· sai '+fmtD(ev.mont)+'</span>' : '')+'</b></div>'+
-        '<div class="row"><span>Motorista</span><b>'+(mot.length ? mot[0] + (mot.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(mot.length-1)+'</span>' : '') : 'A definir')+'</b></div>'+
+        '<div class="row"><span>Caminhão</span><b>'+(v ? v.tipo+' '+v.placa + ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '') : ((ev.fretes||[]).length ? '' : 'A definir'))+
+          ((ev.fretes||[]).length ? (v?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
+          (v && mot.length ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+'</b></div>'+
       '</div>'+
-      '<div class="mats">'+
+      (soSetorJC ? '' : semaforoCard(ev))+
+      (!soSetorJC ? '' : '<div class="mats">'+
         (function(){
           const its = soSetorJC ? (ev.itens||[]).filter(itemDoSetorJC) : (ev.itens||[]);
           const lim = soSetorJC ? 6 : 4;
@@ -6134,7 +6183,7 @@ function cardEvento(ev, soSetorJC, papel){
             (its.length>lim ? '<span class="mtag mais" onclick="verEvento(\''+ev.id+'\')">+'+(its.length-lim)+' itens</span>' : '')+
             (soSetorJC ? '' : '<span class="carga">'+num(a.carga.vol)+' m³ · '+num(a.carga.peso)+' kg</span>');
         })()+
-      '</div>'+
+      '</div>')+
       '<div class="selo">'+
         (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
         chipClima(ev)+
@@ -6196,8 +6245,8 @@ function verEvento(id){
     '<div class="selo"><span class="badge '+s.classe+'">'+s.texto+'</span>'+
       opChip(ev)+faseChip(ev.fase)+'</div></div>'+
     '<button class="x" onclick="fechar(\'ov-ev\')">✕</button></header>'+
-  '<div class="mbody">'+
-  '<div class="sec"><h4>📅 DATAS</h4><div class="info">'+
+  '<div class="mbody">'+barraSecoes(ev)+
+  '<div class="sec" id="sec-datas"><h4>'+dotSec(ev,'datas')+' 📅 DATAS</h4><div class="info">'+
       '<div><i>Fase atual</i><select class="sel-fase" onchange="setFase(\''+ev.id+'\',this.value)">'+
         '<option value="">— sem fase —</option>'+
         [...new Set([...FASES_PADRAO, ...(ev.fase ? [ev.fase] : [])])]
@@ -6233,11 +6282,12 @@ function verEvento(id){
         (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+(ev.rotaCaminhao?' · rota de caminhão ('+ev.rotaCaminhao+')':'')+'</small>' : '')+'</div>'+
       '</div></div>'+
 
-    '<div class="sec"><h4>👥 EQUIPES</h4>'+
+    '<div class="sec" id="sec-equipes"><h4>'+dotSec(ev,'equipes')+' 👥 EQUIPES</h4>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
         '<button class="mini" style="font-weight:800;padding:9px 16px;'+(eq!==EQUIPE_TERC?'background:#1c4fa0;border-color:#1c4fa0;color:#fff':'')+'" onclick="defEquipeTipo(\''+ev.id+'\',\'nossa\')">🏠 EQUIPE NOSSA</button>'+
         '<button class="mini" style="font-weight:800;padding:9px 16px;'+(eq===EQUIPE_TERC?'background:#6b5bb5;border-color:#6b5bb5;color:#fff':'')+'" onclick="defEquipeTipo(\''+ev.id+'\',\'terc\')">🤝 TERCEIRIZADA</button>'+
-        (eq===EQUIPE_TERC ? '<input value="'+String(ev.tercEmpresa||'').replace(/"/g,'&quot;')+'" placeholder="empresa terceirizada — quem vai montar" style="flex:1;min-width:210px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setCampo(\''+ev.id+'\',\'tercEmpresa\',this.value.trim())">' : '')+
+        (eq===EQUIPE_TERC ? '<input value="'+String(ev.tercEmpresa||'').replace(/"/g,'&quot;')+'" placeholder="empresa terceirizada — quem vai montar" style="flex:1;min-width:210px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setCampo(\''+ev.id+'\',\'tercEmpresa\',this.value.trim())">'+
+          '<input type="number" min="0" value="'+(+ev.tercValor||'')+'" placeholder="R$" title="Valor combinado com a terceirizada" style="width:110px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setCampo(\''+ev.id+'\',\'tercValor\',+this.value||null)">' : '')+
       '</div>'+
       '<div class="fgrid">'+
       '<label class="f"><i>Equipe (montagem e desmontagem)</i><select onchange="setCampo(\''+ev.id+'\',\'equipe\',this.value)">'+
@@ -6291,7 +6341,7 @@ function verEvento(id){
       '</div>'+
     '</div></div>'+
 
-    '<div class="sec"><h4>🚚 CAMINHÕES</h4>'+
+    '<div class="sec" id="sec-caminhoes"><h4>'+dotSec(ev,'caminhoes')+' 🚚 CAMINHÕES</h4>'+
       '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Frete fechado por fora: lance no quadro de fretes aqui embaixo.</div>'+
       '<div class="info">'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
@@ -6323,7 +6373,7 @@ function verEvento(id){
     blocoJuntarEv(ev)+blocoPermanencia(ev)+''+
     '</div>'+
   
-    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
+    '<div class="sec" id="sec-estruturas"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+dotSec(ev,'estruturas')+' 🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
       ((ev.estruturas||[]).length ? '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>' : '')+'</h4>'+
       ((ev.estruturas||[]).length
         ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
@@ -6336,9 +6386,10 @@ function verEvento(id){
     '</div>'+
 
     
-    '<div class="sec"><h4 style="display:flex;align-items:center;gap:10px">✅ CHECKLIST DO MATERIAL <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">nosso ou terceirizado — clique na etiqueta do item para alternar</span>'+
+    '<div class="sec" id="sec-checklist"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+dotSec(ev,'checklist')+' ✅ CHECKLIST DO MATERIAL <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">nosso ou terceirizado — clique na etiqueta do item para alternar</span>'+
       '<button class="mini" style="font-weight:600" onclick="abrirOS(\''+ev.id+'\')" title="Cole o texto da OS e a lista de material entra sozinha, casada com o catálogo">📄 Ler material da OS</button>'+
-      '<button class="mini" style="font-weight:600" onclick="abrirImpQuant(\''+ev.id+'\')" title="Cole o Total de peças que sai do quantificador — os itens entram no evento com o mesmo nome, e nomes iguais somam">📥 Colar da quantificação</button></h4>'+
+      '<button class="mini" style="font-weight:600" onclick="abrirImpQuant(\''+ev.id+'\')" title="Cole o Total de peças que sai do quantificador — os itens entram no evento com o mesmo nome, e nomes iguais somam">📥 Colar da quantificação</button>'+
+      '<button class="mini" style="font-weight:600" onclick="imprimirChecklist(\''+ev.id+'\')" title="Imprime o checklist separado em NOSSO e TERCEIRIZADO">🖨 Imprimir</button></h4>'+
       '<div class="rolar"><table><thead><tr><th>Material</th><th>Qtd</th><th>Peso</th><th>Volume</th><th></th></tr></thead><tbody>'+itens+'</tbody></table></div>'+
       '<div class="tot"><div><i>Peso total</i><b>'+num(c.peso)+' kg</b></div>'+
       '<div><i>Volume total</i><b>'+num(c.vol)+' m³</b></div>'+
@@ -6352,7 +6403,7 @@ function verEvento(id){
     '</div>'+
 
     
-    '<div class="sec"><h4>⚠️ RISCOS</h4>'+alertas+
+    '<div class="sec" id="sec-riscos"><h4>'+dotSec(ev,'riscos')+' ⚠️ RISCOS</h4>'+alertas+
       '<div class="info" style="margin-top:10px">'+'<div style="grid-column:1/-1"><i>🌦 Previsão do tempo nos dias de trabalho</i>'+blocoClima(ev)+'</div>'+
       blocoDiasFora(ev)+'</div>'+
       '<div class="ia">'+
@@ -6365,7 +6416,7 @@ function verEvento(id){
     '</div>'+
 
     
-    '<div class="sec"><h4>🎬 PRODUÇÃO</h4><div class="info">'+
+    '<div class="sec" id="sec-producao"><h4>'+dotSec(ev,'producao')+' 🎬 PRODUÇÃO</h4><div class="info">'+
       '<div><i>Produtor</i><select class="sel-fase" onchange="setProdutor(\''+ev.id+'\',this.value,true)">'+
         (ev.produtor?'':'<option value="" selected>'+(a.produtor||'A definir')+' — sugestão da IA</option>')+
         [...new Set([...produtores.map(p=>p.nome), ...(ev.produtor && ev.produtor!==SEM_PRODUTOR ? [ev.produtor] : [])])]
@@ -6385,7 +6436,7 @@ function verEvento(id){
         'onchange="setRespTel(\''+ev.id+'\',this.value.trim())"></div>'+
       '</div></div>'+
 
-    '<div class="sec"><h4>🛒 COMPRAS E LOCAÇÕES</h4>'+blocoCompras(ev)+'</div>'+
+    '<div class="sec" id="sec-compras"><h4>'+dotSec(ev,'compras')+' 🛒 COMPRAS E LOCAÇÕES</h4>'+blocoCompras(ev)+'</div>'+
 
     '<div class="sec"><details'+((ev.hist||[]).length?'':' open')+'><summary style="cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase">🕘 Histórico de alterações'+
       ((ev.hist||[]).length ? ' <span style="text-transform:none;letter-spacing:0;font-weight:600">· '+ev.hist.length+' registro(s), último '+
@@ -6404,6 +6455,208 @@ function verEvento(id){
   '</div>'+
   '<div class="mfoot">'+acoes+'</div>';
   document.getElementById('ov-ev').classList.add('on');
+}
+
+/* ===== SEMÁFORO DAS 8 SEÇÕES DO EVENTO =====
+   verde = pronto · amarelo = falta detalhe · vermelho = trava a operação */
+const SECOES = [['datas','DATAS'],['equipes','EQUIPES'],['caminhoes','CAMINHÕES'],['estruturas','ESTRUTURAS'],
+  ['checklist','CHECKLIST'],['riscos','RISCOS'],['producao','PRODUÇÃO'],['compras','COMPRAS']];
+function secoesStatus(ev){
+  const out = {}, put = (k, cor, txt) => out[k] = {cor, txt};
+  const a = plano(ev), terceiro = ev.esp === 'terceirizado';
+  const semPesoC = (a.conflitos||[]).filter(c=>/peso e volume/i.test(c.msg||''));
+  const confl = (a.conflitos||[]).filter(c=>!/peso e volume/i.test(c.msg||''));
+  /* DATAS */
+  if(!ev.mont || !ev.desm) put('datas','verm','falta a data de montagem ou de desmontagem');
+  else if(fimMontInvalido(ev) || fimDesmInvalido(ev)) put('datas','verm','o "até" de uma data está errado');
+  else if(!ev.local || ev.local==='—' || !(+ev.km)) put('datas','amar', !ev.local || ev.local==='—' ? 'falta o local do evento' : 'falta a distância (km)');
+  else put('datas','verde','datas, local e distância ok');
+  /* EQUIPES */
+  const eq = ev.equipe || a.equipe;
+  if(terceiro) put('equipes','verde','evento todo terceirizado');
+  else if(eq === EQUIPE_TERC) put('equipes', ev.tercEmpresa ? 'verde' : 'amar', ev.tercEmpresa ? 'terceirizada: ' + ev.tercEmpresa : 'terceirizada sem empresa definida');
+  else if(!eq) put('equipes','verm','sem equipe');
+  else if(confl.some(c=>/equipe|montador|l[ií]der/i.test(c.msg||''))) put('equipes','verm','equipe em conflito com outro evento');
+  else if(!ev.equipe) put('equipes','amar','equipe sugerida pela IA — falta confirmar');
+  else put('equipes','verde','equipe ' + eq);
+  /* CAMINHÕES */
+  const fr = frotaDo(ev) || [], fretes = ev.fretes || [];
+  if(terceiro) put('caminhoes','verde','evento todo terceirizado');
+  else if(!fr.length && !fretes.length) put('caminhoes','verm','sem caminhão nem frete');
+  else if(confl.some(c=>/caminh|ve[ií]culo|motorista|placa|carreta|frota/i.test(c.msg||''))) put('caminhoes','verm','caminhão ou motorista em conflito');
+  else if(fr.length && escalaDo(ev,'mont').some(x=>!x.motorista)) put('caminhoes','amar','caminhão sem motorista');
+  else put('caminhoes','verde', fretes.length && !fr.length ? 'frete contratado' : 'caminhão e motorista ok');
+  /* ESTRUTURAS */
+  put('estruturas', (ev.estruturas||[]).length ? 'verde' : 'amar', (ev.estruturas||[]).length ? (ev.estruturas.length + ' estrutura(s)') : 'nada lançado da OS');
+  /* CHECKLIST */
+  const its = ev.itens || [];
+  if(!its.length) put('checklist', terceiro ? 'verde' : 'verm', terceiro ? 'evento todo terceirizado' : 'sem material lançado');
+  else if(its.some(i=>i.presumido)) put('checklist','amar','tem quantidade presumida para conferir');
+  else if(semPesoC.length) put('checklist','amar','material sem peso/volume no catálogo — o caminhão pode ficar pequeno');
+  else put('checklist','verde', its.length + ' item(ns)');
+  /* RISCOS */
+  const nc = confl.length;
+  let rTxt = nc ? nc + ' conflito(s) de agenda' : 'sem conflito';
+  let rCor = nc ? 'verm' : 'verde';
+  try{
+    if(rCor==='verde' && ev.datasMudaram && ev.datasMudaram.avisar){ rCor = 'amar'; rTxt = 'datas mudaram depois da escala enviada'; }
+    if(rCor==='verde'){ const ac = alertasClima(ev) || []; const forte = ac.find(x=>x.nivel >= 2); if(forte){ rCor = 'amar'; rTxt = 'previsão ruim em ' + fmtD(forte.d).slice(0,5) + ': ' + forte.txt.replace(/<[^>]+>/g,''); } }
+  }catch(e){}
+  put('riscos', rCor, rTxt);
+  /* PRODUÇÃO */
+  if(!produtorDo(ev) || ev.produtor===SEM_PRODUTOR) put('producao','verm','sem produtor');
+  else if(!ev.produtor) put('producao','amar','produtor sugerido pela IA — falta confirmar');
+  else if(!ev.respNome || !ev.respTel) put('producao','amar','falta o responsável no local (nome e telefone)');
+  else put('producao','verde','produtor e responsável ok');
+  /* COMPRAS */
+  const pend = (ev.compras||[]).filter(x=>!x.ok).length;
+  if(eq === EQUIPE_TERC && !ev.tercEmpresa && !terceiro) put('compras','amar','definir a empresa terceirizada');
+  else if(pend) put('compras','amar', pend + ' compra/locação em aberto');
+  else put('compras','verde', (ev.compras||[]).length ? 'tudo resolvido' : 'nada a comprar ou alugar');
+  return out;
+}
+const COR_TXT = {verde:'pronto', amar:'atenção', verm:'trava'};
+function dotSec(ev, k){ const s = secoesStatus(ev)[k]; return s ? '<span class="sdot '+s.cor+'" title="'+COR_TXT[s.cor]+': '+String(s.txt).replace(/"/g,'&quot;')+'"></span>' : ''; }
+function barraSecoes(ev){
+  const st = secoesStatus(ev);
+  return '<div class="secbar">'+SECOES.map(([k,n])=>'<button title="'+COR_TXT[st[k].cor]+': '+String(st[k].txt).replace(/"/g,'&quot;')+'" onclick="irSecao(\''+k+'\')"><span class="sdot '+st[k].cor+'"></span>'+n+'</button>').join('')+'</div>';
+}
+function irSecao(k){
+  const el = document.getElementById('sec-' + k); if(!el) return;
+  const bar = document.querySelector('#m-ev .secbar');
+  const ov = document.getElementById('ov-ev');
+  if(ov && el.getBoundingClientRect){
+    const alvo = el.getBoundingClientRect().top - ov.getBoundingClientRect().top + ov.scrollTop - ((bar && bar.offsetHeight) || 0) - 8;
+    ov.scrollTo ? ov.scrollTo({top: alvo, behavior:'smooth'}) : (ov.scrollTop = alvo);
+  } else if(el.scrollIntoView) el.scrollIntoView();
+}
+function abrirNaSecao(id, k){ verEvento(id); setTimeout(()=>irSecao(k), 60); }
+function semaforoCard(ev){
+  const st = secoesStatus(ev);
+  const ok = SECOES.filter(([k])=>st[k].cor==='verde').length;
+  const verm = SECOES.filter(([k])=>st[k].cor==='verm').length;
+  return '<div class="semcard">'+SECOES.map(([k,n])=>'<span class="sdot '+st[k].cor+'" title="'+n+' — '+COR_TXT[st[k].cor]+': '+String(st[k].txt).replace(/"/g,'&quot;')+'" onclick="abrirNaSecao(\''+ev.id+'\',\''+k+'\')"></span>').join('')+
+    '<b style="color:'+(verm?'#c0392b':ok===8?'#0f8a4d':'#a86412')+'">'+ok+' de 8 prontos</b></div>';
+}
+
+/* ===== BARRA "MAIS" ===== */
+function toggleMais(e){ if(e) e.stopPropagation(); const m = document.getElementById('menu-mais'); if(m) m.classList.toggle('on'); }
+function fecharMais(){ const m = document.getElementById('menu-mais'); if(m) m.classList.remove('on'); }
+if(typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e=>{ const m = document.getElementById('menu-mais'); if(m && m.classList && m.classList.contains('on') && !(e.target.closest && e.target.closest('.mais-wrap'))) fecharMais(); });
+
+/* ===== EVENTOS EM RISCO ===== */
+function eventosEmRisco(comAmar){
+  return eventos.filter(ev=>{
+    if(ev.esp==='cancelado' || ev.esp==='finalizado') return false;
+    const fim = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.mont) || '9999';
+    if(fim < HOJE) return false;
+    const st = secoesStatus(ev);
+    return SECOES.some(([k])=>st[k].cor==='verm' || (comAmar && st[k].cor==='amar'));
+  }).sort((a,b)=>(dia(a.mont)||'9999').localeCompare(dia(b.mont)||'9999'));
+}
+function atualizarBtnRisco(){
+  const b = document.getElementById('btn-risco'); if(!b) return;
+  const n = eventosEmRisco(false).length;
+  b.innerHTML = '⚠️ Em risco' + (n ? '<span class="qtd">' + n + '</span>' : '');
+}
+function abrirRisco(){ renderRisco(); document.getElementById('ov-risco').classList.add('on'); }
+function renderRisco(){
+  const box = document.getElementById('rk-res'); if(!box) return;
+  const comAmar = !!(document.getElementById('rk-amar')||{}).checked;
+  const L = eventosEmRisco(comAmar);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!L.length){ box.innerHTML = '<div class="alert green" style="margin:0">Nenhum evento '+(comAmar?'com seção em atenção ou':'com seção')+' no vermelho daqui pra frente. 👍</div>'; return; }
+  box.innerHTML = L.map(ev=>{
+    const st = secoesStatus(ev);
+    const dias = ev.mont ? difDias(HOJE, dia(ev.mont)) : null;
+    const quando = dias==null ? 'sem data' : dias < 0 ? 'em andamento' : dias===0 ? 'monta HOJE' : dias===1 ? 'monta amanhã' : 'monta em ' + dias + ' dias';
+    const probs = SECOES.filter(([k])=>st[k].cor==='verm' || (comAmar && st[k].cor==='amar'));
+    return '<div class="row" style="align-items:flex-start;gap:12px">'+
+      '<span style="min-width:96px"><b style="color:'+(dias!=null && dias<=2?'#c0392b':'var(--ink)')+'">'+(ev.mont?fmtD(ev.mont).slice(0,5):'—')+'</b><br><small style="color:var(--muted)">'+quando+'</small></span>'+
+      '<span style="flex:1;min-width:0;cursor:pointer" onclick="fechar(\'ov-risco\');verEvento(\''+ev.id+'\')"><b>'+esc(ev.nome)+'</b> <small style="color:var(--muted)">'+(ev.cidade&&ev.cidade!=='—'?esc(ev.cidade):'')+'</small><br>'+
+        probs.map(([k,n])=>'<span onclick="event.stopPropagation();fechar(\'ov-risco\');abrirNaSecao(\''+ev.id+'\',\''+k+'\')" style="display:inline-flex;align-items:center;gap:5px;margin:4px 6px 0 0;font-size:12px;border:1px solid var(--line);border-radius:14px;padding:2px 9px;cursor:pointer"><span class="sdot '+st[k].cor+'"></span><b>'+n+'</b> '+esc(st[k].txt)+'</span>').join('')+
+      '</span></div>';
+  }).join('');
+}
+
+/* ===== TERCEIRIZADOS DO MÊS ===== */
+function abrirTerc(){ const m = document.getElementById('tc-mes'); if(m && !m.value) m.value = HOJE.slice(0,7); renderTerc(); document.getElementById('ov-terc').classList.add('on'); }
+function dadosTerc(mes){
+  const linhas = [], porForn = {};
+  const soma = (f, tipo, v) => { const k = (f||'(sem fornecedor)').trim(); const o = porForn[k] = porForn[k] || {forn:k, tipos:new Set(), val:0, n:0}; o.tipos.add(tipo); o.val += (+v||0); o.n++; };
+  eventos.forEach(ev=>{
+    if(ev.esp==='cancelado' || !ev.mont || dia(ev.mont).slice(0,7) !== mes) return;
+    const eq = ev.equipe || plano(ev).equipe;
+    const L = [];
+    if(eq === EQUIPE_TERC || ev.esp === 'terceirizado'){ L.push({tipo:'EQUIPE', o:'montagem', forn:ev.tercEmpresa||'', val:+ev.tercValor||0}); }
+    (ev.fretes||[]).forEach(f=>L.push({tipo:'FRETE', o:(f.fase==='desm'?'desmontagem':'montagem'), forn:f.emp, val:+f.val||0}));
+    (ev.compras||[]).forEach(c=>L.push({tipo:c.tipo==='compra'?'COMPRA':'LOCAÇÃO', o:c.oque, forn:c.forn||'', val:+c.val||0, ok:c.ok}));
+    (ev.itens||[]).filter(i=>i.terc).forEach(i=>L.push({tipo:'MATERIAL', o:i.nome + ' (' + num(i.qtd) + ' ' + (i.un||'un') + ')', forn:'', val:0, semValor:true}));
+    if(!L.length) return;
+    L.forEach(x=>{ if(!x.semValor) soma(x.forn, x.tipo, x.val); });
+    linhas.push({ev, L, total: L.reduce((t,x)=>t+(+x.val||0),0)});
+  });
+  linhas.sort((a,b)=>dia(a.ev.mont).localeCompare(dia(b.ev.mont)));
+  const forn = Object.values(porForn).sort((a,b)=>b.val-a.val);
+  const tot = {}; linhas.forEach(l=>l.L.forEach(x=>{ tot[x.tipo] = (tot[x.tipo]||0) + (+x.val||0); }));
+  return {linhas, forn, tot, geral: linhas.reduce((t,l)=>t+l.total,0)};
+}
+function htmlTerc(mes, imprimir){
+  const d = dadosTerc(mes);
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!d.linhas.length) return '<div class="panel empty" style="margin:0"><b>Nada terceirizado em '+nomeMes(mes)+'</b>Equipe de fora, frete, locação e material 🤝 lançados nos eventos aparecem aqui.</div>';
+  const box = (rot, v) => '<div style="flex:1;min-width:130px;border:1px solid #e3e8f0;border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:#6b7690;text-transform:uppercase;letter-spacing:.5px">'+rot+'</div><div style="font-size:19px;font-weight:800;color:#1c4fa0">'+reais(v||0)+'</div></div>';
+  return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+box('Total do mês', d.geral)+box('Equipe de fora', d.tot['EQUIPE'])+box('Frete', d.tot['FRETE'])+box('Locação', d.tot['LOCAÇÃO'])+box('Compra', d.tot['COMPRA'])+'</div>'+
+    '<h3 style="font-size:14px;margin:14px 0 6px;color:#f0851e">POR EVENTO</h3>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b7690;font-size:11.5px;text-transform:uppercase"><th style="padding:6px">Evento</th><th style="padding:6px">O quê</th><th style="padding:6px">Fornecedor</th><th style="padding:6px;text-align:right">Valor</th></tr></thead><tbody>'+
+      d.linhas.map(l=>l.L.map((x,ix)=>'<tr style="border-top:1px solid #e3e8f0">'+
+        (ix===0 ? '<td style="padding:6px;vertical-align:top" rowspan="'+l.L.length+'"><b>'+esc(l.ev.nome)+'</b><br><small style="color:#6b7690">'+fmtD(l.ev.mont).slice(0,5)+(l.ev.cidade&&l.ev.cidade!=='—'?' · '+esc(l.ev.cidade):'')+'</small><br><small><b>'+reais(l.total)+'</b></small></td>' : '')+
+        '<td style="padding:6px"><b style="font-size:11px;color:#1c4fa0">'+x.tipo+'</b> '+esc(x.o)+(x.ok?' <small style="color:#0f8a4d">✓ resolvido</small>':'')+'</td>'+
+        '<td style="padding:6px">'+(x.forn ? esc(x.forn) : (x.semValor ? '<small style="color:#6b7690">—</small>' : '<small style="color:#b47f08">definir</small>'))+'</td>'+
+        '<td style="padding:6px;text-align:right">'+(x.semValor ? '<small style="color:#6b7690">—</small>' : (+x.val ? reais(+x.val) : '<small style="color:#b47f08">sem valor</small>'))+'</td></tr>').join('')).join('')+
+    '</tbody></table>'+
+    '<h3 style="font-size:14px;margin:18px 0 6px;color:#f0851e">POR FORNECEDOR</h3>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>'+
+      d.forn.map(f=>'<tr style="border-top:1px solid #e3e8f0"><td style="padding:6px"><b>'+esc(f.forn)+'</b> <small style="color:#6b7690">'+[...f.tipos].join(', ').toLowerCase()+' · '+f.n+'x</small></td><td style="padding:6px;text-align:right"><b>'+reais(f.val)+'</b></td></tr>').join('')+
+    '</tbody></table>';
+}
+function renderTerc(){ const m = (document.getElementById('tc-mes')||{}).value || HOJE.slice(0,7); const b = document.getElementById('tc-res'); if(b) b.innerHTML = htmlTerc(m); }
+function imprimirTerc(){
+  const m = (document.getElementById('tc-mes')||{}).value || HOJE.slice(0,7);
+  const w = window.open('', '_blank'); if(!w) return toast('O navegador bloqueou a janela de impressão.');
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Terceirizados — '+nomeMes(m)+'</title><style>body{font-family:Poppins,Arial,sans-serif;color:#16234b;margin:28px}h1{font-size:20px;margin:0 0 4px;color:#1c4fa0}small{font-size:11px}</style></head><body>'+
+    (CONFIG.logo?'<img src="'+CONFIG.logo+'" style="max-height:52px;float:right">':'')+
+    '<h1>TERCEIRIZADOS — '+nomeMes(m).toUpperCase()+'</h1><div style="height:3px;background:#f0851e;width:90px;margin:6px 0 18px"></div>'+htmlTerc(m, true)+
+    '<script>setTimeout(()=>print(),400)<\/script></body></html>');
+  w.document.close();
+}
+
+/* ===== CHECKLIST IMPRESSO (NOSSO x TERCEIRIZADO) ===== */
+function imprimirChecklist(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const its = ev.itens || [], nosso = its.filter(i=>!i.terc), terc = its.filter(i=>i.terc);
+  const tab = (tit, cor, L) => '<h2 style="font-size:15px;color:'+cor+';margin:22px 0 6px;border-left:5px solid '+cor+';padding-left:8px">'+tit+' <small style="color:#6b7690;font-weight:500">('+L.length+' item'+(L.length===1?'':'s')+')</small></h2>'+
+    (L.length ? '<table><thead><tr><th style="width:34px">✓</th><th>Material</th><th style="width:110px;text-align:right">Qtd</th><th style="width:200px">Obs.</th></tr></thead><tbody>'+
+      L.map(i=>'<tr><td><span class="cx"></span></td><td><b>'+esc(i.nome)+'</b></td><td style="text-align:right"><b>'+num(i.qtd)+'</b> '+esc(i.un||'un')+'</td><td></td></tr>').join('')+'</tbody></table>'
+      : '<div style="color:#6b7690;font-size:13px">Nada.</div>');
+  const w = window.open('', '_blank'); if(!w) return toast('O navegador bloqueou a janela de impressão.');
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Checklist — '+esc(ev.nome)+'</title><style>'+
+    'body{font-family:Poppins,Arial,sans-serif;color:#16234b;margin:26px}h1{font-size:20px;margin:0;color:#1c4fa0}'+
+    'table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-size:11px;color:#6b7690;text-transform:uppercase;padding:6px;border-bottom:2px solid #1c4fa0}'+
+    'td{padding:8px 6px;border-bottom:1px solid #e3e8f0}.cx{display:inline-block;width:16px;height:16px;border:2px solid #1c4fa0;border-radius:3px}'+
+    '.meta{font-size:12.5px;color:#3a4766;margin-top:4px}.ass{margin-top:40px;display:flex;gap:40px}.ass div{flex:1;border-top:1px solid #16234b;padding-top:5px;font-size:12px;text-align:center}'+
+    '</style></head><body>'+
+    (CONFIG.logo?'<img src="'+CONFIG.logo+'" style="max-height:52px;float:right">':'')+
+    '<h1>CHECKLIST — '+esc(ev.nome).toUpperCase()+'</h1><div style="height:3px;background:#f0851e;width:90px;margin:6px 0 8px"></div>'+
+    '<div class="meta">OS '+esc(ev.os||'—')+' · '+esc(ev.local&&ev.local!=='—'?ev.local:'')+(ev.cidade&&ev.cidade!=='—'?' · '+esc(ev.cidade):'')+'</div>'+
+    '<div class="meta">Montagem <b>'+fmtD(ev.mont)+(dia(fimMont(ev))!==dia(ev.mont)?' a '+fmtD(fimMont(ev)):'')+'</b> · Desmontagem <b>'+fmtD(ev.desm)+'</b></div>'+
+    ((ev.estruturas||[]).length ? '<h2 style="font-size:15px;color:#1c4fa0;margin:20px 0 6px">ESTRUTURAS</h2><div style="font-size:13px;line-height:1.7">'+ev.estruturas.map(esc).join('<br>')+'</div>' : '')+
+    tab('🏠 MATERIAL NOSSO (sai do galpão)', '#1c4fa0', nosso)+
+    tab('🤝 MATERIAL TERCEIRIZADO (buscar / receber)', '#f0851e', terc)+
+    '<div class="ass"><div>Separado por</div><div>Conferido por</div><div>Data</div></div>'+
+    '<script>setTimeout(()=>print(),400)<\/script></body></html>');
+  w.document.close();
 }
 
 /* ===== EQUIPE NOSSA x TERCEIRIZADA / FRETE / COMPRAS E LOCAÇÕES ===== */
