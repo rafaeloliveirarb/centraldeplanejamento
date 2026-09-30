@@ -11446,11 +11446,7 @@ function cardTV(o, D){
   const semLider = o.pessoas.filter(pp=>!pp.prod);
   const local = localCurtoTV(o.ev);
   const al = [];
-  const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
-  if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
-  const chH = chuvaNoHorario(o.ev, D, o.fase);
-  const tempo = w ? '<div class="tv-lin" style="'+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>'+
-    (chH && chH.faixas.length ? '<div class="tv-lin" style="font-weight:800;color:'+(chH.forte?'#ffb4a8':'#ffd88a')+'">'+chH.txt+'</div>' : '') : '';
+  const tempo = climaTV(o, D);
   const f = fichaLocal(o.ev); if(f && resumoFicha(f)) al.push('🚧 ' + resumoFicha(f));
   { const ad = alertaDescarga(o.ev, saidaDaOp(o, D)); if(ad) al.push(ad.txt); }
   { const ar = alertaRestricao(o.ev, o.fase, D, saidaDaOp(o, D)); if(ar) al.push(ar.txt); }
@@ -11464,7 +11460,7 @@ function cardTV(o, D){
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
-    (semLider.length ? '<div class="tv-lin">👷 <b>'+esc(o.equipe||'')+'</b>: '+semLider.map(pp=>esc(pp.nome)+(pp.mt?' (manut.)':'')).join(', ')+'</div>' : '')+
+    (semLider.length ? equipesTV(o) : '')+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
     tempo+
     cam.map(c=>'<div class="tv-lin" style="font-weight:800;color:'+(c.local?'#9be3b5':'#ffd88a')+'">'+esc(c.x.v.tipo+' '+c.x.v.placa)+' — '+esc(c.txt)+'</div>').join('')+
@@ -11532,7 +11528,7 @@ function renderTV(){
     } else {
       /* o que só continua do dia anterior vira uma linha curta; card grande só para o que começa nesse dia */
       const novos = ops.filter(o=>!antes.has(o.ev.id + '|' + o.fase)), seguem = ops.filter(o=>antes.has(o.ev.id + '|' + o.fase));
-      corpo = novos.map(o=>cardTV(o, D)).join('') + seguem.map(o=>contTV(o)).join('');
+      corpo = novos.map(o=>cardTV(o, D)).join('') + seguem.map(o=>contTV(o, D)).join('');
     }
     return '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
@@ -11592,16 +11588,42 @@ function mudouTV(ev){
   return '';
 }
 /* linha curta para o que só continua do dia anterior */
-function contTV(o){
+function contTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const eq = o.equipe || '';
-  return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+'↻ <b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+(eq?' · 👷 '+esc(eq):'')+'</div>';
+  return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+'↻ <b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+
+    equipesTV(o, true) + climaTV(o, D, true) + '</div>';
+}
+/* pessoas do dia separadas pela equipe de cada uma (quando o evento junta mais de uma equipe) */
+function equipesTV(o, curto){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const pess = (o.pessoas||[]).filter(pp=>!pp.prod);
+  if(!pess.length) return '';
+  const tods = todosMontadores(), grupos = {}, ordem = [];
+  pess.forEach(pp=>{
+    const t = tods.find(x=>x.nome===pp.nome);
+    const g = !t ? (o.equipe || 'Outros') : t.equipe === 'piloto' ? 'Piloto' : t.equipe;
+    if(!grupos[g]){ grupos[g] = []; ordem.push(g); }
+    grupos[g].push(esc(pp.nome) + (pp.mt ? ' (manut.)' : ''));
+  });
+  ordem.sort((a,b)=>(a===o.equipe?-1:0) - (b===o.equipe?-1:0));
+  return ordem.map(g=>'<div class="tv-lin"'+(curto?' style="font-size:13.5px;margin-top:4px"':'')+'>👷 <b>'+esc(g)+'</b>'+(ordem.length>1?' <small style="opacity:.75">('+grupos[g].length+')</small>':'')+': '+grupos[g].join(', ')+'</div>').join('');
+}
+/* previsão do dia no card (pede a previsão se ainda não tiver) */
+function climaTV(o, D, curto){
+  const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
+  if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
+  if(!w) return '';
+  const chH = chuvaNoHorario(o.ev, D, o.fase), fs = curto ? 'font-size:13.5px;margin-top:4px;' : '';
+  return '<div class="tv-lin" style="'+fs+(riscoClima(w)===2?'color:#ffc9c2;font-weight:700':riscoClima(w)?'color:#ffe0a8;font-weight:700':'color:#cfe3ff')+'">'+climaCurto(w)+'</div>'+
+    (chH && chH.faixas.length ? '<div class="tv-lin" style="'+fs+'font-weight:800;color:'+(chH.forte?'#ffb4a8':'#ffd88a')+'">'+chH.txt+'</div>' : '');
 }
 /* contagem do topo: caminhões na rua, equipes em campo e livres */
 function contagemTV(r){
   const box = document.getElementById('tv-contagem'); if(!box) return;
   const cam = new Set(), eqs = new Set();
-  r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe); });
+  const tods = todosMontadores();
+  r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe);
+    (o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>{ const t = tods.find(x=>x.nome===pp.nome); if(t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC) eqs.add(t.equipe); }); });
   const tot = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
   box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span><span>🏠 <b>'+Math.max(0, tot - eqs.size)+'</b>livre'+(tot - eqs.size===1?'':'s')+'</span>';
 }
