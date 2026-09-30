@@ -6265,7 +6265,7 @@ function noPeriodo(ev){
 }
 
 function filtrados(){
-  return eventos.filter(noPeriodo)
+  return eventos.filter(e => (busca && busca.trim()) || noPeriodo(e))   /* pesquisando, acha em qualquer data */
     .filter(e => !tipoFiltro || situacao(e).tipo === tipoFiltro)
     .filter(e => espFiltro==='todos' ? true
       : espFiltro==='ativos' ? !evEncerrado(e)   /* cancelado e finalizado saem da vista */
@@ -9350,6 +9350,9 @@ function gravarLote(){
   toast((partes.length ? partes.join(' e ') : 'Nada novo para gravar') +
     (semData ? ' · ' + semData + ' sem data na coluna "📅 Sem data"' : '') + '. A IA já montou as sugestões.');
   if(remarcados.length) mostrarRemarcados(remarcados);
+  { const novosEv = eventos.slice(-n).filter(e=>n > 0);
+    const fora = novosEv.filter(e=>!noPeriodo(e));
+    if(fora.length) setTimeout(()=>toast('📅 ' + fora.length + ' evento(s) importado(s) ficam depois dos ' + (periodo===9999?'':periodo + ' dias do ') + 'quadro: ' + fora.slice(0,3).map(e=>e.nome).join(', ') + (fora.length>3?'…':'') + '.', 'Ver todos', ()=>{ periodo = 9999; try{ renderPeriodos(); }catch(e){} renderQuadro(); }), 1800); }
   if(CONFIG.galpao) setTimeout(()=>calcularKmEmLote(false), 1500);
 }
 
