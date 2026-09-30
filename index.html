@@ -468,7 +468,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 #tv .tv-top img{max-height:52px;background:#fff;border-radius:8px;padding:4px 8px}
 #tv .tv-tit{font-size:30px;font-weight:800;letter-spacing:.5px}
 #tv .tv-tit small{display:block;font-size:17px;font-weight:500;color:#aab4d4;letter-spacing:0}
-#tv .tv-rel{margin-left:auto;font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#tv .tv-rel{font-size:64px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
 #tv .tv-cols{flex:1;display:grid;grid-template-columns:1.45fr repeat(4,1fr);gap:16px;padding:18px 24px;min-height:0}
 #tv .tv-col h2{flex-wrap:wrap}
 #tv .tv-col.tvmini h2{font-size:21px;gap:8px}
@@ -503,6 +503,20 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 #tv .tv-vazio{font-size:24px;color:#8b95b8;padding:30px 0}
 #tv .tv-rod{padding:12px 30px;background:#7a2a22;font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden}
 #tv .tv-rod.ok{background:#16502f}
+#tv .tv-rod.n3{background:#7a2a22}#tv .tv-rod.n2{background:#8a4d0e}#tv .tv-rod.n1{background:#5c4a0c}
+#tv .tv-rod .tv-rodn{display:inline-block;background:rgba(0,0,0,.25);border-radius:6px;padding:1px 9px;margin-right:12px;font-size:16px}
+#tv .tv-cont{background:#16214a;border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:15px;line-height:1.35;border-left:5px solid #f0851e;color:#d6dcf0}
+#tv .tv-cont.d{border-left-color:#3d7be0}
+#tv .tv-cont b{color:#fff}
+#tv .tv-agora{display:flex;align-items:center;gap:10px;color:#ff8a7a;font-weight:800;font-size:16px;letter-spacing:1px;margin:4px 0 12px}
+#tv .tv-agora:before,#tv .tv-agora:after{content:'';flex:1;height:2px;background:#ff8a7a}
+#tv .tv-mud{display:inline-block;background:#e0851e;color:#1b1b1b;font-size:13px;font-weight:800;border-radius:6px;padding:2px 8px;margin-right:8px;vertical-align:middle;letter-spacing:.5px}
+#tv .tv-cont .tv-mud{font-size:11px;padding:1px 6px}
+#tv .tv-contagem{display:flex;gap:10px;flex-wrap:wrap;margin-left:auto;margin-right:10px}
+#tv .tv-contagem span{background:#223066;border-radius:10px;padding:8px 14px;font-size:18px;font-weight:700;white-space:nowrap}
+#tv .tv-contagem span b{font-size:24px;color:#ffb25e;margin-right:4px}
+#tv .tv-folgas{padding:8px 30px;background:#121c40;font-size:16px;color:#c9d2ee;border-top:1px solid #26356e}
+#tv .tv-folgas b{color:#fff}
 #tv .tv-x{position:absolute;top:8px;right:10px;background:transparent;border:0;color:#44507a;font-size:18px;cursor:pointer}
 </style>
 </head>
@@ -579,7 +593,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <div class="menu-mais" id="menu-mais" onclick="fecharMais()">
           <button onclick="toggleEscuro()">🌙 Modo escuro<small>liga e desliga neste aparelho</small></button>
           <button onclick="toggleLetra()">🔠 Letra maior<small>aumenta tudo neste aparelho</small></button>
-          <button onclick="abrirTV()">📺 Tela do galpão<small>tela grande para a TV: o que sai hoje e amanhã</small></button>
+          <button onclick="abrirTV()">📺 Operações externas<small>tela grande para a TV: o que está na rua hoje e nos próximos dias</small></button>
           <button onclick="abrirLixeira()">🗑 Lixeira<small>eventos excluídos — traga de volta com um clique</small></button>
           <button onclick="abrirTerc()">🤝 Terceirizados do mês<small>equipe de fora, frete e locação — por evento e fornecedor</small></button>
           <button id="btn-meu" onclick="abrirMeuDia()">🙋 Meu dia<small>seus eventos, lembretes e pendências</small></button>
@@ -774,7 +788,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <b>📲 Link do motorista</b>
         <input id="cfg-url" placeholder="Endereço da Central na internet (ex.: https://…/central-planejamento.html)" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.urlCentral=this.value.trim();salvar()">
-        <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a Tela do galpão mostra onde está o caminhão e quando chega. Precisa ser o endereço onde a Central fica publicada (um arquivo aberto só no computador não abre no celular).</small>
+        <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a tela de Operações externas mostra onde está o caminhão e quando chega. Precisa ser o endereço onde a Central fica publicada (um arquivo aberto só no computador não abre no celular).</small>
       </div>
       <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com o Google ligado, o TomTom fica só para o que o Google não dá: o detalhe dos acidentes e interdições na rota, o mapa da TV e a ordem das paradas na viagem combinada. Pode deixar as duas chaves.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
@@ -976,6 +990,13 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-div" onclick="if(event.target===this)fechar('ov-div')">
+  <div class="modal" style="max-width:860px">
+    <header><div><h2>📅 Data diferente da planilha — qual fica?</h2><div class="os">a Central não troca data sozinha: escolha, campo por campo, se fica a data da Central ou a que veio na planilha</div></div><button class="x" onclick="fechar('ov-div')">✕</button></header>
+    <div class="mbody"><div id="div-res"></div></div>
   </div>
 </div>
 
@@ -2599,6 +2620,18 @@ let PLANO = {};
    dos filtros da tela. Enquanto nada disso muda, reaproveita o resultado. */
 let planoSujo = true;
 function marcarPlanoSujo(){ planoSujo = true; }
+/* horários que vieram do Pipefy com minuto quebrado (08:01, 13:01, 17:59) voltam para o redondo */
+function arredondarHorarios(){
+  let n = 0;
+  eventos.forEach(ev=>['mont','desm','evt','montFim','desmFim','evtFim'].forEach(k=>{
+    const v = ev[k]; if(!v || String(v).length < 16) return;
+    const hh = +String(v).slice(11,13), mi = +String(v).slice(14,16); let t = hh*60 + mi;
+    if(!(t % 5)) return;
+    const r = Math.round(t/5)*5; if(Math.abs(r - t) > 2 || r >= 1440) return;
+    ev[k] = String(v).slice(0,11) + String(Math.floor(r/60)).padStart(2,'0') + ':' + String(r%60).padStart(2,'0'); n++;
+  }));
+  return n;
+}
 function replanejar(forcar){
   if(!forcar && !planoSujo) return;  /* filtro mudou: a conta continua valendo */
   planoSujo = false;
@@ -4525,7 +4558,7 @@ async function puxarPipefy(manual){
     pendentes.forEach(n => { if(!catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
     const maxUp = cards.reduce((m,c)=>String(c.updated_at||'') > m ? String(c.updated_at) : m, ultimo);
     CONFIG.pipefyUltimo = maxUp; CONFIG.pipefyQuando = new Date().toISOString();
-    if(alvo.length){ lote = alvo; gravarLote(); }
+    if(alvo.length){ lote = alvo; gravarLote(true); }
     else salvar();
     const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' card(s) novos ou alterados trazidos para a Central.' : 'Pipefy conferido — nada mudou.';
     if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -5042,6 +5075,7 @@ function levantarPendencias(nDias, leves){
     const t = tempoAprendido(ev);
     if(t && t.curto && dia(ev.mont) >= HOJE) add({sev:2, ev:ev.id, dia:dia(ev.mont), ic:'🧠', tipo:'tempo', txt:t.estr + ' costuma levar ' + t.dias + ' dias — planejado ' + t.planejado});
     if(ev.datasMudaram && ev.datasMudaram.avisar) add({sev:2, ev:ev.id, dia:quando, ic:'📅', tipo:'info', txt:'Datas mudaram depois da escala enviada: ' + ev.datasMudaram.o_que.join(' · ')});
+    if(ev.divDatas && Object.keys(ev.divDatas).length) add({sev:3, ev:ev.id, dia: quando < HOJE ? HOJE : quando, ic:'📅', tipo:'info', txt:'Planilha trouxe outra data (' + Object.keys(ev.divDatas).map(k=>(Object.fromEntries(CAMPOS_DATA)[k]||k).toLowerCase()).join(', ') + ') — abra o evento e escolha qual fica'});
     if(dia(ev.mont) <= somaDiaISO(HOJE, 7) && dia(ev.mont) >= HOJE){
       if(!destinoTexto(ev)) add({sev:2, ev:ev.id, dia:dia(ev.mont), ic:'📍', tipo:'info', txt:'Sem local e cidade — sem rota, previsão e horário de saída'});
       else if(!(+ev.km)) add({sev:1, ev:ev.id, dia:dia(ev.mont), ic:'📍', tipo:'info', txt:'Sem distância calculada (use 📍 Calcular)'});
@@ -6454,6 +6488,7 @@ function cardEvento(ev, soSetorJC, papel){
       '<div class="selo">'+
         (papel==='desm' ? '<span class="fase op-d" title="Este card está na coluna do dia da desmontagem">📤 DESMONTAGEM NESTE DIA</span>' : '')+
         chipClima(ev)+
+        (ev.divDatas ? '<span class="fase" style="background:#c0392b;cursor:pointer" title="A planilha trouxe outra data — clique para escolher qual fica" onclick="abrirDiv()">📅 DATA DIFERENTE DA PLANILHA — DECIDIR</span>' : '')+
         (ev.datasMudaram ? '<span class="fase" style="background:'+(ev.datasMudaram.avisar?'#b0483c':'#b47f08')+'" title="'+String(ev.datasMudaram.o_que.join(' · ')).replace(/"/g,'&quot;')+'">📅 DATAS MUDARAM'+(ev.datasMudaram.avisar?' — AVISAR':'')+'</span>' : '')+
         '<span class="badge '+s.classe+'">'+s.texto+'</span>'+
         opChip(ev)+
@@ -6528,6 +6563,7 @@ function verEvento(id){
         '<div class="ate">a <input type="date" class="dtin" value="'+valD(ev.evtFim)+'" onchange="setData(\''+ev.id+'\',\'evtFim\',this.value)" title="Deixe vazio se o evento é de um dia só"></div></div>'+
       '<div><i>Desmontagem</i><input type="datetime-local" class="dtin" value="'+valDT(ev.desm)+'" onchange="setData(\''+ev.id+'\',\'desm\',this.value)">'+
         '<div class="ate">até <input type="date" class="dtin" value="'+valD(ev.desmFim)+'" onchange="setData(\''+ev.id+'\',\'desmFim\',this.value)" title="Deixe vazio se a desmontagem termina no mesmo dia"></div></div>'+
+      (ev.divDatas ? '<div style="grid-column:1/-1"><div class="alert red" style="margin:0">📅 <b>A planilha trouxe outra data:</b> '+Object.keys(ev.divDatas).map(k=>(Object.fromEntries(CAMPOS_DATA)[k]||k).toLowerCase()+' — Central '+fmtDataDiv(ev.divDatas[k].central)+' × planilha '+fmtDataDiv(ev.divDatas[k].planilha)).join(' · ')+'. <button class="mini" onclick="abrirDiv()">Escolher qual fica</button></div></div>' : '')+
       (ev.datasMudaram ? '<div style="grid-column:1/-1"><div class="alert '+(ev.datasMudaram.avisar?'red':'amber')+'" style="margin:0">'+
         '📅 <b>A importação mudou as datas deste evento:</b> '+ev.datasMudaram.o_que.join(' · ')+'.'+
         (ev.datasMudaram.avisar ? ' A escala e a agenda já tinham sido enviadas com as datas antigas — <b>avise Produção e Frota</b>.' : '')+
@@ -6763,7 +6799,8 @@ function secoesStatusCalc(ev){
   const semPesoC = (a.conflitos||[]).filter(c=>/peso e volume/i.test(c.msg||''));
   const confl = (a.conflitos||[]).filter(c=>!/peso e volume/i.test(c.msg||''));
   /* DATAS */
-  if(!ev.mont || !ev.desm) put('datas','verm','falta a data de montagem ou de desmontagem');
+  if(ev.divDatas && Object.keys(ev.divDatas).length) put('datas','verm','a planilha trouxe outra data — decidir qual fica');
+  else if(!ev.mont || !ev.desm) put('datas','verm','falta a data de montagem ou de desmontagem');
   else if(fimMontInvalido(ev) || fimDesmInvalido(ev)) put('datas','verm','o "até" de uma data está errado');
   else if(!ev.local || ev.local==='—' || !(+ev.km)) put('datas','amar', !ev.local || ev.local==='—' ? 'falta o local do evento' : 'falta a distância (km)');
   else put('datas','verde','datas, local e distância ok');
@@ -6948,6 +6985,89 @@ function renderCfgSetor(){
 }
 function setDonoSec(k, v){ CONFIG.donosSec = Object.assign({}, CONFIG.donosSec||{}); CONFIG.donosSec[k] = String(v||'').trim() || DONOS_PADRAO[k]; salvar(); if(!setoresLista().includes(SETOR_ATUAL)) SETOR_ATUAL = setoresLista()[0]; renderSetor(); renderQuadro(); }
 function setPrazoSec(k, v){ CONFIG.prazosSec = Object.assign({}, CONFIG.prazosSec||{}); CONFIG.prazosSec[k] = Math.max(0, parseInt(v)||0); salvar(); renderSetor(); renderQuadro(); }
+
+/* ===== DATA DA CENTRAL x DATA DA PLANILHA ===== */
+const CAMPOS_DATA = [['mont','Início da montagem'],['montFim','Fim da montagem'],['evt','Início do evento'],['evtFim','Fim do evento'],['desm','Início da desmontagem'],['desmFim','Fim da desmontagem']];
+function valDataPlan(e, k){ return k==='evt' ? (e.evt || dia(e.mont)) : e[k]; }
+function mesmaData(a, b){ if(dia(a) !== dia(b)) return false; const ha = String(a).slice(11,16), hb = String(b).slice(11,16); return !ha || !hb || ha === hb; }
+function fmtDataDiv(v){ return v ? fmtD(v) + (String(v).length > 10 ? ' ' + String(v).slice(11,16) : '') : '—'; }
+function registrarDatasPlanilha(ex, e, soConferir){
+  const preenchidas = [], div = {};
+  CAMPOS_DATA.forEach(([k, rot])=>{
+    const pv = valDataPlan(e, k); if(!pv) return;
+    const cv = ex[k];
+    if(!cv){ if(!soConferir){ ex[k] = pv; preenchidas.push(rot.toLowerCase() + ' definida em ' + fmtD(pv)); } return; }
+    if(mesmaData(cv, pv)){ if(ex.divDatas) delete ex.divDatas[k]; return; }
+    const ign = (ex.divIgnorar || {})[k]; if(ign && mesmaData(ign, pv)) return;   /* já decidiu manter a da Central para essa mesma data */
+    div[k] = {central: cv, planilha: pv};
+  });
+  if(Object.keys(div).length){ ex.divDatas = Object.assign({}, ex.divDatas || {}, div); ex.divQuando = HOJE; }
+  if(ex.divDatas && !Object.keys(ex.divDatas).length){ delete ex.divDatas; delete ex.divQuando; }
+  return {preenchidas, div};
+}
+function evsComDiv(){ return eventos.filter(e=>e.divDatas && Object.keys(e.divDatas).length); }
+function abrirDiv(){ renderDiv(); document.getElementById('ov-div').classList.add('on'); }
+function renderDiv(){
+  const box = document.getElementById('div-res'); if(!box) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = evsComDiv();
+  if(!L.length){ box.innerHTML = '<div class="alert green" style="margin:0">Nenhuma data pendente — tudo decidido. 👍</div>'; return; }
+  const rot = Object.fromEntries(CAMPOS_DATA);
+  box.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><span style="font-size:13px"><b>'+L.length+'</b> evento(s) com data diferente</span><span style="flex:1"></span>'+
+      '<button class="mini" onclick="decidirTodos(\'central\')">🏢 Manter tudo como está na Central</button><button class="mini" onclick="decidirTodos(\'planilha\')">📄 Usar tudo da planilha</button></div>'+
+    L.map(ev=>'<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><b style="flex:1;cursor:pointer" onclick="fechar(\'ov-div\');verEvento(\''+ev.id+'\')">'+esc(ev.nome)+'</b>'+
+        '<button class="mini" onclick="decidirEvento(\''+ev.id+'\',\'central\')">🏢 Manter Central</button><button class="mini" onclick="decidirEvento(\''+ev.id+'\',\'planilha\')">📄 Usar planilha</button></div>'+
+      Object.keys(ev.divDatas).map(k=>{ const d = ev.divDatas[k];
+        return '<div style="display:grid;grid-template-columns:150px 1fr 1fr;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:13px">'+
+          '<span style="color:var(--muted)">'+(rot[k]||k)+'</span>'+
+          '<button class="mini" style="text-align:left" onclick="decidirData(\''+ev.id+'\',\''+k+'\',\'central\')">🏢 Central: <b>'+fmtDataDiv(d.central)+'</b></button>'+
+          '<button class="mini" style="text-align:left;border-color:#f0851e" onclick="decidirData(\''+ev.id+'\',\''+k+'\',\'planilha\')">📄 Planilha: <b>'+fmtDataDiv(d.planilha)+'</b></button></div>'; }).join('')+
+    '</div>').join('')+
+    '<div style="font-size:12px;color:var(--muted)">"Manter Central": a Central guarda essa escolha e não pergunta de novo enquanto a planilha trouxer essa mesma data. Se escolher a planilha e a escala já tinha sido enviada, o evento fica marcado para avisar a equipe.</div>';
+}
+function aplicarDecisao(ev, k, lado){
+  const d = (ev.divDatas || {})[k]; if(!d) return null;
+  let txt = null;
+  if(lado === 'planilha'){
+    ev[k] = d.planilha;
+    if(ev.montFim && dia(ev.montFim) < dia(ev.mont)) ev.montFim = null;
+    if(ev.desmFim && dia(ev.desmFim) < dia(ev.desm)) ev.desmFim = null;
+    if(ev.evtFim && dia(ev.evtFim) < dia(ev.evt)) ev.evtFim = null;
+    txt = (Object.fromEntries(CAMPOS_DATA)[k] || k).toLowerCase() + ' ' + fmtD(d.central) + ' → ' + fmtD(d.planilha);
+    if(ev.divIgnorar) delete ev.divIgnorar[k];
+  } else {
+    ev.divIgnorar = Object.assign({}, ev.divIgnorar || {}, {[k]: d.planilha});
+  }
+  delete ev.divDatas[k];
+  if(!Object.keys(ev.divDatas).length){ delete ev.divDatas; delete ev.divQuando; }
+  return txt;
+}
+function posDecisao(ev, trocas){
+  if(trocas.length){
+    ev.datasMudaram = {quando: HOJE, o_que: trocas, avisar: !!(ev.escalaEnviada || ev.agendaEnviada)};
+    try{ agendarEscalaEv(ev.id); }catch(e){}
+  }
+  try{ marcarVisto(ev.id); }catch(e){}
+}
+function decidirData(id, k, lado){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const t = aplicarDecisao(ev, k, lado); posDecisao(ev, t ? [t] : []);
+  salvar(); marcarPlanoSujo(); renderQuadro(); renderDiv();
+  if(!evsComDiv().length){ fechar('ov-div'); toast('📅 Datas decididas.'); }
+}
+function decidirEvento(id, lado){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !ev.divDatas) return;
+  const trocas = Object.keys(ev.divDatas).map(k=>aplicarDecisao(ev, k, lado)).filter(Boolean);
+  posDecisao(ev, trocas);
+  salvar(); marcarPlanoSujo(); renderQuadro(); renderDiv();
+  if(!evsComDiv().length){ fechar('ov-div'); toast('📅 Datas decididas.'); }
+}
+function decidirTodos(lado){
+  evsComDiv().forEach(ev=>{ const trocas = Object.keys(ev.divDatas).map(k=>aplicarDecisao(ev, k, lado)).filter(Boolean); posDecisao(ev, trocas); });
+  salvar(); marcarPlanoSujo(); renderQuadro(); fechar('ov-div');
+  toast(lado === 'planilha' ? '📄 Datas da planilha aplicadas.' : '🏢 Ficaram as datas da Central.');
+}
 
 /* ===== ORDEM DO QUADRO ===== */
 let ORDEM = 'data';
@@ -8671,7 +8791,11 @@ function dataBR(v){
   if(v instanceof Date && !isNaN(v)){
     const p = n => String(n).padStart(2,'0');
     const base = v.getFullYear()+'-'+p(v.getMonth()+1)+'-'+p(v.getDate());
-    return (v.getHours()||v.getMinutes()) ? base+'T'+p(v.getHours())+':'+p(v.getMinutes()) : base;
+    /* o Pipefy grava 08:00:51 — vira 08:00, não 08:01 (arredonda para o múltiplo de 5 min mais perto) */
+    let mins = v.getHours()*60 + v.getMinutes() + (v.getSeconds() >= 30 ? 1 : 0);
+    if(mins % 5 && Math.abs(Math.round(mins/5)*5 - mins) <= 2) mins = Math.round(mins/5)*5;
+    if(mins >= 1440) mins = 1435;
+    return mins ? base+'T'+p(Math.floor(mins/60))+':'+p(mins%60) : base;
   }
   if(typeof v === 'number' && v > 20000 && v < 80000){
     const d = new Date(Math.round((v - 25569) * 86400000));
@@ -8681,6 +8805,7 @@ function dataBR(v){
   let m = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
   if(m) return m[1]+'-'+m[2]+'-'+m[3] + (m[4] ? 'T'+m[4]+':'+m[5] : '');
   m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if(m && m[4]){ let mm = (+m[4])*60 + (+m[5]); if(mm % 5 && Math.abs(Math.round(mm/5)*5 - mm) <= 2) mm = Math.round(mm/5)*5; m[4] = String(Math.floor(mm/60)).padStart(2,'0'); m[5] = String(mm%60).padStart(2,'0'); }
   if(m) return m[3]+'-'+m[2]+'-'+m[1] + (m[4] ? 'T'+m[4]+':'+m[5] : '');
   return null;
 }
@@ -9287,28 +9412,27 @@ function marcarLote(v){
   lote.forEach(e=>{ e.marcado = v && !e.repetido && !e.cancelado && !e.foraFunil; });
   renderLote();
 }
-function gravarLote(){
+function gravarLote(auto){
   let n = 0, atualizados = 0;
-  const remarcados = [];
+  const remarcados = [], divergiram = new Set();
+  /* evento que já está no quadro e veio desmarcado: não mexe em nada, só confere se a data bate */
+  lote.forEach(e => {
+    if(e.marcado || e.repetido || !e.nome) return;
+    const ex = eventoExistente(e); if(!ex) return;
+    if(Object.keys(registrarDatasPlanilha(ex, e, true).div).length) divergiram.add(ex.id);
+  });
   lote.forEach(e => {
     if(!e.marcado || !e.nome) return;
     if(e.repetido) return; /* linha repetida da própria planilha nunca entra */
     const ex = eventoExistente(e);
     if(ex){
-      /* já está no quadro: antes de sobrescrever, guarda o que MUDOU nas datas.
-         Escala e agenda já enviadas ficam defasadas — a pessoa precisa saber. */
-      const rot = {mont:'montagem', montFim:'fim da montagem', evt:'evento', evtFim:'fim do evento', desm:'desmontagem', desmFim:'fim da desmontagem'};
-      const mudancas = [];
-      Object.keys(rot).forEach(k=>{
-        const antes = dia(ex[k]) || null;
-        const depois = dia(k==='evt' ? (e.evt || dia(e.mont)) : e[k]) || null;
-        if(depois && antes && antes !== depois) mudancas.push(rot[k] + ' ' + fmtD(antes) + ' → ' + fmtD(depois));
-        else if(depois && !antes) mudancas.push(rot[k] + ' definida em ' + fmtD(depois));
-      });
-      if(mudancas.length){
-        ex.datasMudaram = {quando: HOJE, o_que: mudancas,
-          avisar: !!(ex.escalaEnviada || ex.agendaEnviada)};
-        remarcados.push({nome: ex.nome, mudancas, enviado: !!(ex.escalaEnviada || ex.agendaEnviada)});
+      /* já está no quadro: data que a Central já tem NUNCA é trocada sozinha.
+         Se a planilha trouxe outra, vira uma pergunta (qual data fica). Data vazia é preenchida. */
+      const rd = registrarDatasPlanilha(ex, e, false);
+      if(Object.keys(rd.div).length) divergiram.add(ex.id);
+      if(rd.preenchidas.length){
+        ex.datasMudaram = {quando: HOJE, o_que: rd.preenchidas, avisar: !!(ex.escalaEnviada || ex.agendaEnviada)};
+        remarcados.push({nome: ex.nome, mudancas: rd.preenchidas, enviado: !!(ex.escalaEnviada || ex.agendaEnviada)});
       }
       /* endereço que já foi colocado na Central fica — a planilha só preenche o que está vazio */
       const temTxt = v => v != null && String(v).trim() !== '' && String(v).trim() !== '—';
@@ -9316,9 +9440,6 @@ function gravarLote(){
       Object.assign(ex, {
         nome:e.nome, os: osDigitos(e) || e.os, cidade:mantemEnd.cidade,
         local:mantemEnd.local, km:mantemEnd.km,
-        mont:e.mont, montFim:e.montFim || null,
-        evt:e.evt || dia(e.mont), evtFim:e.evtFim || null,
-        desm:e.desm, desmFim:e.desmFim || null,
         permanece:e.permanece, fase:e.fase || ex.fase || null,
         respNome:e.respNome || ex.respNome || null,
         respTel:e.respTel || ex.respTel || ex.contato || null,
@@ -9350,6 +9471,11 @@ function gravarLote(){
   toast((partes.length ? partes.join(' e ') : 'Nada novo para gravar') +
     (semData ? ' · ' + semData + ' sem data na coluna "📅 Sem data"' : '') + '. A IA já montou as sugestões.');
   if(remarcados.length) mostrarRemarcados(remarcados);
+  if(divergiram.size){
+    salvar(); renderQuadro();
+    if(auto) toast('📅 ' + divergiram.size + ' evento(s) vieram com data diferente da que está na Central — nada foi trocado.', 'Decidir', abrirDiv);
+    else setTimeout(abrirDiv, remarcados.length ? 900 : 300);
+  }
   { const novosEv = eventos.slice(-n).filter(e=>n > 0);
     const fora = novosEv.filter(e=>!noPeriodo(e));
     if(fora.length) setTimeout(()=>toast('📅 ' + fora.length + ' evento(s) importado(s) ficam depois dos ' + (periodo===9999?'':periodo + ' dias do ') + 'quadro: ' + fora.slice(0,3).map(e=>e.nome).join(', ') + (fora.length>3?'…':'') + '.', 'Ver todos', ()=>{ periodo = 9999; try{ renderPeriodos(); }catch(e){} renderQuadro(); }), 1800); }
@@ -11179,7 +11305,7 @@ function abrirTV(){
   renderTV();
   clearInterval(tvTimer); tvTimer = setInterval(renderTV, 60*1000);
   clearInterval(tvRelogio); tvRelogio = setInterval(relogioTV, 1000); relogioTV();
-  clearInterval(tvRola); tvRola = setInterval(rolarTV, 9000);
+  clearInterval(tvRola); tvRola = setInterval(rolarTV, 40);
   tvMostrarCards(); clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 40000);
   carregarLeaflet().catch(()=>{});
   try{ if(location.hash !== '#tv') history.replaceState(null, '', '#tv'); }catch(e){}
@@ -11187,7 +11313,7 @@ function abrirTV(){
 function fecharTV(){
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
   t.classList.remove('on');
-  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola); clearTimeout(tvCarrossel);
+  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola); clearTimeout(tvCarrossel); clearTimeout(TV_AL_T);
   try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
   try{ if(tvWake) tvWake.release(); }catch(e){}
   try{ if(location.hash === '#tv') history.replaceState(null, '', location.pathname + location.search); }catch(e){}
@@ -11286,11 +11412,17 @@ function relogioTV(){
   if(tvRelogio && iso !== HOJE && !window.__tvRecarregou){ window.__tvRecarregou = true; try{ location.reload(); }catch(e){} }
 }
 function rolarTV(){
+  /* desce devagar; no fim para uns segundos e volta para o começo */
+  const agora = Date.now();
   document.querySelectorAll('#tv .tv-lista').forEach(el2=>{
-    if(el2.scrollHeight <= el2.clientHeight + 4){ el2.scrollTop = 0; return; }
-    const prox = el2.scrollTop + el2.clientHeight * 0.8;
-    const alvo = prox >= el2.scrollHeight - el2.clientHeight + 4 && el2.scrollTop >= el2.scrollHeight - el2.clientHeight - 4 ? 0 : prox;
-    try{ el2.scrollTo({top: alvo, behavior:'smooth'}); }catch(e){ el2.scrollTop = alvo; }
+    const max = el2.scrollHeight - el2.clientHeight;
+    if(max <= 4){ el2.scrollTop = 0; return; }
+    if(el2._pausa && agora < el2._pausa) return;
+    if(el2._pausa){ el2._pausa = 0; if(el2._volta){ el2._volta = false; el2.scrollTop = 0; el2._pausa = agora + 4000; return; } }
+    el2._pos = (el2._pos == null || Math.abs(el2._pos - el2.scrollTop) > 3) ? el2.scrollTop : el2._pos;
+    el2._pos += 0.6;
+    el2.scrollTop = el2._pos;
+    if(el2._pos >= max - 1){ el2._pausa = agora + 5000; el2._volta = true; el2._pos = null; }
   });
 }
 /* status da saída de hoje: SAIU, CARREGANDO (ou quase), PRÓXIMA */
@@ -11312,7 +11444,7 @@ function cardTV(o, D){
   const cam = situacaoCaminhao(o, D);
   const st = cam.length ? {cls: cam.every(c=>c.local) ? '' : 'agora', txt: cam.every(c=>c.local) ? 'NO LOCAL' : 'A CAMINHO'} : statusTV(hs, D, o);
   const semLider = o.pessoas.filter(pp=>!pp.prod);
-  const local = [o.ev.local && o.ev.local!=='—' ? o.ev.local : '', o.ev.cidade && o.ev.cidade!=='—' ? o.ev.cidade : ''].filter(Boolean).join(' — ');
+  const local = localCurtoTV(o.ev);
   const al = [];
   const c = cidadeClima(o.ev), w = c && CLIMA[c] && CLIMA[c].dias && CLIMA[c].dias[D];
   if(c && !(CLIMA[c] && (CLIMA[c].dias || CLIMA[c].semLocal)) && D <= somaDiaISO(HOJE, 15)) pedirClima(o.ev);
@@ -11325,7 +11457,7 @@ function cardTV(o, D){
   datasEspeciais(D, o.ev.cidade).forEach(x=>al.push((x.tipo==='feriado'?'📅 ':'🏟 ') + x.nome));
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
-    '<div class="tv-nome">'+(o.fase==='desm'?'📤 ':'🔨 ')+esc(o.ev.nome)+'</div>'+
+    '<div class="tv-nome">'+(mudouTV(o.ev)?'<span class="tv-mud" title="'+esc(mudouTV(o.ev))+'">MUDOU</span>':'')+(o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(o.ev.nome))+'</div>'+
     '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
     (false ? '<div class="tv-hor">'+(hs.parada>=2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
@@ -11382,31 +11514,115 @@ function renderTV(){
   const listas = dias.map(D=>({D, r: listaTV(D)}));
   document.getElementById('tv-logo').innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'">' : '';
   const dt = new Date(HOJE+'T12:00');
-  document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES DO GALPÃO<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+'</small>';
+  document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES EXTERNAS<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+'</small>';
   const nS = r => r.ops.reduce((s,o)=>s + o.viagens.filter(x=>!x.jaLocal).length, 0);
   const vazio = txt => '<div class="tv-vazio">'+txt+'</div>';
   const guarda = [...document.querySelectorAll('#tv .tv-lista')].map(e2=>e2.scrollTop);
-  document.getElementById('tv-cols').innerHTML = listas.map(({D, r}, i)=>
-    '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
+  const agoraMin = (()=>{ const a = new Date(); return a.getHours()*60 + a.getMinutes(); })();
+  const colHtml = ({D, r}, i) => {
+    const antes = i > 0 ? new Set(listas[i-1].r.ops.map(o=>o.ev.id + '|' + o.fase)) : new Set();
+    let ops = r.ops;
+    let corpo;
+    if(i === 0){
+      /* HOJE em ordem de horário, com a linha do AGORA */
+      ops = [...ops].sort((a,b)=>(a.hora||'00:00').localeCompare(b.hora||'00:00'));
+      let pos = ops.findIndex(o=>o.hora && minDe(o.hora) > agoraMin);
+      corpo = ops.map((o, k)=>(k === pos ? '<div class="tv-agora">AGORA ' + String(Math.floor(agoraMin/60)).padStart(2,'0') + ':' + String(agoraMin%60).padStart(2,'0') + '</div>' : '') + cardTV(o, D)).join('') +
+        (pos === -1 && ops.length ? '<div class="tv-agora">AGORA ' + String(Math.floor(agoraMin/60)).padStart(2,'0') + ':' + String(agoraMin%60).padStart(2,'0') + '</div>' : '');
+    } else {
+      /* o que só continua do dia anterior vira uma linha curta; card grande só para o que começa nesse dia */
+      const novos = ops.filter(o=>!antes.has(o.ev.id + '|' + o.fase)), seguem = ops.filter(o=>antes.has(o.ev.id + '|' + o.fase));
+      corpo = novos.map(o=>cardTV(o, D)).join('') + seguem.map(o=>contTV(o)).join('');
+    }
+    return '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
-      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length ? r.ops.map(o=>cardTV(o, D)).join('') : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>').join('');
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
+  };
+  document.getElementById('tv-cols').innerHTML = listas.map(colHtml).join('');
+  contagemTV(listas[0].r);
+  folgasTV();
   document.querySelectorAll('#tv .tv-lista').forEach((e2,i)=>{ e2.scrollTop = guarda[i] || 0; });
-  /* rodapé: o que precisa de atenção */
+  /* rodapé: o que precisa de atenção — um por vez, do mais grave para o menos */
   const al = [];
   listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
-    r.duplos.forEach(x=>al.push(q + ': ' + x.nome + ' em dois lugares'));
-    r.camDuplo.forEach(x=>al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'));
-    r.ops.forEach(o=>{ const b = resumoBloqueio(o.ev, o.fase, D); if(b) al.push(q + ': ' + o.ev.nome + ' — ' + b.replace(/^🚧\s*/,'ROTA BLOQUEADA: ')); });
-    r.ops.forEach(o=>{ const t = resumoTransito(o.ev, o.fase, D); if(t && t.nivel) al.push(q + ': ' + o.ev.nome + ' — ' + t.txt.replace(/^\S+\s/,'')); });
-    r.ops.filter(o=>o.fora).forEach(o=>al.push(q + ': ' + o.ev.nome + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'));
+    r.duplos.forEach(x=>al.push({n:2, t:q + ': ' + x.nome + ' em dois lugares'}));
+    r.camDuplo.forEach(x=>al.push({n:2, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'}));
+    r.ops.forEach(o=>{ const b = resumoBloqueio(o.ev, o.fase, D); if(b) al.push({n:3, t:q + ': ' + nomeTV(o.ev.nome) + ' — ' + b.replace(/^🚧\s*/,'ROTA BLOQUEADA: ')}); });
+    r.ops.forEach(o=>{ const t = resumoTransito(o.ev, o.fase, D); if(t && t.nivel) al.push({n: t.nivel===2 ? 3 : 1, t:q + ': ' + nomeTV(o.ev.nome) + ' — ' + t.txt.replace(/^\S+\s/,'')}); });
+    r.ops.filter(o=>o.fora).forEach(o=>al.push({n:1, t:q + ': ' + nomeTV(o.ev.nome) + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'}));
     r.ops.forEach(o=>o.viagens.forEach(x=>{
-      if(x.manut) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção');
-      else if(!x.motorista && !x.jaLocal) al.push(q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + o.ev.nome + ')');
+      if(x.manut) al.push({n:3, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção'});
+      else if(!x.motorista && !x.jaLocal) al.push({n:3, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + nomeTV(o.ev.nome) + ')'});
     }));
   });
-  const rod = document.getElementById('tv-rod');
-  rod.className = 'tv-rod' + (al.length ? '' : ' ok');
-  rod.textContent = al.length ? '⚠ ' + al.join('   •   ') : '✔ Tudo certo: todos os caminhões com motorista, ninguém em dois lugares.   Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const vistos = new Set();
+  TV_ALERTAS = al.filter(a=>{ if(vistos.has(a.t)) return false; vistos.add(a.t); return true; }).sort((a,b)=>b.n - a.n);
+  mostrarAlertaTV();
+}
+let TV_ALERTAS = [], TV_AL_I = 0, TV_AL_T = null;
+function mostrarAlertaTV(avancar){
+  const rod = document.getElementById('tv-rod'); if(!rod) return;
+  if(!TV_ALERTAS.length){
+    rod.className = 'tv-rod ok';
+    rod.textContent = '✔ Tudo certo: todos os caminhões com motorista, ninguém em dois lugares.   Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  } else {
+    if(avancar) TV_AL_I++;
+    if(TV_AL_I >= TV_ALERTAS.length) TV_AL_I = 0;
+    const a = TV_ALERTAS[TV_AL_I];
+    rod.className = 'tv-rod n' + a.n;
+    rod.innerHTML = '<span class="tv-rodn">' + (TV_AL_I+1) + '/' + TV_ALERTAS.length + '</span>' + (a.n===3 ? '⛔ ' : '⚠ ') + String(a.t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  }
+  clearTimeout(TV_AL_T);
+  if(document.getElementById('tv') && document.getElementById('tv').classList.contains('on')) TV_AL_T = setTimeout(()=>mostrarAlertaTV(true), 7000);
+}
+/* nome sem o número do Pipefy; endereço de rua vira só a cidade */
+function nomeTV(n){ return String(n||'').replace(/\s*[-–]?\s*\(\s*\d{5,}\s*\)\s*/g, ' ').replace(/\s{2,}/g,' ').trim(); }
+function localCurtoTV(ev){
+  const loc = String(ev.local||'').trim(), cid = String(ev.cidade||'').trim();
+  const temL = loc && loc !== '—' && !/^(rua|r\.|av\.?|avenida|estrada|estr\.|rod\.?|rodovia|travessa|tv\.|alameda|al\.|praça|pça|largo)\b/i.test(loc) && loc.length <= 34;
+  const temC = cid && cid !== '—';
+  return [temL ? loc : '', temC ? cid : ''].filter(Boolean).join(' — ');
+}
+/* mudou data ou horário nas últimas 24 h */
+function mudouTV(ev){
+  const lim = Date.now() - 24*3600*1000;
+  const h2 = (ev.hist||[]).find(x=>new Date(x.q).getTime() >= lim && (x.o||[]).some(t=>/mont|desm|evento|hor|data/i.test(t)));
+  if(h2) return (h2.o||[]).filter(t=>/mont|desm|evento|hor|data/i.test(t)).join(' · ');
+  if(ev.datasMudaram && ev.datasMudaram.quando >= somaDiaISO(HOJE, -1)) return (ev.datasMudaram.o_que||[]).join(' · ');
+  return '';
+}
+/* linha curta para o que só continua do dia anterior */
+function contTV(o){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const eq = o.equipe || '';
+  return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+'↻ <b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+(eq?' · 👷 '+esc(eq):'')+'</div>';
+}
+/* contagem do topo: caminhões na rua, equipes em campo e livres */
+function contagemTV(r){
+  const box = document.getElementById('tv-contagem'); if(!box) return;
+  const cam = new Set(), eqs = new Set();
+  r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe); });
+  const tot = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
+  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span><span>🏠 <b>'+Math.max(0, tot - eqs.size)+'</b>livre'+(tot - eqs.size===1?'':'s')+'</span>';
+}
+/* folgas e férias de hoje e amanhã, pela Escala de Montadores */
+let TV_FOLGAS = {t:0, html:''};
+function folgasTV(){
+  const box = document.getElementById('tv-folgas'); if(!box) return;
+  if(Date.now() - TV_FOLGAS.t < 10*60*1000){ box.style.display = TV_FOLGAS.html ? '' : 'none'; box.innerHTML = TV_FOLGAS.html; return; }
+  TV_FOLGAS.t = Date.now();
+  const amanha = somaDiaISO(HOJE, 1);
+  Promise.all([
+    escReq('escala_montadores?select=id,nome'),
+    escReq('escala_marcas?dia=in.(' + HOJE + ',' + amanha + ')&status=in.(FO,FE)&select=dia,montador_id,status')
+  ]).then(([mont, marcas])=>{
+    const nome = id => { const m = (mont||[]).find(x=>String(x.id)===String(id)); return m ? String(m.nome).split(' ')[0].replace(/^./, c=>c.toUpperCase()).replace(/\B./g, c=>c.toLowerCase()) : null; };
+    const grupo = (d, st) => [...new Set((marcas||[]).filter(x=>x.dia===d && x.status===st).map(x=>nome(x.montador_id)).filter(Boolean))];
+    const parte = (rot, d) => { const fo = grupo(d,'FO'), fe = grupo(d,'FE'); if(!fo.length && !fe.length) return ''; return '<b>'+rot+':</b> '+(fo.length?'💤 folga: '+fo.join(', '):'')+(fo.length&&fe.length?' · ':'')+(fe.length?'🏖 férias: '+fe.join(', '):''); };
+    const L = [parte('Hoje', HOJE), parte('Amanhã', amanha)].filter(Boolean);
+    TV_FOLGAS.html = L.join('&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;');
+    box.innerHTML = TV_FOLGAS.html; box.style.display = TV_FOLGAS.html ? '' : 'none';
+  }).catch(()=>{ TV_FOLGAS.html = ''; box.style.display = 'none'; });
 }
 /* abre direto na TV: endereço terminando em #tv */
 if(typeof window !== 'undefined' && typeof location !== 'undefined' && location.hash === '#tv') setTimeout(()=>abrirTV(), 2500);
@@ -11693,6 +11909,7 @@ async function salvar(){
       marcarSync(true);
       nuvemEscutar(); escutando = true;
       carregarRecados();
+      setTimeout(()=>{ try{ if(arredondarHorarios()){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
       setTimeout(()=>{ try{ autoIA7(); }catch(e){} }, 15000);
       setTimeout(()=>{ try{ autoFinalizar(); }catch(e){} }, 20000);
       setInterval(()=>{ try{ autoFinalizar(); }catch(e){} }, 3600000);        /* IA preenche os próximos 7 dias ao abrir */
@@ -11772,12 +11989,13 @@ async function salvar(){
 </script>
 <div id="tv" ondblclick="fecharTV()">
   <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
-  <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-rel" id="tv-rel"></div></div>
+  <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-contagem" id="tv-contagem"></div><div class="tv-rel" id="tv-rel"></div></div>
   <div class="tv-cols" id="tv-cols"></div>
   <div id="tv-mapa-box" style="flex:1;position:relative;display:none;min-height:0">
     <div id="tv-mapa" style="position:absolute;inset:0"></div>
     <div id="tv-mapa-leg" style="position:absolute;top:14px;left:14px;z-index:500;background:rgba(15,23,51,.88);border-radius:12px;padding:12px 16px;font-size:17px;line-height:1.7"></div>
   </div>
+  <div class="tv-folgas" id="tv-folgas" style="display:none"></div>
   <div class="tv-rod" id="tv-rod"></div>
 </div>
 </body>
