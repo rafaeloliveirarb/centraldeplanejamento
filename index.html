@@ -340,6 +340,7 @@ select.cad{max-width:200px}
 .b-blue{background:#e8f1fd;color:var(--blue)}
 .b-green{background:#e6f6ee;color:var(--green)}
 .b-amber{background:#fdf4e0;color:#b47f08}
+.b-gray{background:#eef1f5;color:#5d6778}
 .fasefiltro{background:#f7f9fc;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}
 .ff-tit{font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:9px;display:flex;align-items:center;gap:8px}
 .ff-chips{display:flex;gap:7px;flex-wrap:wrap}
@@ -1055,7 +1056,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
     <div class="mbody">
       <label style="display:flex;gap:10px;align-items:flex-start;font-size:13.5px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin-bottom:14px">
         <input type="checkbox" id="ia-auto" style="margin-top:3px" onchange="CONFIG.autoIA7=this.checked;salvar();if(this.checked)autoIA7(true)">
-        <span><b>Automático: próximos 7 dias</b><br><small style="color:var(--muted)">todo dia a IA preenche sozinha os eventos que montam ou desmontam nos próximos 7 dias — vai andando junto com o calendário. O que você já escolheu na mão nunca é trocado.</small></span>
+        <span><b>Automático: próximos 7 dias</b><br><small style="color:var(--muted)">todo dia a IA preenche sozinha os eventos que montam ou desmontam nos próximos 7 dias — vai andando junto com o calendário (hoje até daqui 7 dias; amanhã entra mais um dia). Os eventos depois disso ficam <b>⏳ aguardando</b>, sem sugestão de equipe, para não encher o quadro de conflito. O que você já escolheu na mão nunca é trocado.</small></span>
       </label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
         <label class="f"><i>Preencher agora até</i><input type="date" id="ia-ate" onchange="renderIAPreencher()"></label>
@@ -1784,6 +1785,7 @@ function diasDe(ev, nome){
     etD.forEach(x=>diasEntre(x.ini, x.fim || x.ini).forEach(d=>out.add(d)));
     const naDesm = temTimeDesm(ev) ? (nome===eqE || timeDesmOp(ev, eqE).includes(nome)) : (nome===eqE || montadoresOp(ev, eqE).includes(nome));
     const naMont = nome===eqE || montadoresOp(ev, eqE).includes(nome);
+    if(naMont) diasAntes(ev).forEach(d=>out.add(d));
     if(!etM.length && naMont) diasEntre(ev.mont, fimMont(ev)).forEach(d=>out.add(d));
     if(!etD.length && naDesm && ev.desm) diasEntre(ev.desm, fimDesm(ev)).forEach(d=>out.add(d));
     const jan = new Set(janelaDias(ev));
@@ -1794,13 +1796,17 @@ function diasDe(ev, nome){
   const out = [];
   const emM = nome===eq || montadoresOp(ev, eq).includes(nome);
   const emD = nome===eq || timeDesmOp(ev, eq).includes(nome);
-  if(emM) diasEntre(ev.mont, fimMont(ev)).forEach(d=>out.push(d));
+  if(emM) diasAntes(ev).concat(diasEntre(ev.mont, fimMont(ev))).forEach(d=>{ if(!out.includes(d)) out.push(d); });
   if(emD) diasEntre(ev.desm, fimDesm(ev)).forEach(d=>{ if(!out.includes(d)) out.push(d); });
-  return out;
+  return out.sort();
 }
 /* janela de dias que o calendário mostra: do evento, com 3 dias de folga nas pontas */
 function janelaDias(ev){
-  const i0 = dia(ev.mont), f0 = dia(fimDesm(ev)) || dia(ev.desm) || i0;
+  /* começa no serviço antes da montagem ou no dia mais cedo marcado para alguém (até 30 dias antes) */
+  let pre = diasAntes(ev)[0];
+  if(dia(ev.mont)){ const lim = somaDiaISO(dia(ev.mont), -30);
+    Object.values(ev.diasPessoa || {}).forEach(r=>{ const c = r && ((r.dias && r.dias.length) ? [...r.dias].sort()[0] : r.ini); if(c && c >= lim && (!pre || c < pre)) pre = c; }); }
+  const i0 = (pre && dia(ev.mont) && pre < dia(ev.mont)) ? pre : dia(ev.mont), f0 = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.mont);
   if(!i0) return [];
   const a = new Date(i0+'T12:00'); a.setDate(a.getDate()-3);
   const b = new Date((f0||i0)+'T12:00'); b.setDate(b.getDate()+3);
@@ -1875,7 +1881,7 @@ function setDiasPessoa(id, nome){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const ini = (document.getElementById('dp-ini')||{}).value || '';
   const fim = (document.getElementById('dp-fim')||{}).value || ini;
-  const padraoIni = dia(ev.mont), padraoFim = dia(fimDesm(ev)) || dia(ev.desm) || padraoIni;
+  const padraoIni = diasAntes(ev)[0] || dia(ev.mont), padraoFim = dia(fimDesm(ev)) || dia(ev.desm) || padraoIni;
   const alvo = alvoDias(ev, nome);
   const lista = diasEntre(ini, fim || ini);
   ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
@@ -1911,7 +1917,7 @@ function editorDiasPessoa(ev, eq){
   const ehProd = nome === produtorDo(ev);
   if(!ehLider && !ehProd && !montadoresBase(ev, eq).includes(nome) && !timeDesmBase(ev, eq).includes(nome)){ pessoaDias = null; return ''; }
   const reg = (ev.diasPessoa||{})[nome] || {};
-  const ini = reg.ini || dia(ev.mont) || '';
+  const ini = reg.ini || diasAntes(ev)[0] || dia(ev.mont) || '';
   const fim = reg.fim || reg.ini || dia(fimDesm(ev)) || dia(ev.desm) || ini;
   const casa = ehLider ? eq : ((todosMontadores().find(t=>t.nome===nome)||{}).equipe);
   const colegas = casa ? [...montadoresBase(ev, eq), eq].filter(n=>n!==nome &&
@@ -1945,7 +1951,7 @@ function editorDiasPessoa(ev, eq){
     (colegas ? '<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="dp-eq" style="width:15px;height:15px"> aplicar à frente inteira ('+(colegas+1)+' pessoas da equipe '+casa+')</label>' : '')+
     '<span style="flex:1"></span>'+
     '<button class="mini" onclick="setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Aplicar</button>'+
-    '<button class="mini" onclick="document.getElementById(\'dp-ini\').value=\''+ (dia(ev.mont)||'') +'\';document.getElementById(\'dp-fim\').value=\''+ (dia(fimDesm(ev))||dia(ev.desm)||'') +'\';setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Voltar ao padrão</button>'+
+    '<button class="mini" onclick="document.getElementById(\'dp-ini\').value=\''+ (diasAntes(ev)[0]||dia(ev.mont)||'') +'\';document.getElementById(\'dp-fim\').value=\''+ (dia(fimDesm(ev))||dia(ev.desm)||'') +'\';setDiasPessoa(\''+ev.id+'\',\''+nome.replace(/'/g,"\\'")+'\')">Voltar ao padrão</button>'+
     '<button class="mini" onclick="pessoaDias=null;verEvento(\''+ev.id+'\')">Fechar</button>'+
     '</div>'+
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
@@ -2180,7 +2186,91 @@ function fimDesmInvalido(ev){
 }
 const fimMont = ev => ev.montFim && dia(ev.montFim) >= dia(ev.mont) && !fimMontInvalido(ev) ? ev.montFim : ev.mont;
 const fimDesm = ev => ev.desmFim && dia(ev.desmFim) >= dia(ev.desm) && !fimDesmInvalido(ev) ? ev.desmFim : ev.desm;
-const diasEquipe = ev => [...new Set([...diasEntre(ev.mont, fimMont(ev)), ...diasEntre(ev.desm, fimDesm(ev))])];
+/* ===== SERVIÇO ANTES DA MONTAGEM =====
+   ev.antes = [{id, ini, fim, oque}] — a equipe do evento trabalha nesses dias antes de montar
+   (marcação, pré-montagem, visita, preparar material). Conta como dia da equipe: prende,
+   gera conflito, entra nos dias seguidos e na Escala. */
+function diasAntes(ev){
+  const out = new Set();
+  (ev && ev.antes || []).forEach(s=>{ if(s && s.ini) diasEntre(s.ini, s.fim || s.ini).forEach(d=>out.add(d)); });
+  return [...out].sort();
+}
+function servicoAntesDia(ev, D){ return (ev && ev.antes || []).find(s=>s && s.ini && diasEntre(s.ini, s.fim || s.ini).includes(D)) || null; }
+const diasEquipe = ev => [...new Set([...diasAntes(ev), ...diasEntre(ev.mont, fimMont(ev)), ...diasEntre(ev.desm, fimDesm(ev))])].sort();
+function addAntes(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const g = k => (document.getElementById(k)||{}).value || '';
+  const oque = g('an-oque').trim(), ini = g('an-ini'), fim = g('an-fim') || ini;
+  if(!ini) return toast('Escolha o dia do serviço.');
+  if(fim < ini) return toast('O "até" está antes do "de".');
+  if(ev.mont && ini >= dia(ev.mont)) return toast('O serviço antes precisa começar antes da montagem (' + fmtD(ev.mont).slice(0,5) + ').');
+  ev.antes = [...(ev.antes||[]), {id:'a'+Date.now().toString(36), ini, fim, oque: oque || 'Serviço antes da montagem'}];
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id);
+  setTimeout(()=>{ try{ irSecao('equipes'); }catch(e){} }, 50);
+  try{ agendarEscalaEv(id); }catch(e){}
+  toast('🔧 Serviço antes da montagem lançado: ' + fmtD(ini).slice(0,5) + (fim!==ini ? ' a ' + fmtD(fim).slice(0,5) : '') + ' — a equipe fica presa nesses dias.');
+}
+function rmAntes(id, sid){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.antes = (ev.antes||[]).filter(s=>s.id!==sid); if(!ev.antes.length) delete ev.antes;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id);
+  setTimeout(()=>{ try{ irSecao('equipes'); }catch(e){} }, 50);
+  try{ agendarEscalaEv(id); }catch(e){}
+}
+function blocoAntes(ev){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const L = ev.antes || [];
+  const ate = ev.mont ? somaDiaISO(dia(ev.mont), -1) : '';
+  return '<div style="grid-column:1/-1;border:1px solid #c9d8f0;background:#f4f8fe;border-radius:10px;padding:10px 12px;margin-bottom:12px">'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">🔧 Serviço antes da montagem</b>'+
+    '<span style="font-size:12px;color:var(--muted)">a equipe vai antes (marcação, pré-montagem, visita…) — prende a equipe e entra na Escala</span></div>'+
+    (L.length ? '<div style="margin-top:8px">'+L.map(s=>'<div class="row" style="padding:6px 0"><span><b>'+fmtD(s.ini).slice(0,5)+(s.fim && s.fim!==s.ini ? ' a '+fmtD(s.fim).slice(0,5) : '')+'</b> · '+esc(s.oque)+
+      ' <span style="color:var(--muted);font-size:12px">('+diasEntre(s.ini, s.fim||s.ini).length+' dia(s))</span></span>'+
+      '<button class="mini danger" onclick="rmAntes(\''+ev.id+'\',\''+s.id+'\')">Tirar</button></div>').join('')+'</div>' : '')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">'+
+      '<label class="f" style="flex:1;min-width:180px;margin:0"><i>O que vai fazer</i><input id="an-oque" placeholder="ex.: marcação do terreno, pré-montagem do palco"></label>'+
+      '<label class="f" style="margin:0"><i>De</i><input type="date" id="an-ini" max="'+ate+'"></label>'+
+      '<label class="f" style="margin:0"><i>Até</i><input type="date" id="an-fim" max="'+ate+'"></label>'+
+      '<button class="mini" style="margin-bottom:2px" onclick="addAntes(\''+ev.id+'\')">+ Lançar</button>'+
+    '</div></div>';
+}
+/* ===== CAMINHÃO QUE FICA NO LOCAL =====
+   ev.fica = { idDoVeiculo: 'desm' (fica até a desmontagem) | 'AAAA-MM-DD' (volta nesse dia) }
+   enquanto está parado no local o caminhão fica preso (não sai para outro evento);
+   o motorista não — ele volta e fica livre */
+function ficaAte(e, vid){ const f = ((e && e.fica) || {})[vid]; if(!f) return null; if(f === 'desm') return dia(e.desm) || null; return f; }
+function extraFica(e, vid){ const ate = ficaAte(e, vid), ini = dia(e.mont); if(!ate || !ini || ate < ini) return []; return diasEntre(ini, ate); }
+/* motorista que fica junto com o caminhão no local: preso nos mesmos dias */
+function motFica(e, vid){ return !!(((e && e.ficaMot) || {})[vid] && ficaAte(e, vid)); }
+function extraFicaMot(e, vid){ return motFica(e, vid) ? extraFica(e, vid) : []; }
+function setFicaMot(id, vid, on){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.ficaMot = Object.assign({}, ev.ficaMot || {});
+  if(on) ev.ficaMot[vid] = true; else delete ev.ficaMot[vid];
+  if(!Object.keys(ev.ficaMot).length) delete ev.ficaMot;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const x = escalaDo(ev, 'mont').find(y=>y.v===vid) || {}, a = ficaAte(ev, vid);
+  toast(on ? '🧑‍✈️ ' + (x.motorista || 'O motorista') + ' fica junto no local até ' + fmtD(a).slice(0,5) + ' — não entra em outra viagem nesses dias.' : '🧑‍✈️ ' + (x.motorista || 'O motorista') + ' volta e fica livre para outras viagens.');
+}
+function ficaAteDesm(e, vid){ const a = ficaAte(e, vid); return !!(a && e.desm && a >= dia(e.desm)); }
+function setFica(id, vid, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.fica = Object.assign({}, ev.fica || {});
+  if(!val || val === 'nao'){ delete ev.fica[vid]; if(ev.ficaMot){ delete ev.ficaMot[vid]; if(!Object.keys(ev.ficaMot).length) delete ev.ficaMot; } }
+  else if(val === 'data') ev.fica[vid] = somaDiaISO(dia(ev.mont) || HOJE, 2);
+  else ev.fica[vid] = val;
+  if(!Object.keys(ev.fica).length) delete ev.fica;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); irSecao && setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const v = veiculos.find(x=>x.id===vid), a = ficaAte(ev, vid);
+  if(v) toast(a ? '📍 ' + v.tipo + ' ' + v.placa + ' fica no local até ' + fmtD(a).slice(0,5) + ' — preso para outros eventos nesses dias.' : '🚚 ' + v.tipo + ' ' + v.placa + ' volta para o galpão depois da montagem.');
+}
+/* texto curto para o card */
+function txtFica(ev){
+  const ids = Object.keys(ev.fica || {}); if(!ids.length) return '';
+  return ids.map(id=>{ const v = veiculos.find(x=>x.id===id), a = ficaAte(ev, id); if(!v || !a) return '';
+    const m = motFica(ev, id) ? ((escalaDo(ev,'mont').find(y=>y.v===id)||{}).motorista || 'motorista') : null;
+    return '📍 ' + v.placa + (m ? ' + ' + m : '') + ' fica' + (m ? 'm' : '') + ' no local ' + (ficaAteDesm(ev, id) ? 'até a desmontagem' : 'até ' + fmtD(a).slice(0,5)); }).filter(Boolean).join(' · ');
+}
 const diasVeiculo = ev => ev.permanece ? diasEntre(ev.mont, fimDesm(ev)) : diasEquipe(ev);
 const periodo2 = (a,b) => dia(a)===dia(b) ? fmtD(a) : fmtD(a)+' a '+fmtD(b);
 
@@ -2495,6 +2585,25 @@ function montarEscala(frota, ag, ev, dEq){
   return escala;
 }
 
+/* ===== JANELA DA IA: só sugere equipe para o que opera nos próximos 7 dias =====
+   o resto fica "aguardando" (sem sugestão, sem prender equipe, sem conflito)
+   e entra sozinho quando o dia chega na janela — hoje 01/10 vê até 08/10; amanhã, até 09/10 */
+const JANELA_IA = 7;
+let IA_ATE_LIVRE = null;   /* quando o gestor pede para preencher além da janela (mês inteiro) */
+function limiteJanelaIA(){ const l = somaDiaISO(HOJE, JANELA_IA); return (IA_ATE_LIVRE && IA_ATE_LIVRE > l) ? IA_ATE_LIVRE : l; }
+function aguardaIA(ev){
+  if(typeof CONFIG === 'undefined' || CONFIG.autoIA7 === false) return null;
+  if(!ev || ev.equipe || ev.esp || !ev.mont || ev.sugerirJa) return null;
+  const ds = diasEquipe(ev).filter(d=>d >= HOJE).sort(); if(!ds.length) return null;
+  if(ds[0] <= limiteJanelaIA()) return null;
+  return somaDiaISO(ds[0], -JANELA_IA);
+}
+function sugerirAgora(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.sugerirJa = true; marcarPlanoSujo(); salvar(); renderQuadro();
+  if(evAberto === id) verEvento(id);
+  toast('🤖 A IA já sugeriu equipe para "' + ev.nome + '" — confira e aceite.');
+}
 function analisar(ev, ag){
   if(evSemNossaEquipe(ev)){
     /* sem equipe nossa: nada a sugerir e nada a conflitar */
@@ -2508,6 +2617,12 @@ function analisar(ev, ag){
     dica:'Abra o evento e corrija o "até" da montagem — provavelmente dia e mês trocados ou ano errado na planilha.'});
   if(fimDesmInvalido(ev)) datasRuins.push({msg:'A desmontagem está de ' + fmtD(ev.desm) + ' até ' + fmtD(ev.desmFim) + ' (' + (difDias(ev.desm, ev.desmFim)+1) + ' dias). A Central está considerando só o dia ' + fmtD(ev.desm) + ' até você corrigir.',
     dica:'Abra o evento e corrija o "até" da desmontagem.'});
+  const quandoIA = aguardaIA(ev);
+  if(quandoIA){
+    const txt = 'Opera daqui a mais de ' + JANELA_IA + ' dias. Para não encher o quadro de conflito com equipes, a IA só sugere a equipe (e produtor e caminhão) em ' + fmtD(quandoIA).slice(0,5) + ', 7 dias antes — com a agenda já mais firme.';
+    return {equipe:null, aguardaIA:quandoIA, produtor: ev.produtor || null, frota:[], escala:[], carga:c,
+      conflitos:[...datasRuins], just:{equipe:txt, produtor:txt}};
+  }
   const dEq = diasEquipe(ev), dVe = diasVeiculo(ev);
   const r = {carga:c, conflitos:[...datasRuins], just:{}, frota:[]};
 
@@ -2612,6 +2727,40 @@ function analisar(ev, ag){
   const frM = (ev.veiculos && ev.veiculos.length) ? ev.veiculos : (r.frota || []);
   const frTodas = [...new Set([...frM, ...(temFrotaDesm(ev) ? (ev.veiculosD||[]) : [])])];
   const emManut = frTodas.map(id=>veiculos.find(v=>v.id===id)).filter(v=>v && v.manut);
+  /* caminhão deste evento que está parado no local de outro evento */
+  try{
+    const viagensEv = [];
+    const dMv = diasEntre(ev.mont, fimMont(ev)), dDv = ev.desm ? diasEntre(ev.desm, fimDesm(ev)) : [];
+    (ev.veiculos||[]).forEach((v,i)=>{ const g = (ev.escala||[]).find(x=>x.i===i) || {}; viagensEv.push({v, dias: g.dia ? [g.dia] : (temFrotaDesm(ev) ? dMv : dMv.concat(ficaAteDesm(ev, v) ? [] : dDv))}); });
+    (temFrotaDesm(ev) ? (ev.veiculosD||[]) : []).forEach((v,i)=>{ const g = (ev.escalaD||[]).find(x=>x.i===i) || {}; viagensEv.push({v, dias: g.dia ? [g.dia] : dDv}); });
+    const ja = new Set();
+    viagensEv.forEach(t=>{
+      eventos.forEach(o=>{
+        if(o.id === ev.id || o.esp || !o.fica || !o.fica[t.v]) return;
+        const pres = extraFica(o, t.v).filter(d=>t.dias.includes(d) && d !== dia(o.mont)); if(!pres.length || ja.has(t.v+o.id)) return;
+        ja.add(t.v+o.id);
+        const vv = veiculos.find(x=>x.id===t.v) || {tipo:'Caminhão', placa:t.v};
+        r.conflitos.push({msg:'O caminhão ' + vv.tipo + ' ' + vv.placa + ' fica parado no local do evento "' + o.nome + '" até ' + fmtD(ficaAte(o, t.v)).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
+          dica:'Troque o caminhão desta operação, ou no outro evento marque para ele voltar antes ("Fica no local").'});
+      });
+    });
+    /* motorista escalado aqui que ficou junto com o caminhão no local de outro evento */
+    const motsEv = [];
+    (ev.escala||[]).forEach(g=>{ if(g.motorista) motsEv.push({m:g.motorista, dias: g.dia ? [g.dia] : (temFrotaDesm(ev) ? dMv : dMv.concat(dDv))}); });
+    (temFrotaDesm(ev) ? (ev.escalaD||[]) : []).forEach(g=>{ if(g.motorista) motsEv.push({m:g.motorista, dias: g.dia ? [g.dia] : dDv}); });
+    motsEv.forEach(t=>{
+      eventos.forEach(o=>{
+        if(o.id === ev.id || o.esp || !o.ficaMot) return;
+        (o.escala||[]).forEach(g=>{
+          if(g.motorista !== t.m || !motFica(o, g.v) || ja.has('m'+t.m+o.id)) return;
+          const pres = extraFica(o, g.v).filter(d=>t.dias.includes(d) && d !== dia(o.mont)); if(!pres.length) return;
+          ja.add('m'+t.m+o.id);
+          r.conflitos.push({msg:'O motorista ' + t.m + ' ficou junto com o caminhão no local do evento "' + o.nome + '" até ' + fmtD(ficaAte(o, g.v)).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
+            dica:'Escale outro motorista para esta viagem, ou no outro evento desmarque "motorista fica junto".'});
+        });
+      });
+    });
+  }catch(e){}
   if(emManut.length)
     r.conflitos.push({msg: emManut.map(v=>v.tipo+' '+v.placa).join(' e ') + ' está em manutenção e segue alocado nesta operação.',
       dica:'Troque por outro veículo no bloco de caminhões, ou tire o veículo da manutenção na aba Veículos.'});
@@ -2710,13 +2859,13 @@ function replanejar(forcar){
     const regDe = (arr, i) => (arr||[]).find(x=>x.i===i) || {};
     if(temFrotaDesm(e)){
       const dM = diasEntre(e.mont, fimMont(e)), dD = diasEntre(e.desm, fimDesm(e));
-      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, r.dia?[r.dia]:dM, e.id); });
+      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, (r.dia?[r.dia]:dM).concat(extraFica(e, v)), e.id); });
       (e.veiculosD||[]).forEach((v,i) => { const r = regDe(e.escalaD, i); reservar(ag,'ve', v, r.dia?[r.dia]:dD, e.id); });
-      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:dM, e.id));
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, (x.dia?[x.dia]:dM).concat(extraFicaMot(e, x.v)), e.id));
       (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:dD, e.id));
     } else {
-      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, r.dia?[r.dia]:diasVeiculo(e), e.id); });
-      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:diasEquipe(e), e.id));
+      (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, (r.dia?[r.dia]:diasVeiculo(e)).concat(extraFica(e, v)), e.id); });
+      (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, (x.dia?[x.dia]:diasEquipe(e)).concat(extraFicaMot(e, x.v)), e.id));
     }
     /* cada montador reservado pelo nome: pega troca entre equipes e piloto emprestado */
     if(e.equipe && e.equipe!==EQUIPE_TERC)
@@ -2727,8 +2876,8 @@ function replanejar(forcar){
     PLANO[e.id] = a;
     if(!e.equipe) reservar(ag,'eq', a.equipe, diasEquipe(e), e.id);
     if(!e.produtor) reservar(ag,'pr', a.produtor, diasEquipe(e), e.id);
-    if(!(e.veiculos||[]).length) a.frota.forEach(v => reservar(ag,'ve', v, diasVeiculo(e), e.id));
-    if(!(e.escala||[]).length) a.escala.forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e), e.id));
+    if(!(e.veiculos||[]).length) a.frota.forEach(v => reservar(ag,'ve', v, diasVeiculo(e).concat(extraFica(e, v)), e.id));
+    if(!(e.escala||[]).length) a.escala.forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e).concat(extraFicaMot(e, x.v)), e.id));
   });
 }
 const plano = ev => PLANO[ev.id] || analisar(ev, novaAgenda());
@@ -2856,7 +3005,7 @@ function opsDoDia(D){
       if(temFrotaDesm(ev)) pegar('desm', dia(ev.desm), false);
       else if((dia(ev.desm)) === D) escalaDo(ev, 'mont').forEach(x=>{
         const v = veiculos.find(y=>y.id===x.v); if(!v) return;
-        viagens.push({v, i:x.i, motorista:x.motorista, fase:'desm', jaLocal: !!ev.permanece, manut: !!v.manut, junto: null});
+        viagens.push({v, i:x.i, motorista:x.motorista, fase:'desm', jaLocal: !!ev.permanece || ficaAteDesm(ev, x.v), manut: !!v.manut, junto: null});
       });
     }
     /* quem trabalha no dia */
@@ -2864,8 +3013,9 @@ function opsDoDia(D){
       .map(pp => Object.assign({}, pp, {mt: manutDia(ev, pp.nome, D)}));
     if(!fase && !viagens.length && !pessoas.length) return;
     const lista = fase==='desm' ? dD : dM;
-    const fora = !fase && !viagens.length;   /* alguém marcado num dia que não é de montagem nem de desmontagem */
-    ops.push({ev, dia: D, fase: fase || (viagens[0] && viagens[0].fase) || 'mont', fora,
+    const antes = !fase ? servicoAntesDia(ev, D) : null;
+    const fora = !fase && !viagens.length && !antes;   /* alguém marcado num dia que não é de montagem nem de desmontagem */
+    ops.push({ev, dia: D, fase: fase || (viagens[0] && viagens[0].fase) || 'mont', fora, antes,
       n: fase ? lista.indexOf(D)+1 : 0, tot: fase ? lista.length : 0,
       hora: String(fase==='desm' ? ev.desm : ev.mont || '').slice(11,16),
       equipe: ev.equipe || plano(ev).equipe, pessoas, viagens});
@@ -2926,6 +3076,7 @@ function rotuloOp(o, sep){
     const noEvento = diasEntre(o.ev.evt, o.ev.evtFim || o.ev.evt).includes(o.dia);
     return (noEvento ? 'Dia do evento' : 'Fora da montagem e da desmontagem') + sep + 'dias marcados de ' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ');
   }
+  if(o.antes) return 'Serviço antes da montagem' + sep + o.antes.oque;
   return (o.fase==='desm' ? 'Desmontagem' : 'Montagem') + (o.tot>1 ? sep + 'dia ' + o.n + ' de ' + o.tot : '');
 }
 /* mensagem do líder só com o que acontece NAQUELE dia */
@@ -2933,7 +3084,7 @@ function mensagemDia(o, D){
   const ev = o.ev, L = [];
   L.push('*' + (D===diaSeguinte() ? 'AMANHÃ' : 'ESCALA') + ' — ' + rotDia(D) + '*');
   L.push('*' + ev.nome + '*');
-  L.push(o.fora ? '📅 ' + rotuloOp(o, ' — ') : (o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
+  L.push(o.fora ? '📅 ' + rotuloOp(o, ' — ') : o.antes ? '🔧 SERVIÇO ANTES DA MONTAGEM — ' + o.antes.oque : (o.fase==='desm' ? '📤 Desmontagem' : '🔨 Montagem') + (o.tot>1 ? ' (dia ' + o.n + ' de ' + o.tot + ')' : '') + (o.hora ? ' — início ' + o.hora : ''));
   if(ev.local && ev.local!=='—') L.push('📍 ' + ev.local + (ev.cidade && ev.cidade!=='—' ? ' — ' + ev.cidade : ''));
   else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
@@ -3149,6 +3300,7 @@ function situacao(ev){
   const a = plano(ev);
   if(ev.esp) return {cor:ESP[ev.esp].cor, classe:ESP[ev.esp].classe, texto:ESP[ev.esp].texto, tipo:'esp', a};
   if(a.conflitos.length) return {cor:'var(--red)', classe:'b-red', texto:'Conflito', tipo:'conflito', a};
+  if(a.aguardaIA && ev.estado!=='confirmado') return {cor:'#8a94a6', classe:'b-gray', texto:'⏳ IA sugere em ' + fmtD(a.aguardaIA).slice(0,5), tipo:'aguarda', a};
   if(ev.estado==='confirmado') return {cor:'var(--green)', classe:'b-green', texto:'Planejado', tipo:'ok', a};
   if(ev.estado==='alinhamento') return {cor:'var(--blue)', classe:'b-blue', texto:'Em alinhamento', tipo:'alinhamento', a};
   return {cor:'var(--amber)', classe:'b-amber', texto:'Sugestão da IA', tipo:'sugestao', a};
@@ -4155,7 +4307,7 @@ function renderSemaforo(){
     ['mont','desm'].forEach(fase=>{
       if(fase==='desm' && !e.desm) return;
       const padrao = fase==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, fase).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ (ocupV[d] = ocupV[d] || new Set()).add(x.v); }); });
+      escalaDo(e, fase).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(fase==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ (ocupV[d] = ocupV[d] || new Set()).add(x.v); }); });
     });
   });
   const linhas = dias.map(d=>{
@@ -5031,7 +5183,7 @@ function ocupadoEm(tipo, chave, dias, exceto){
       return ['mont','desm'].some(f=>{
         if(f==='desm' && !e.desm) return false;
         const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-        return escalaDo(e, f).some(x=> (tipo==='mo' ? x.motorista===chave : x.v===chave) && (x.dia ? [x.dia] : padrao).some(d=>ds.has(d)));
+        return escalaDo(e, f).some(x=> (tipo==='mo' ? x.motorista===chave : x.v===chave) && (x.dia ? [x.dia] : padrao).concat(f==='mont' ? (tipo==='ve' ? extraFica(e, x.v) : extraFicaMot(e, x.v)) : []).some(d=>ds.has(d)));
       });
     }
     return false;
@@ -6345,7 +6497,7 @@ function filtrarPorTipo(t){
 const PERIODOS = [['Hoje',0],['7 dias',7],['15 dias',15],['30 dias',30],['Todos',9999]];
 /* data de HOJE pelo relógio do aparelho (Brasília), não por Greenwich — antes, das 21h à meia-noite já virava o dia */
 const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-const HOJE = isoLocal(new Date());
+let HOJE = isoLocal(new Date());
 
 /* Filtro por data: mostra eventos cuja operação (montagem até desmontagem)
    encosta no intervalo escolhido. Quando ativo, substitui os botões de período. */
@@ -6523,6 +6675,7 @@ function cardEvento(ev, soSetorJC, papel){
   if(s.tipo==='conflito') botoes = '<button onclick="verEvento(\''+ev.id+'\')">Resolver</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else if(s.tipo==='alinhamento') botoes = '<button class="primary" onclick="confirmar(\''+ev.id+'\')">Confirmar</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else if(s.tipo==='esp') botoes = '<button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
+  else if(s.tipo==='aguarda') botoes = '<button title="Fura a fila: a IA sugere a equipe agora, mesmo faltando mais de 7 dias" onclick="sugerirAgora(\''+ev.id+'\')">🤖 Sugerir já</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else if(s.tipo==='sugestao') botoes = '<button class="primary" onclick="aceitar(\''+ev.id+'\')">Aceitar sugestão</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   else botoes = '<button onclick="reabrir(\''+ev.id+'\')">Reabrir</button><button onclick="verEvento(\''+ev.id+'\')">Ver</button>';
   botoes += '<button title="Excluir evento" aria-label="Excluir evento" style="flex:0 0 44px;color:var(--red)" onclick="excluirEvento(\''+ev.id+'\')">✕</button>';
@@ -6540,6 +6693,7 @@ function cardEvento(ev, soSetorJC, papel){
         '<option '+(ev.produtor===SEM_PRODUTOR?'selected':'')+'>'+SEM_PRODUTOR+'</option>'+
         '</select>'+' · '+ev.cidade+((+ev.km||0) ? ' · '+ev.km+' km' : '')+'</div>'+
       '<div class="dates">'+
+        ((ev.antes||[]).length ? '<div class="dchip" style="background:#eaf1fc" title="'+String(ev.antes.map(s=>s.oque).join(' · ')).replace(/"/g,'&quot;')+'"><i>🔧 ANTES</i><b>'+(function(){ const ds = diasAntes(ev); return ds.length===1 ? fmtD(ds[0]).slice(0,5) : fmtD(ds[0]).slice(0,5)+' a '+fmtD(ds[ds.length-1]).slice(0,5); })()+'</b></div><span class="arrow">→</span>' : '')+
         '<div class="dchip"><i>MONTAGEM</i><b>'+(!ev.mont ? 'A definir' : (dia(ev.mont)===dia(fimMont(ev)) ? fmtDH(ev.mont) : periodo2(ev.mont, fimMont(ev))))+'</b></div><span class="arrow">→</span>'+
         '<div class="dchip"><i>EVENTO</i><b>'+periodo2(ev.evt, ev.evtFim||ev.evt)+'</b></div><span class="arrow">→</span>'+
         '<div class="dchip"><i>DESMONT.</i><b>'+periodo2(ev.desm, fimDesm(ev))+'</b></div>'+
@@ -6555,7 +6709,8 @@ function cardEvento(ev, soSetorJC, papel){
         (soSetorJC ? '' : contatosCard(ev))+
         '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (v ? v.tipo+' '+v.placa : 'A definir') : selCaminhao(ev, 'prodsel') + (v ? ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' : '')) + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
           ((ev.fretes||[]).length ? (v?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
-          (v && mot.length ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+'</b></div>'+
+          (v && mot.length ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+
+          (txtFica(ev) ? '<br><span style="color:#1c4fa0;font-weight:600;font-size:12px">'+txtFica(ev)+'</span>' : '')+'</b></div>'+
       '</div>'+
       (soSetorJC ? '' : semaforoCard(ev))+
       (!soSetorJC ? '' : '<div class="mats">'+
@@ -6626,6 +6781,7 @@ function verEvento(id){
   if(ev.esp) acoes += '<button class="btn-orange" onclick="definirEsp(\''+ev.id+'\',\''+ev.esp+'\')">Voltar ao planejamento</button>';
   else if(s.tipo==='sugestao' || s.tipo==='conflito') acoes += '<button class="mini" onclick="alinhar(\''+ev.id+'\')">Marcar em alinhamento</button><button class="btn-orange" onclick="aceitar(\''+ev.id+'\')">Aceitar sugestão</button>';
   else if(s.tipo==='alinhamento') acoes += '<button class="btn-orange" onclick="confirmar(\''+ev.id+'\')">Confirmar planejamento</button>';
+  else if(s.tipo==='aguarda') acoes += '<button class="btn-orange" onclick="sugerirAgora(\''+ev.id+'\')">🤖 Sugerir equipe já</button>';
   else acoes += '<button class="mini" onclick="reabrir(\''+ev.id+'\')">Reabrir planejamento</button>';
 
   document.getElementById('m-ev').innerHTML =
@@ -6679,6 +6835,7 @@ function verEvento(id){
           '<input type="number" min="0" value="'+(+ev.tercValor||'')+'" placeholder="R$" title="Valor combinado com a terceirizada" style="width:110px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setCampo(\''+ev.id+'\',\'tercValor\',+this.value||null)">' : '')+
       '</div>'+
       '<div class="fgrid">'+
+      (eq!==EQUIPE_TERC ? blocoAntes(ev) : '')+
       '<label class="f"><i>Equipe (montagem e desmontagem)</i><select onchange="setCampo(\''+ev.id+'\',\'equipe\',this.value)">'+
         equipes.map(e=>'<option '+(e.nome===eq?'selected':'')+'>'+e.nome+'</option>').join('')+
         '<option '+(eq===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option></select></label>'+
@@ -6733,7 +6890,7 @@ function verEvento(id){
     '<div class="sec" id="sec-caminhoes"><h4>'+dotSec(ev,'caminhoes')+' 🚚 CAMINHÕES</h4>'+
       '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Frete fechado por fora: lance no quadro de fretes aqui embaixo.</div>'+
       '<div class="info">'+
-      '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':'Retorna ao galpão')+'</b></div>'+
+      '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':(txtFica(ev) ? '<span style="color:#1c4fa0">'+txtFica(ev)+'</span>' : 'Retorna ao galpão'))+'</b></div>'+
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
       blocoTransito(ev)+
       '<div style="grid-column:1/-1"><i>⛽ Custo da viagem</i>'+blocoCusto(ev)+'</div>'+
@@ -6855,6 +7012,18 @@ const PRAZOS_PADRAO = {datas:10, equipes:7, caminhoes:3, estruturas:7, checklist
 function donoSec(k){ const d = (CONFIG.donosSec||{})[k]; return (d && String(d).trim()) || DONOS_PADRAO[k] || ''; }
 function prazoSec(k){ const p = (CONFIG.prazosSec||{})[k]; return (p === undefined || p === null || p === '') ? PRAZOS_PADRAO[k] : (+p || 0); }
 let SEC_CACHE = new Map();
+/* a tela fica aberta dias (TV, escritório): quando vira o dia, a janela anda sozinha */
+function virarDia(){
+  const h = isoLocal(new Date());
+  if(h === HOJE) return false;
+  HOJE = h;
+  try{ limparSecCache(); }catch(e){}
+  marcarPlanoSujo();
+  try{ renderQuadro(); }catch(e){}
+  try{ if(CONFIG.autoIA7 !== false) autoIA7(); }catch(e){}
+  return true;
+}
+if(typeof setInterval === 'function' && typeof window !== 'undefined') setInterval(()=>{ try{ virarDia(); }catch(e){} }, 60000);
 function limparSecCache(){ SEC_CACHE = new Map(); EMENDAS = null; OCUP_CACHE = {}; SEGUIDOS = null; DIAS_PESSOA = null; CONF_PESSOAS = null; CAM_RUA = null; }
 function secoesStatus(ev){
   const ck = ev.id + '|' + HOJE;
@@ -6891,6 +7060,7 @@ function secoesStatusCalc(ev){
   const eq = ev.equipe || a.equipe;
   if(terceiro) put('equipes','verde','evento todo terceirizado');
   else if(eq === EQUIPE_TERC) put('equipes', ev.tercEmpresa ? 'verde' : 'amar', ev.tercEmpresa ? 'terceirizada: ' + ev.tercEmpresa : 'terceirizada sem empresa definida');
+  else if(!eq && a.aguardaIA) put('equipes','amar','a IA sugere a equipe em ' + fmtD(a.aguardaIA).slice(0,5) + ' (7 dias antes)');
   else if(!eq) put('equipes','verm','sem equipe');
   else if(confl.some(c=>/equipe|montador|l[ií]der/i.test(c.msg||''))) put('equipes','verm','equipe em conflito com outro evento');
   else if(conflitosPessoas().some(c=>c.ev===ev)){ const cs = conflitosPessoas().filter(c=>c.ev===ev); put('equipes', cs.some(c=>c.nome===eq) ? 'verm' : 'amar', cs.slice(0,3).map(c=>c.nome+' '+c.motivo+' '+fmtD(c.dia).slice(0,5)).join(', ')+(cs.length>3?' e mais '+(cs.length-3):'')); }
@@ -6899,6 +7069,7 @@ function secoesStatusCalc(ev){
   /* CAMINHÕES */
   const fr = frotaDo(ev) || [], fretes = ev.fretes || [];
   if(terceiro) put('caminhoes','verde','evento todo terceirizado');
+  else if(!fr.length && !fretes.length && a.aguardaIA) put('caminhoes','amar','a IA sugere o caminhão em ' + fmtD(a.aguardaIA).slice(0,5));
   else if(!fr.length && !fretes.length) put('caminhoes','verm','sem caminhão nem frete');
   else if(confl.some(c=>/caminh|ve[ií]culo|motorista|placa|carreta|frota/i.test(c.msg||''))) put('caminhoes','verm','caminhão ou motorista em conflito');
   else if(fr.length && escalaDo(ev,'mont').some(x=>!x.motorista)) put('caminhoes','amar','caminhão sem motorista');
@@ -7178,7 +7349,7 @@ function calcSeguidos(){
     ['mont','desm'].forEach(f=>{
       if(f === 'desm' && !ev.desm) return;
       const padrao = f === 'desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
-      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
+      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).concat(f === 'mont' ? extraFicaMot(ev, x.v) : []).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
     });
   });
   (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s).filter(d=>d >= ini && d <= fim); pessoasBase(s).forEach(p=>ds.forEach(d=>marca(p, produtores.some(x=>x.nome===p) ? 'produtor' : 'montador', d, 'base:' + s.id))); });
@@ -7328,7 +7499,7 @@ function caminhoesNaRua(){
     ['mont','desm'].forEach(f=>{
       if(f==='desm' && !e.desm) return;
       const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
+      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(f==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
     });
   });
   const lim = limiteCaminhao(), out = [];
@@ -7627,7 +7798,7 @@ function ocupacaoDia(d){
     ['mont','desm'].forEach(f=>{
       if(f==='desm' && !e.desm) return;
       const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(x.v && (x.dia ? [x.dia] : padrao).includes(d)) vs.add(x.v); });
+      escalaDo(e, f).forEach(x=>{ if(x.v && ((x.dia ? [x.dia] : padrao).includes(d) || (f==='mont' && extraFica(e, x.v).includes(d)))) vs.add(x.v); });
     });
     if(op) n++;
   });
@@ -7918,8 +8089,11 @@ function aplicarIA(ev){
   return true;
 }
 function preencherIA(ate, silencioso){
-  const L = alvosIA(ate), feitos = [], pulados = [];
-  L.forEach(ev=>{ if(aplicarIA(ev)) feitos.push(ev); else pulados.push(ev); });
+  const feitos = [], pulados = [];
+  IA_ATE_LIVRE = ate;
+  try{ const L = alvosIA(ate);
+    L.forEach(ev=>{ if(aplicarIA(ev)) feitos.push(ev); else pulados.push(ev); });
+  } finally { IA_ATE_LIVRE = null; marcarPlanoSujo(); }
   if(feitos.length){
     salvar(); renderQuadro();
     feitos.forEach(ev=>{ try{ enviarParaEscala(ev.id, true); }catch(e){} });
@@ -7944,6 +8118,10 @@ function renderIAPreencher(){
   const box = document.getElementById('ia-res'); if(!box) return;
   const ate = (document.getElementById('ia-ate')||{}).value || fimDoMes(HOJE);
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  IA_ATE_LIVRE = ate;
+  try{ return renderIAPreencher2(box, ate, esc); } finally { IA_ATE_LIVRE = null; marcarPlanoSujo(); }
+}
+function renderIAPreencher2(box, ate, esc){
   replanejar(true);
   const L = alvosIA(ate);
   if(!L.length){ box.innerHTML = '<div class="alert green" style="margin:0">Todos os eventos até <b>'+fmtD(ate)+'</b> já estão com equipe definida. 👍</div>'; return; }
@@ -8486,7 +8664,22 @@ function blocoFrota(ev, modo){
              '<span style="display:flex;gap:10px;align-items:center">'+
              '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              sel+
-             '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>';
+             '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
+             (fase==='mont' && conta[x.v]===1 ? (function(){
+               const f = (ev.fica||{})[x.v], ate = ficaAte(ev, x.v);
+               const val = !f ? 'nao' : f==='desm' ? 'desm' : 'data';
+               return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local do evento?</span>'+
+                 '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+
+                 '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px'+(f?';border-color:#1c4fa0;color:#1c4fa0;font-weight:600':'')+'" onchange="setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">'+
+                   '<option value="nao"'+(val==='nao'?' selected':'')+'>Não — volta pro galpão</option>'+
+                   '<option value="data"'+(val==='data'?' selected':'')+'>Fica alguns dias…</option>'+
+                   (ev.desm ? '<option value="desm"'+(val==='desm'?' selected':'')+'>Fica até a desmontagem</option>' : '')+
+                 '</select>'+
+                 (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" min="'+(dia(ev.mont)||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
+                 (ate ? '<span class="tag" style="color:#1c4fa0">'+extraFica(ev, x.v).length+' dia(s) parado</span>' : '')+
+                 (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFica(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão — ele fica preso para outras viagens nesses dias"><input type="checkbox" '+(motFica(ev, x.v)?'checked':'')+' onchange="setFicaMot(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
+                 '</span></div>';
+             })() : '');
     }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>';
 }
 /* bloco da desmontagem: fechado por padrão, abre quando os caminhões são outros */
@@ -8505,7 +8698,8 @@ function blocoDesmontagem(ev){
     const linhas = escalaDo(ev,'mont').map(x=>{
       const v2 = veiculos.find(y=>y.id===x.v); if(!v2) return '';
       return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+
-        (x.motorista?' <span style="color:var(--muted);font-size:12px">'+x.motorista+'</span>':'')+'</span>'+
+        (x.motorista?' <span style="color:var(--muted);font-size:12px">'+x.motorista+'</span>':'')+
+        (ficaAteDesm(ev, x.v) ? ' <span class="tag" style="color:#1c4fa0">📍 já está no local</span>' : '')+'</span>'+
         '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">volta em '+
         '<input type="date" value="'+padraoD+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--muted)" title="Se este caminhão volta em outro dia (dias alternados), troque aqui — a frota da desmontagem passa a ser própria" onchange="diaDesmViagem(\''+ev.id+'\','+x.i+',this.value)"></span></div>';
     }).join('');
