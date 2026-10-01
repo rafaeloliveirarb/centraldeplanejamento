@@ -7496,13 +7496,13 @@ let CAM_RUA = null;
 function limiteCaminhao(){ const v = +CONFIG.limiteCaminhaoRua; return v >= 3 ? v : 10; }
 function caminhoesNaRua(){
   if(CAM_RUA) return CAM_RUA;
-  const porV = {};
+  const porV = {}, desde = CONFIG.seguidosDesde || '2026-10-01';   /* mesma data de início dos dias seguidos */
   eventos.forEach(e=>{
     if(e.esp==='cancelado' || e.esp==='terceirizado' || !e.mont) return;
     ['mont','desm'].forEach(f=>{
       if(f==='desm' && !e.desm) return;
       const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(f==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
+      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(f==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ if(d < desde) return; (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
     });
   });
   const lim = limiteCaminhao(), out = [];
@@ -7679,7 +7679,7 @@ function jKm(){
 function jCam(){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const L = caminhoesNaRua().filter(c=>c.fim >= HOJE), lim = limiteCaminhao();
-  return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:13px;flex-wrap:wrap">Avisar quando o caminhão passar de <input type="number" min="3" value="'+lim+'" onchange="CONFIG.limiteCaminhaoRua=Math.max(3,parseInt(this.value)||10);salvar();renderJornada()" style="width:60px;border:1px solid var(--line);border-radius:8px;padding:6px 8px"> dias seguidos fora do galpão</div>'+
+  return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:13px;flex-wrap:wrap">Avisar quando o caminhão passar de <input type="number" min="3" value="'+lim+'" onchange="CONFIG.limiteCaminhaoRua=Math.max(3,parseInt(this.value)||10);salvar();renderJornada()" style="width:60px;border:1px solid var(--line);border-radius:8px;padding:6px 8px"> dias seguidos fora do galpão <span style="color:var(--muted);font-size:12px">· contando a partir de '+fmtD(CONFIG.seguidosDesde || '2026-10-01').slice(0,5)+'</span></div>'+
     (L.length ? '<table class="jt"><thead><tr><th>Caminhão</th><th>Dias seguidos fora</th><th>Período</th></tr></thead><tbody>'+
       L.map(c=>'<tr><td><b>'+esc(c.v.tipo+' '+c.v.placa)+'</b>'+(c.v.agregado?' <small>(agregado)</small>':'')+'</td><td><span class="jbar" style="width:'+Math.min(180,c.n*10)+'px;background:'+(c.passou?'#c0392b':'#1c4fa0')+'"></span><b style="color:'+(c.passou?'#c0392b':'var(--ink)')+'">'+c.n+'</b>'+(c.passou?' — programar revisão':'')+'</td><td>'+fmtD(c.ini).slice(0,5)+' a '+fmtD(c.fim).slice(0,5)+'</td></tr>').join('')+'</tbody></table>'
       : '<div class="alert green" style="margin:0">Nenhum caminhão emendando dias fora daqui pra frente.</div>');
