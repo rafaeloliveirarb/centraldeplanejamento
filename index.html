@@ -809,6 +809,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <b>🕐 Hora de saída</b>
         <label title="Sentido Rio: 2 eixos proibido das 4h às 10h em dia útil; 3 eixos ou mais proibido das 4h ao meio-dia, todos os dias" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cfg-ponte0" onchange="CONFIG.ponteManual=!this.checked;salvar();renderQuadro();renderCadastros()"> 🌉 Ponte: regra da Ecovias pelos eixos do caminhão</label>
+        <label title="Para essas cidades a rota passa por Magé (BR-493), fugindo da ponte e da Av. Brasil" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="cfg-mage" onchange="CONFIG.viaMage=this.checked;salvar();renderQuadro();calcularKmEmLote(false)"> 🛣 Preferir rota via Magé para:</label>
+        <input id="cfg-mage-cid" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px" title="Cidades separadas por vírgula" onchange="CONFIG.mageCidades=this.value;salvar();renderQuadro();calcularKmEmLote(false)">
         <label>Pegou horário de ponte, sai às <input id="cfg-ponte3" type="time" title="Padrão dos motoristas quando precisa atravessar antes do fechamento" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteSaida=this.value||'02:30';salvar();renderQuadro()"></label>
         <label style="color:var(--muted)">manual: até <input id="cfg-ponte" type="time" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px" onchange="CONFIG.ponteAte=this.value||'06:00';salvar();renderQuadro()"></label>
         <label style="color:var(--muted)">e depois das <input id="cfg-ponte2" type="time" title="Deixe vazio se não pode atravessar à noite. Só vale com a regra da Ecovias desligada" onchange="CONFIG.ponteDepois=this.value||'';salvar();renderQuadro()" style="border:1px solid var(--line);border-radius:7px;padding:5px 8px"></label>
@@ -3578,10 +3580,32 @@ function paramsCaminhao(v){
   return '&vehicleCommercial=true&vehicleHeight=' + d.altura.toFixed(2) + '&vehicleLength=' + d.comprimento.toFixed(2) + '&vehicleWidth=' + d.largura.toFixed(2) + '&vehicleWeight=' + d.peso +
     (String(v.tipo).toUpperCase()==='CARRETA' ? '&vehicleAxleWeight=10000' : '');
 }
+/* ===== ROTA VIA MAGÉ (BR-493) =====
+   Para a Baixada e a Serra (Duque de Caxias, Petrópolis...) a regra da casa é ir por Magé,
+   fugindo da Ponte Rio-Niterói e da Av. Brasil. Vale no km, no tempo de estrada, no trânsito,
+   no mapa e no link do Google Maps do motorista. */
+const MAGE_PT = {lat:-22.6528, lon:-43.0408, nome:'Magé, RJ'};
+const MAGE_PADRAO = 'Duque de Caxias, Petrópolis, Itaipava, Magé, Guapimirim, Teresópolis, Belford Roxo, São João de Meriti, Nova Iguaçu, Mesquita, Nilópolis, Queimados, Japeri, Areal, Três Rios, Paraíba do Sul';
+function cidadesMage(){ return String(CONFIG.mageCidades == null ? MAGE_PADRAO : CONFIG.mageCidades).split(/[,;\n]/).map(s=>semAcentoSimples(s).trim()).filter(Boolean); }
+function usaMageAuto(ev){
+  if(CONFIG.viaMage === false || !ev) return false;
+  const txt = semAcentoSimples((ev.cidade||'') + ' ' + (ev.local||'') + ' ' + (ev.bairro||''));
+  return cidadesMage().some(c=>c && txt.includes(c));
+}
+function usaMage(ev){ if(!ev) return false; if(ev.viaMage === 'sim') return true; if(ev.viaMage === 'nao') return false; return usaMageAuto(ev); }
+/* destino com o ponto de passagem por Magé quando a regra vale */
+function comVia(ev, dst){ return (dst && usaMage(ev)) ? Object.assign({}, dst, {via:[MAGE_PT]}) : dst; }
+function viaLocs(b){ return (b && b.via || []).map(p=>p.lat + ',' + p.lon); }
+function setViaMage(id, v){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.viaMage = v || null; ev.kmVia = null;
+  salvar(); renderQuadro(); verEvento(id);
+  if(CONFIG.galpao) calcularKm(id, true).then(r=>{ if(r){ verEvento(id); toast('🛣 Rota ' + (usaMage(ev) ? 'via Magé' : 'direta') + ': ' + ev.km + ' km do galpão.'); } });
+}
 /* rota de caminhão pelo TomTom (com medidas); devolve km, tempo, pontos e a ponte */
 const ROTAS = {};   /* ev.id -> pontos [[lat,lon],...] (só na memória, para o mapa) */
 async function rotaTomTom(a, b, v, extra){
-  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + a.lat + ',' + a.lon + ':' + b.lat + ',' + b.lon + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) +
+  const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + [a.lat + ',' + a.lon, ...viaLocs(b), b.lat + ',' + b.lon].join(':') + '/json?key=' + encodeURIComponent(CONFIG.tomtomKey) +
     '&travelMode=truck&routeType=fastest&sectionType=tollRoad' + paramsCaminhao(v) + (extra || '');
   const r = await fetch(u);
   if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'rota ' + r.status);
@@ -3599,7 +3623,7 @@ async function rotaTomTom(a, b, v, extra){
 async function rotaKm(a, b, v){
   if(CONFIG.googleKey){ try{ const g = await rotaGoogle(a, b, v, null); if(g) return g; }catch(e){} }
   if(CONFIG.tomtomKey){ try{ const t = await rotaTomTom(a, b, v); if(t) return t; }catch(e){} }
-  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + a.lon + ',' + a.lat + ';' + b.lon + ',' + b.lat + '?overview=full&geometries=geojson');
+  const r = await fetch('https://router.project-osrm.org/route/v1/driving/' + [a.lon + ',' + a.lat, ...(b.via||[]).map(p=>p.lon + ',' + p.lat), b.lon + ',' + b.lat].join(';') + '?overview=full&geometries=geojson');
   if(!r.ok) throw new Error('rota ' + r.status);
   const j = await r.json();
   if(!j.routes || !j.routes[0]) return null;
@@ -3630,7 +3654,8 @@ async function calcularKm(id, silencioso){
     if(!dest && temCid){ dest = await geocodEndereco(cid + ', Brasil'); fonte = 'cidade'; }
     if(!dest){ if(!silencioso) toast('Não achei "' + (loc || cid) + '" no mapa. Confira o local ou a cidade do evento.'); return null; }
     const cam = maiorCaminhao(ev, 'mont');
-    const rt = await rotaKm(orig, dest, cam);
+    const rt = await rotaKm(orig, comVia(ev, dest), cam);
+    ev.kmVia = usaMage(ev) ? 'mage' : 'direta';
     if(rt == null){ if(!silencioso) toast('Não consegui traçar a rota até o evento.'); return null; }
     if(rt.pts){ ROTAS[ev.id] = rt.pts; ev.pracas = pracasNaRota(rt.pts); }
     if(rt.fonte === 'google') ev.pedagioG = rt.pedagio != null ? {carro: Math.round(rt.pedagio*100)/100, t: Date.now()} : null;
@@ -3650,7 +3675,8 @@ async function calcularKm(id, silencioso){
 let kmRodando = false;
 async function calcularKmEmLote(manual){
   if(kmRodando) return; kmRodando = true;
-  const alvo = eventos.filter(e=>!e.esp && !(+e.km) && ((e.local && e.local!=='—') || (e.cidade && e.cidade!=='—')));
+  /* sem km, ou com km calculado antes da regra de Magé (rota mudou) */
+  const alvo = eventos.filter(e=>!e.esp && (!(+e.km) || (e.kmFonte && (usaMage(e) ? 'mage' : 'direta') !== (e.kmVia || 'direta'))) && ((e.local && e.local!=='—') || (e.cidade && e.cidade!=='—')));
   const st = document.getElementById('km-status');
   let ok = 0, falha = 0;
   try{
@@ -3693,6 +3719,7 @@ function cfgSaida(){
 function passaPonte(ev){
   if(ev.ponte === 'sim') return true;
   if(ev.ponte === 'nao') return false;
+  if(usaMage(ev)) return false;   /* rota por Magé não atravessa a ponte */
   if(typeof ev.ponteRota === 'boolean') return ev.ponteRota;
   const cid = semAcentoSimples(ev.cidade||''), gal = semAcentoSimples(CONFIG.galpao||'');
   if(!gal) return false;
@@ -3803,7 +3830,10 @@ function blocoSaida(ev){
     '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
       ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
         '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
-        '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select></div>';
+        '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select>' +
+      ' · 🛣 Via Magé: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px' + (usaMage(ev) ? ';color:#1c4fa0;font-weight:700' : '') + '" onchange="setViaMage(\'' + ev.id + '\',this.value)">' +
+        '<option value=""' + (!ev.viaMage ? ' selected' : '') + '>automático (' + (usaMageAuto(ev) ? 'vai por Magé' : 'rota direta') + ')</option>' +
+        '<option value="sim"' + (ev.viaMage==='sim' ? ' selected' : '') + '>ir por Magé</option><option value="nao"' + (ev.viaMage==='nao' ? ' selected' : '') + '>rota direta</option></select></div>';
 }
 function passaPonteAuto(ev){ const s = ev.ponte; ev.ponte = null; const r = passaPonte(ev); ev.ponte = s; return r; }
 function setPonte(id, v){
@@ -3860,6 +3890,7 @@ async function rotaGoogle(a, b, v, quando){
     travelMode: 'DRIVE', routingPreference: 'TRAFFIC_AWARE',
     extraComputations: ['TOLLS'], languageCode: 'pt-BR', units: 'METRIC'
   };
+  if(b.via && b.via.length) corpo.intermediates = b.via.map(p=>({via:true, location:{latLng:{latitude:p.lat, longitude:p.lon}}}));
   if(quando && new Date(quando) - Date.now() > 60000) corpo.departureTime = new Date(quando).toISOString();
   const r = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
     method:'POST',
@@ -3943,7 +3974,7 @@ function linkGoogleRota(ev){
   const o = CONFIG.galpaoCoord ? CONFIG.galpaoCoord.lat + ',' + CONFIG.galpaoCoord.lon : (CONFIG.galpao || '');
   const g = evGeo(ev);
   const d = g ? g.lat + ',' + g.lon : destinoTexto(ev);
-  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(o) + '&destination=' + encodeURIComponent(d);
+  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(o) + '&destination=' + encodeURIComponent(d) + (usaMage(ev) ? '&waypoints=' + encodeURIComponent(MAGE_PT.lat + ',' + MAGE_PT.lon) : '');
 }
 function linkWaze(ev){
   const g = evGeo(ev);
@@ -3951,7 +3982,8 @@ function linkWaze(ev){
 }
 function botoesRota(ev){
   if(!destinoTexto(ev)) return '';
-  return '<a class="mini" style="text-decoration:none;display:inline-block" target="_blank" href="'+linkGoogleRota(ev)+'">🗺 Google Maps</a> '+
+  return (usaMage(ev) ? '<span class="tag" style="color:#1c4fa0;margin-right:4px" title="Regra da casa: ir por Magé (BR-493). No Waze, passe por Magé manualmente">🛣 via Magé</span> ' : '')+
+         '<a class="mini" style="text-decoration:none;display:inline-block" target="_blank" href="'+linkGoogleRota(ev)+'">🗺 Google Maps'+(usaMage(ev)?' (via Magé)':'')+'</a> '+
          '<a class="mini" style="text-decoration:none;display:inline-block" target="_blank" href="'+linkWaze(ev)+'">🚗 Waze</a>';
 }
 async function consultarTransito(ev, fase, D, forcar){
@@ -3973,14 +4005,14 @@ async function consultarTransito(ev, fase, D, forcar){
   try{
     let atraso = 0, minTot = 0, kmTot = 0, evs = [], pts2 = null;
     if(CONFIG.googleKey){
-      const g = await rotaGoogle(o, dst, maiorCaminhao(ev, fase), dep === 'now' ? null : dep);
+      const g = await rotaGoogle(o, comVia(ev, dst), maiorCaminhao(ev, fase), dep === 'now' ? null : dep);
       if(!g) throw new Error('sem rota');
       atraso = g.atraso; minTot = Math.round(g.min); kmTot = Math.round(g.km);
       pts2 = g.pts.map(p2=>({latitude:p2[0], longitude:p2[1]}));
       if(g.pts.length) ROTAS[ev.id] = g.pts;
       if(g.pedagio != null && !ev.pedagioG) { ev.pedagioG = {carro: Math.round(g.pedagio*100)/100, t: Date.now()}; try{ salvar(); }catch(e){} }
     } else {
-      const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + o.lat + ',' + o.lon + ':' + dst.lat + ',' + dst.lon + '/json' +
+      const u = 'https://api.tomtom.com/routing/1/calculateRoute/' + [o.lat + ',' + o.lon, ...viaLocs(comVia(ev, dst)), dst.lat + ',' + dst.lon].join(':') + '/json' +
         '?key=' + encodeURIComponent(CONFIG.tomtomKey) + '&traffic=true&travelMode=truck&sectionType=traffic&routeType=fastest&departAt=' + encodeURIComponent(dep) + paramsCaminhao(maiorCaminhao(ev, fase));
       const r = await fetch(u);
       if(!r.ok) throw new Error(r.status === 403 || r.status === 401 ? 'chave inválida' : 'erro ' + r.status);
@@ -4558,7 +4590,7 @@ async function checarBloqueios(forcar){
         if(!forcar && BLOQ[k] && Date.now() - BLOQ[k].t < 60*60*1000) continue;
         const cam = maiorCaminhao(o.ev, o.fase);
         let pts = ROTAS[o.ev.id], semTr = null;
-        try{ semTr = await rotaTomTom(g0, dst, cam, '&traffic=false'); if(semTr && semTr.pts) pts = ROTAS[o.ev.id] = semTr.pts; }catch(e){}
+        try{ semTr = await rotaTomTom(g0, comVia(o.ev, dst), cam, '&traffic=false'); if(semTr && semTr.pts) pts = ROTAS[o.ev.id] = semTr.pts; }catch(e){}
         if(!pts || !pts.length) continue;
         const la = pts.map(p=>p[0]), lo = pts.map(p=>p[1]);
         const bb = [Math.min(...lo)-0.02, Math.min(...la)-0.02, Math.max(...lo)+0.02, Math.max(...la)+0.02].map(x=>x.toFixed(4)).join(',');
@@ -4584,7 +4616,7 @@ async function checarBloqueios(forcar){
         }catch(e){}
         let desvio = null;
         if(itens.length){
-          try{ const comTr = await rotaTomTom(g0, dst, cam, '&traffic=true');
+          try{ const comTr = await rotaTomTom(g0, comVia(o.ev, dst), cam, '&traffic=true');
             if(comTr && semTr) desvio = {km: Math.round(comTr.km - semTr.km), min: Math.round(comTr.min - semTr.min)};
             if(comTr && comTr.pts) ROTAS[o.ev.id + ':desvio'] = comTr.pts; }catch(e){}
         }
@@ -10314,6 +10346,8 @@ function renderCadastros(){
   { const db = document.getElementById('cfg-datas'); if(db) db.innerHTML = htmlDatasEspeciais(); }
   { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || ''; }
   { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
+  { const m1 = document.getElementById('cfg-mage'); if(m1) m1.checked = CONFIG.viaMage !== false;
+    const m2 = document.getElementById('cfg-mage-cid'); if(m2 && document.activeElement !== m2) m2.value = CONFIG.mageCidades == null ? MAGE_PADRAO : CONFIG.mageCidades; }
   { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-ponte3',c.ponteSaida],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; });
     const p0 = document.getElementById('cfg-ponte0'); if(p0) p0.checked = !c.ponteManual;
     const af = document.getElementById('cfg-autofin'); if(af && document.activeElement !== af) af.value = diasAutoFinal();
@@ -12034,7 +12068,7 @@ async function desenharMapaTV(dest){
   const pts = [[g0.lat, g0.lon]];
   /* rotas: as que já estão na memória; as que faltam, busca (só com a chave) */
   for(const d of dest){
-    if(!ROTAS[d.ev.id] && key){ try{ const r = await rotaTomTom(g0, d.g, maiorCaminhao(d.ev, 'mont')); if(r && r.pts) ROTAS[d.ev.id] = r.pts; }catch(e){} }
+    if(!ROTAS[d.ev.id] && key){ try{ const r = await rotaTomTom(g0, comVia(d.ev, d.g), maiorCaminhao(d.ev, 'mont')); if(r && r.pts) ROTAS[d.ev.id] = r.pts; }catch(e){} }
     const cor = d.n === 0 ? '#f0851e' : corEquipe(d.o.equipe) || '#3d7be0';
     if(ROTAS[d.ev.id]) L.polyline(ROTAS[d.ev.id], {color: cor, weight: d.n===0 ? 6 : 4, opacity: d.n===0 ? .95 : .6}).addTo(tvCamadas);
     const rot = '<div style="background:'+(d.n===0?'#f0851e':'#16234b')+';color:#fff;border:2px solid #fff;border-radius:9px;padding:5px 10px;font:700 15px Segoe UI,Arial;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)">'+
@@ -12595,6 +12629,7 @@ async function salvar(){
       carregarRecados();
       setTimeout(()=>{ try{ if(arredondarHorarios()){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
       setTimeout(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 5000);
+      setTimeout(()=>{ try{ if(CONFIG.galpao) calcularKmEmLote(false); }catch(e){} }, 30000);   /* refaz o km de quem passou a ir por Magé */
       setInterval(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 600000);
       setTimeout(()=>{ try{ autoIA7(); }catch(e){} }, 15000);
       setTimeout(()=>{ try{ autoFinalizar(); }catch(e){} }, 20000);
