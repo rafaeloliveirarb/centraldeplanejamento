@@ -2232,8 +2232,8 @@ function blocoAntes(ev){
       '<button class="mini danger" onclick="rmAntes(\''+ev.id+'\',\''+s.id+'\')">Tirar</button></div>').join('')+'</div>' : '')+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">'+
       '<label class="f" style="flex:1;min-width:180px;margin:0"><i>O que vai fazer</i><input id="an-oque" placeholder="ex.: marcação do terreno, pré-montagem do palco"></label>'+
-      '<label class="f" style="margin:0"><i>De</i><input type="date" id="an-ini" max="'+ate+'"></label>'+
-      '<label class="f" style="margin:0"><i>Até</i><input type="date" id="an-fim" max="'+ate+'"></label>'+
+      '<label class="f" style="margin:0"><i>De</i><input type="date" id="an-ini"></label>'+
+      '<label class="f" style="margin:0"><i>Até</i><input type="date" id="an-fim"></label>'+
       '<button class="mini" style="margin-bottom:2px" onclick="addAntes(\''+ev.id+'\')">+ Lançar</button>'+
     '</div></div>';
 }
@@ -2242,7 +2242,13 @@ function blocoAntes(ev){
    enquanto está parado no local o caminhão fica preso (não sai para outro evento);
    o motorista não — ele volta e fica livre */
 function ficaAte(e, vid){ const f = ((e && e.fica) || {})[vid]; if(!f) return null; if(f === 'desm') return dia(e.desm) || null; return f; }
-function extraFica(e, vid){ const ate = ficaAte(e, vid), ini = dia(e.mont); if(!ate || !ini || ate < ini) return []; return diasEntre(ini, ate); }
+function extraFica(e, vid){
+  const ate = ficaAte(e, vid); if(!ate) return [];
+  const saidas = (e.escala||[]).filter(x=>x.v===vid && x.dia).map(x=>x.dia);
+  const ini = [dia(e.mont), ...saidas].filter(Boolean).sort()[0];
+  if(!ini || ate < ini) return [];
+  return diasEntre(ini, ate);
+}
 /* motorista que fica junto com o caminhão no local: preso nos mesmos dias */
 function motFica(e, vid){ return !!(((e && e.ficaMot) || {})[vid] && ficaAte(e, vid)); }
 function extraFicaMot(e, vid){ return motFica(e, vid) ? extraFica(e, vid) : []; }
@@ -8724,7 +8730,7 @@ function blocoFrota(ev, modo){
                    '<option value="data"'+(val==='data'?' selected':'')+'>Fica alguns dias…</option>'+
                    (ev.desm ? '<option value="desm"'+(val==='desm'?' selected':'')+'>Fica até a desmontagem</option>' : '')+
                  '</select>'+
-                 (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" min="'+(dia(ev.mont)||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
+                 (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
                  (ate ? '<span class="tag" style="color:#1c4fa0">'+extraFica(ev, x.v).length+' dia(s) parado</span>' : '')+
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFica(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão — ele fica preso para outras viagens nesses dias"><input type="checkbox" '+(motFica(ev, x.v)?'checked':'')+' onchange="setFicaMot(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
