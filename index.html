@@ -1039,6 +1039,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         </div>
         <div style="font-size:12.5px;color:var(--muted);margin:10px 0 4px">Ou escolha as pessoas (soma com a equipe, se tiver):</div>
         <div id="sb-pessoas" style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;max-height:150px;overflow:auto"></div>
+        <div style="font-size:12.5px;color:var(--muted);margin:10px 0 4px">🚚 Motoristas que ficam na base:</div>
+        <div id="sb-motoristas" style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;max-height:110px;overflow:auto"></div>
         <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn-orange" onclick="addBase()">+ Lançar serviço na base</button></div>
       </div>
       <div id="sb-lista"></div>
@@ -2273,12 +2275,45 @@ function setFica(id, vid, val){
   const v = veiculos.find(x=>x.id===vid), a = ficaAte(ev, vid);
   if(v) toast(a ? '📍 ' + v.tipo + ' ' + v.placa + ' fica no local até ' + fmtD(a).slice(0,5) + ' — preso para outros eventos nesses dias.' : '🚚 ' + v.tipo + ' ' + v.placa + ' volta para o galpão depois da montagem.');
 }
+/* ===== DESMONTAGEM: caminhão que vai buscar e fica alguns dias no local =====
+   ev.ficaD = { idDoVeiculo: 'AAAA-MM-DD' (volta nesse dia) | 'fim' (fica até o fim da desmontagem) }
+   ev.ficaMotD = { idDoVeiculo: true } — o motorista fica junto. Só vale com caminhões próprios da desmontagem. */
+function ficaAteD(e, vid){ if(!e || !temFrotaDesm(e)) return null; const f = (e.ficaD || {})[vid]; if(!f) return null; if(f === 'fim') return dia(fimDesm(e)) || dia(e.desm) || null; return f; }
+function iniFicaD(e, vid){ const s = (e.escalaD||[]).filter(x=>x.v===vid && x.dia).map(x=>x.dia); return [dia(e.desm), ...s].filter(Boolean).sort()[0] || null; }
+function extraFicaD(e, vid){ const ate = ficaAteD(e, vid), ini = iniFicaD(e, vid); if(!ate || !ini || ate < ini) return []; return diasEntre(ini, ate); }
+function motFicaD(e, vid){ return !!(((e && e.ficaMotD) || {})[vid] && ficaAteD(e, vid)); }
+/* genéricos por fase — usados nas reservas, conflitos, dias seguidos e contagens */
+function xFica(e, vid, f){ return f === 'desm' ? extraFicaD(e, vid) : extraFica(e, vid); }
+function xFicaMot(e, vid, f){ return f === 'desm' ? (motFicaD(e, vid) ? extraFicaD(e, vid) : []) : extraFicaMot(e, vid); }
+function setFicaD(id, vid, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.ficaD = Object.assign({}, ev.ficaD || {});
+  if(!val || val === 'nao'){ delete ev.ficaD[vid]; if(ev.ficaMotD){ delete ev.ficaMotD[vid]; if(!Object.keys(ev.ficaMotD).length) delete ev.ficaMotD; } }
+  else if(val === 'data') ev.ficaD[vid] = somaDiaISO(iniFicaD(ev, vid) || HOJE, 2);
+  else ev.ficaD[vid] = val;
+  if(!Object.keys(ev.ficaD).length) delete ev.ficaD;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const v = veiculos.find(x=>x.id===vid), a = ficaAteD(ev, vid);
+  if(v) toast(a ? '📍 ' + v.tipo + ' ' + v.placa + ' fica no local da desmontagem até ' + fmtD(a).slice(0,5) + ' — preso para outros eventos nesses dias.' : '🚚 ' + v.tipo + ' ' + v.placa + ' vai e volta no mesmo dia da desmontagem.');
+}
+function setFicaMotD(id, vid, on){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.ficaMotD = Object.assign({}, ev.ficaMotD || {});
+  if(on) ev.ficaMotD[vid] = true; else delete ev.ficaMotD[vid];
+  if(!Object.keys(ev.ficaMotD).length) delete ev.ficaMotD;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const x = escalaDo(ev, 'desm').find(y=>y.v===vid) || {};
+  toast(on ? '🧑‍✈️ ' + (x.motorista || 'O motorista') + ' fica junto no local até ' + fmtD(ficaAteD(ev, vid)).slice(0,5) + '.' : '🧑‍✈️ ' + (x.motorista || 'O motorista') + ' volta e fica livre para outras viagens.');
+}
 /* texto curto para o card */
 function txtFica(ev){
-  const ids = Object.keys(ev.fica || {}); if(!ids.length) return '';
+  const ids = Object.keys(ev.fica || {}); if(!ids.length && !Object.keys(ev.ficaD || {}).length) return '';
   return ids.map(id=>{ const v = veiculos.find(x=>x.id===id), a = ficaAte(ev, id); if(!v || !a) return '';
     const m = motFica(ev, id) ? ((escalaDo(ev,'mont').find(y=>y.v===id)||{}).motorista || 'motorista') : null;
-    return '📍 ' + v.placa + (m ? ' + ' + m : '') + ' fica' + (m ? 'm' : '') + ' no local ' + (ficaAteDesm(ev, id) ? 'até a desmontagem' : 'até ' + fmtD(a).slice(0,5)); }).filter(Boolean).join(' · ');
+    return '📍 ' + v.placa + (m ? ' + ' + m : '') + ' fica' + (m ? 'm' : '') + ' no local ' + (ficaAteDesm(ev, id) ? 'até a desmontagem' : 'até ' + fmtD(a).slice(0,5)); }).filter(Boolean)
+  .concat(Object.keys(ev.ficaD || {}).map(id=>{ const v = veiculos.find(x=>x.id===id), a = ficaAteD(ev, id); if(!v || !a) return '';
+    const m = motFicaD(ev, id) ? ((escalaDo(ev,'desm').find(y=>y.v===id)||{}).motorista || 'motorista') : null;
+    return '📍 ' + v.placa + (m ? ' + ' + m : '') + ' fica' + (m ? 'm' : '') + ' na desmontagem até ' + fmtD(a).slice(0,5); }).filter(Boolean)).join(' · ');
 }
 const diasVeiculo = ev => ev.permanece ? diasEntre(ev.mont, fimDesm(ev)) : diasEquipe(ev);
 const periodo2 = (a,b) => dia(a)===dia(b) ? fmtD(a) : fmtD(a)+' a '+fmtD(b);
@@ -2745,11 +2780,14 @@ function analisar(ev, ag){
     const ja = new Set();
     viagensEv.forEach(t=>{
       eventos.forEach(o=>{
-        if(o.id === ev.id || o.esp || !o.fica || !o.fica[t.v]) return;
-        const pres = extraFica(o, t.v).filter(d=>t.dias.includes(d) && d !== dia(o.mont)); if(!pres.length || ja.has(t.v+o.id)) return;
+        if(o.id === ev.id || o.esp || !((o.fica && o.fica[t.v]) || (o.ficaD && o.ficaD[t.v]))) return;
+        const pm = (o.fica && o.fica[t.v]) ? extraFica(o, t.v).filter(d=>d !== dia(o.mont)) : [];
+        const pd = (o.ficaD && o.ficaD[t.v]) ? extraFicaD(o, t.v).filter(d=>d !== iniFicaD(o, t.v)) : [];
+        const pres = pm.concat(pd).filter(d=>t.dias.includes(d)); if(!pres.length || ja.has(t.v+o.id)) return;
         ja.add(t.v+o.id);
         const vv = veiculos.find(x=>x.id===t.v) || {tipo:'Caminhão', placa:t.v};
-        r.conflitos.push({msg:'O caminhão ' + vv.tipo + ' ' + vv.placa + ' fica parado no local do evento "' + o.nome + '" até ' + fmtD(ficaAte(o, t.v)).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
+        const ateO = pd.length && pres.some(d=>pd.includes(d)) ? ficaAteD(o, t.v) : ficaAte(o, t.v);
+        r.conflitos.push({msg:'O caminhão ' + vv.tipo + ' ' + vv.placa + ' fica parado no local do evento "' + o.nome + '" até ' + fmtD(ateO).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
           dica:'Troque o caminhão desta operação, ou no outro evento marque para ele voltar antes ("Fica no local").'});
       });
     });
@@ -2759,14 +2797,16 @@ function analisar(ev, ag){
     (temFrotaDesm(ev) ? (ev.escalaD||[]) : []).forEach(g=>{ if(g.motorista) motsEv.push({m:g.motorista, dias: g.dia ? [g.dia] : dDv}); });
     motsEv.forEach(t=>{
       eventos.forEach(o=>{
-        if(o.id === ev.id || o.esp || !o.ficaMot) return;
-        (o.escala||[]).forEach(g=>{
-          if(g.motorista !== t.m || !motFica(o, g.v) || ja.has('m'+t.m+o.id)) return;
-          const pres = extraFica(o, g.v).filter(d=>t.dias.includes(d) && d !== dia(o.mont)); if(!pres.length) return;
+        if(o.id === ev.id || o.esp || !(o.ficaMot || o.ficaMotD)) return;
+        [['mont', o.escala||[]], ['desm', temFrotaDesm(o) ? (o.escalaD||[]) : []]].forEach(([fz, lista])=>lista.forEach(g=>{
+          const fica = fz === 'desm' ? motFicaD(o, g.v) : motFica(o, g.v);
+          if(g.motorista !== t.m || !fica || ja.has('m'+t.m+o.id)) return;
+          const ini0 = fz === 'desm' ? iniFicaD(o, g.v) : dia(o.mont);
+          const pres = xFica(o, g.v, fz).filter(d=>t.dias.includes(d) && d !== ini0); if(!pres.length) return;
           ja.add('m'+t.m+o.id);
-          r.conflitos.push({msg:'O motorista ' + t.m + ' ficou junto com o caminhão no local do evento "' + o.nome + '" até ' + fmtD(ficaAte(o, g.v)).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
+          r.conflitos.push({msg:'O motorista ' + t.m + ' ficou junto com o caminhão no local do evento "' + o.nome + '" até ' + fmtD(fz === 'desm' ? ficaAteD(o, g.v) : ficaAte(o, g.v)).slice(0,5) + ' — não está livre em ' + pres.map(d=>fmtD(d).slice(0,5)).join(', ') + '.', ev:o.id,
             dica:'Escale outro motorista para esta viagem, ou no outro evento desmarque "motorista fica junto".'});
-        });
+        }));
       });
     });
   }catch(e){}
@@ -2859,7 +2899,8 @@ function replanejar(forcar){
   /* serviço na base prende a equipe e as pessoas nesses dias */
   try{ (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s);
     if(s.equipe) reservar(ag, 'eq', s.equipe, ds, 'base:' + s.id);
-    pessoasBase(s).forEach(p=>reservar(ag, 'mt', p, ds, 'base:' + s.id)); }); }catch(e){}
+    pessoasBase(s).forEach(p=>reservar(ag, 'mt', p, ds, 'base:' + s.id));
+    motoristasBase(s).forEach(m=>reservar(ag, 'mo', m, ds, 'base:' + s.id)); }); }catch(e){}
   ordem.forEach(e=>{
     if(evSemNossaEquipe(e)) return; /* cancelado, finalizado ou tudo terceirizado: não prende ninguém */
     if(e.equipe && e.equipe !== EQUIPE_TERC) diasEquipe(e).forEach(d=>{ const k = e.equipe + '|' + d; if(!String(ag.eq[k]||'').startsWith('base:') && !String(ag.eq[k]||'').startsWith('folga:')) ag.eq[k] = e.id; });
@@ -2869,9 +2910,9 @@ function replanejar(forcar){
     if(temFrotaDesm(e)){
       const dM = diasEntre(e.mont, fimMont(e)), dD = diasEntre(e.desm, fimDesm(e));
       (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, (r.dia?[r.dia]:dM).concat(extraFica(e, v)), e.id); });
-      (e.veiculosD||[]).forEach((v,i) => { const r = regDe(e.escalaD, i); reservar(ag,'ve', v, r.dia?[r.dia]:dD, e.id); });
+      (e.veiculosD||[]).forEach((v,i) => { const r = regDe(e.escalaD, i); reservar(ag,'ve', v, (r.dia?[r.dia]:dD).concat(extraFicaD(e, v)), e.id); });
       (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, (x.dia?[x.dia]:dM).concat(extraFicaMot(e, x.v)), e.id));
-      (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, x.dia?[x.dia]:dD, e.id));
+      (e.escalaD||[]).forEach(x => reservar(ag,'mo', x.motorista, (x.dia?[x.dia]:dD).concat(motFicaD(e, x.v) ? extraFicaD(e, x.v) : []), e.id));
     } else {
       (e.veiculos||[]).forEach((v,i) => { const r = regDe(e.escala, i); reservar(ag,'ve', v, (r.dia?[r.dia]:diasVeiculo(e)).concat(extraFica(e, v)), e.id); });
       (e.escala||[]).forEach(x => reservar(ag,'mo', x.motorista, (x.dia?[x.dia]:diasEquipe(e)).concat(extraFicaMot(e, x.v)), e.id));
@@ -4346,7 +4387,7 @@ function renderSemaforo(){
     ['mont','desm'].forEach(fase=>{
       if(fase==='desm' && !e.desm) return;
       const padrao = fase==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, fase).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(fase==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ (ocupV[d] = ocupV[d] || new Set()).add(x.v); }); });
+      escalaDo(e, fase).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(xFica(e, x.v, fase)).forEach(d=>{ (ocupV[d] = ocupV[d] || new Set()).add(x.v); }); });
     });
   });
   const linhas = dias.map(d=>{
@@ -5213,6 +5254,7 @@ function blocoEtapasFase(ev, fase){
    proibido, prazo curto, data errada...) e, onde dá, propõe saídas prontas que se aplicam num clique. */
 /* quem/qual está ocupado nesses dias, fora deste evento */
 function ocupadoEm(tipo, chave, dias, exceto){
+  if(tipo === 'mo'){ const d0 = (dias||[]).find(d=>motoristaNaBase(chave, d)); if(d0){ const s = motoristaNaBase(chave, d0); return {id:'base:' + s.id, nome:'Serviço na base (' + (s.oque||'') + ')', base:true}; } }
   const ds = new Set(dias);
   return eventos.find(e=>{
     if(e.id === exceto || evSemNossaEquipe(e) || !e.mont) return false;
@@ -5222,7 +5264,7 @@ function ocupadoEm(tipo, chave, dias, exceto){
       return ['mont','desm'].some(f=>{
         if(f==='desm' && !e.desm) return false;
         const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-        return escalaDo(e, f).some(x=> (tipo==='mo' ? x.motorista===chave : x.v===chave) && (x.dia ? [x.dia] : padrao).concat(f==='mont' ? (tipo==='ve' ? extraFica(e, x.v) : extraFicaMot(e, x.v)) : []).some(d=>ds.has(d)));
+        return escalaDo(e, f).some(x=> (tipo==='mo' ? x.motorista===chave : x.v===chave) && (x.dia ? [x.dia] : padrao).concat(tipo==='ve' ? xFica(e, x.v, f) : xFicaMot(e, x.v, f)).some(d=>ds.has(d)));
       });
     }
     return false;
@@ -7233,7 +7275,7 @@ function renderLinha(){
   const cab = '<tr><th class="nm">Evento</th>'+dias.map(d=>{ const dt = new Date(d+'T12:00'), fds = [0,6].includes(dt.getDay()); return '<th class="'+(fds?'fds ':'')+(d===HOJE?'hj':'')+'">'+SEM1[dt.getDay()]+'<br>'+d.slice(8)+(d.slice(8)==='01'||d===dias[0]?'<br><span style="font-size:9px">'+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][dt.getMonth()]+'</span>':'')+'</th>'; }).join('')+'</tr>';
   const rod = '<tr><td class="nm" style="font-size:11px;color:var(--muted);font-weight:600">Equipes nossas em campo<br><small>(de '+nossasEq+')</small></td>'+dias.map(d=>{ const q = (emCampo[d]||new Set()).size; return '<td class="'+(d===HOJE?'hj':'')+'" style="color:'+(q > nossasEq ? '#c0392b' : q === nossasEq && q ? '#a86412' : q ? 'var(--ink)' : 'var(--line)')+'" title="'+q+' operação(ões) da casa em '+fmtD(d).slice(0,5)+'">'+(q||'·')+'</td>'; }).join('')+'</tr>';
   const linhasBase = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= ini && s.ini <= fim).map(s=>{ const ds = new Set(diasBase(s));
-    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');abrirBase()"><b>🏠 SERVIÇO NA BASE</b><small>'+esc(s.oque||'')+' · '+esc([s.equipe, ...(s.pessoas||[])].filter(Boolean).join(', '))+'</small></td>'+
+    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');abrirBase()"><b>🏠 SERVIÇO NA BASE</b><small>'+esc(s.oque||'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+'</small></td>'+
       dias.map(d=>'<td class="dc'+([0,6].includes(new Date(d+'T12:00').getDay())?' fds':'')+(d===HOJE?' hj':'')+'">'+(ds.has(d)?'<span class="bm" style="background:#a8783a"></span>':'')+'</td>').join('')+'</tr>'; }).join('');
   box.innerHTML = '<div class="lt-wrap"><table class="lt"><thead>'+cab+'</thead><tbody>'+linhas+linhasBase+'</tbody><tfoot>'+rod+'</tfoot></table></div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:8px">A última linha conta montagens e desmontagens da casa no dia: <b style="color:#a86412">laranja</b> = todas as equipes ocupadas, <b style="color:#c0392b">vermelho</b> = mais operação que equipe. Clique numa barra para abrir o evento.</div>';
@@ -7390,10 +7432,10 @@ function calcSeguidos(){
     ['mont','desm'].forEach(f=>{
       if(f === 'desm' && !ev.desm) return;
       const padrao = f === 'desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
-      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).concat(f === 'mont' ? extraFicaMot(ev, x.v) : []).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
+      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).concat(xFicaMot(ev, x.v, f)).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
     });
   });
-  (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s).filter(d=>d >= ini && d <= fim); pessoasBase(s).forEach(p=>ds.forEach(d=>marca(p, produtores.some(x=>x.nome===p) ? 'produtor' : 'montador', d, 'base:' + s.id))); });
+  (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s).filter(d=>d >= ini && d <= fim); pessoasBase(s).forEach(p=>ds.forEach(d=>marca(p, produtores.some(x=>x.nome===p) ? 'produtor' : 'montador', d, 'base:' + s.id))); motoristasBase(s).forEach(m=>ds.forEach(d=>marca(m, 'motorista', d, 'base:' + s.id))); });
   /* dia de folga ou férias na Escala não conta */
   Object.values(dias).forEach(o=>{ if(o.tipo === 'motorista') return; Object.keys(o.d).forEach(d=>{ if(folgaDe(o.nome, d)) delete o.d[d]; }); });
   DIAS_PESSOA = dias;
@@ -7433,12 +7475,26 @@ function pessoasBase(s){
   return [...new Set(out)].filter(Boolean);
 }
 function baseDoDia(d){ return (CONFIG.servicosBase||[]).filter(s=>diasBase(s).includes(d)); }
+/* o motorista está escalado neste evento em algum desses dias? */
+function ocupadoEmEv(e, tipo, chave, dias){
+  const ds = new Set(dias);
+  return ['mont','desm'].some(f=>{
+    if(f==='desm' && !e.desm) return false;
+    const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
+    return escalaDo(e, f).some(x=>x.motorista===chave && (x.dia ? [x.dia] : padrao).concat(xFicaMot(e, x.v, f)).some(d=>ds.has(d)));
+  });
+}
+/* motoristas que ficam na base (manutenção do caminhão, pátio, carga) */
+function motoristasBase(s){ return (s && s.motoristas || []).filter(Boolean); }
+function motoristaNaBase(nome, d){ return baseDoDia(d).find(s=>motoristasBase(s).includes(nome)) || null; }
 function abrirBase(){
   const sel = document.getElementById('sb-eq');
   if(sel) sel.innerHTML = '<option value="">— nenhuma —</option>' + equipes.filter(e=>e.nome!==EQUIPE_TERC).map(e=>'<option>'+e.nome+'</option>').join('');
   const i = document.getElementById('sb-ini'), f = document.getElementById('sb-fim');
   if(i && !i.value) i.value = HOJE; if(f && !f.value) f.value = HOJE;
   const pb = document.getElementById('sb-pessoas');
+  const pm = document.getElementById('sb-motoristas');
+  if(pm) pm.innerHTML = motoristas.filter(m=>!m.agregado).map(m=>'<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" class="sb-m" value="'+String(m.nome).replace(/"/g,'&quot;')+'"> '+m.nome+(m.situacao && m.situacao!=='Ativo' ? ' <small style="color:var(--muted)">('+m.situacao+')</small>' : '')+'</label>').join('') || '<small style="color:var(--muted)">nenhum motorista cadastrado</small>';
   if(pb) pb.innerHTML = todosMontadores().map(t=>'<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" class="sb-p" value="'+t.nome.replace(/"/g,'&quot;')+'"> '+t.nome+' <small style="color:var(--muted)">'+(t.equipe==='piloto'?'piloto':t.equipe)+'</small></label>').join('');
   renderBase();
   document.getElementById('ov-base').classList.add('on');
@@ -7449,9 +7505,10 @@ function renderBase(){
   const L = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= somaDiaISO(HOJE, -7)).sort((a,b)=>a.ini.localeCompare(b.ini));
   if(!L.length){ box.innerHTML = '<div style="font-size:13px;color:var(--muted)">Nenhum serviço na base lançado.</div>'; return; }
   box.innerHTML = L.map(s=>{
-    const choques = eventos.filter(e=>!e.esp && e.mont && pessoasNaEscala(e).some(p=>!p.prod && pessoasBase(s).includes(p.nome) && diasDe(e, p.nome).some(d=>diasBase(s).includes(d))));
+    const choques = eventos.filter(e=>!e.esp && e.mont && (pessoasNaEscala(e).some(p=>!p.prod && pessoasBase(s).includes(p.nome) && diasDe(e, p.nome).some(d=>diasBase(s).includes(d)))
+      || motoristasBase(s).some(m=>ocupadoEmEv(e, 'mo', m, diasBase(s)))));
     return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:110px"><b>'+fmtD(s.ini).slice(0,5)+(s.fim && s.fim!==s.ini?' a '+fmtD(s.fim).slice(0,5):'')+'</b><br><small style="color:var(--muted)">'+diasBase(s).length+' dia(s)</small></span>'+
-      '<span style="flex:1"><b>🏠 '+esc(s.oque||'Serviço na base')+'</b><br><small>'+(s.equipe?'👷 Equipe <b>'+esc(s.equipe)+'</b> (inteira)':'')+((s.pessoas||[]).length?(s.equipe?' + ':'')+esc(s.pessoas.join(', ')):'')+'</small>'+
+      '<span style="flex:1"><b>🏠 '+esc(s.oque||'Serviço na base')+'</b><br><small>'+(s.equipe?'👷 Equipe <b>'+esc(s.equipe)+'</b> (inteira)':'')+((s.pessoas||[]).length?(s.equipe?' + ':'')+esc(s.pessoas.join(', ')):'')+(motoristasBase(s).length?((s.equipe||(s.pessoas||[]).length)?'<br>':'')+'🚚 '+esc(motoristasBase(s).join(', ')):'')+'</small>'+
         (choques.length ? '<br><small style="color:#c0392b;font-weight:700">⚠ escalado(s) também em: '+choques.map(e=>esc(e.nome)).join(', ')+'</small>' : '')+'</span>'+
       '<button class="mini danger" onclick="rmBase(\''+s.id+'\')">✕</button></div>';
   }).join('');
@@ -7460,12 +7517,13 @@ function addBase(){
   const g = id => (document.getElementById(id)||{}).value || '';
   const ini = g('sb-ini'), fim = g('sb-fim') || ini, equipe = g('sb-eq');
   const pessoas = [...document.querySelectorAll('.sb-p')].filter(x=>x.checked).map(x=>x.value);
+  const mots = [...document.querySelectorAll('.sb-m')].filter(x=>x.checked).map(x=>x.value);
   if(!ini) return toast('Escolha a data.');
-  if(!equipe && !pessoas.length) return toast('Escolha a equipe ou as pessoas.');
+  if(!equipe && !pessoas.length && !mots.length) return toast('Escolha a equipe, as pessoas ou os motoristas.');
   let quem = ''; try{ quem = localStorage.getItem('cpl:quem') || ''; }catch(e){}
-  CONFIG.servicosBase = [...(CONFIG.servicosBase||[]), {id: Date.now().toString(36), oque: g('sb-oque').trim() || 'Manutenção', ini: fim < ini ? fim : ini, fim: fim < ini ? ini : fim, equipe: equipe || null, pessoas, quem, t: Date.now()}];
+  CONFIG.servicosBase = [...(CONFIG.servicosBase||[]), {id: Date.now().toString(36), oque: g('sb-oque').trim() || 'Manutenção', ini: fim < ini ? fim : ini, fim: fim < ini ? ini : fim, equipe: equipe || null, pessoas, motoristas: mots, quem, t: Date.now()}];
   const o = document.getElementById('sb-oque'); if(o) o.value = '';
-  document.querySelectorAll('.sb-p').forEach(x=>x.checked=false);
+  document.querySelectorAll('.sb-p,.sb-m').forEach(x=>x.checked=false);
   salvar(); marcarPlanoSujo(); renderQuadro(); renderBase();
   toast('🏠 Serviço na base lançado — a IA não escala essa gente em evento nesses dias.');
 }
@@ -7474,12 +7532,12 @@ function baseHojeHtml(){
   const L = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= HOJE && s.ini <= somaDiaISO(HOJE, 13));
   if(!L.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  return '<div class="base-lin">🏠 <b>Serviço na base:</b> '+L.map(s=>'<span onclick="abrirBase()" style="cursor:pointer">'+fmtD(s.ini).slice(0,5)+(s.fim&&s.fim!==s.ini?'–'+fmtD(s.fim).slice(0,5):'')+' · '+esc([s.equipe, ...(s.pessoas||[])].filter(Boolean).join(', '))+' — '+esc(s.oque||'')+'</span>').join('')+'</div>';
+  return '<div class="base-lin">🏠 <b>Serviço na base:</b> '+L.map(s=>'<span onclick="abrirBase()" style="cursor:pointer">'+fmtD(s.ini).slice(0,5)+(s.fim&&s.fim!==s.ini?'–'+fmtD(s.fim).slice(0,5):'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+' — '+esc(s.oque||'')+'</span>').join('')+'</div>';
 }
 function baseTV(D, curto){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return baseDoDia(D).map(s=>'<div class="tv-cont" style="border-left-color:#a8783a">🏠 <b>SERVIÇO NA BASE</b> — '+esc(s.oque||'')+
-    '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', '))+'</div></div>').join('');
+    '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', '))+(motoristasBase(s).length?' · 🚚 '+esc(motoristasBase(s).join(', ')):'')+'</div></div>').join('');
 }
 
 /* ===== FOLGAS E FÉRIAS DA ESCALA DE MONTADORES ===== */
@@ -7514,6 +7572,20 @@ function conflitosPessoas(){
         if(f){ out.push({ev, nome:p.nome, dia:d, motivo: f==='FE' ? 'de FÉRIAS (Escala)' : 'de FOLGA (Escala)'}); return; }
         const s = baseDoDia(d).find(s=>pessoasBase(s).includes(p.nome));
         if(s) out.push({ev, nome:p.nome, dia:d, motivo: 'no SERVIÇO NA BASE (' + (s.oque||'') + ')'});
+      });
+    });
+  });
+  /* motorista com viagem num dia em que ficou na base */
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    ['mont','desm'].forEach(f=>{
+      if(f==='desm' && !ev.desm) return;
+      const padrao = f==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
+      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return;
+        (x.dia ? [x.dia] : padrao).concat(xFicaMot(ev, x.v, f)).filter(d=>d >= HOJE).forEach(d=>{
+          const s = motoristaNaBase(x.motorista, d);
+          if(s) out.push({ev, nome:x.motorista, dia:d, motivo:'no SERVIÇO NA BASE (' + (s.oque||'') + ')', motorista:true});
+        });
       });
     });
   });
@@ -7552,7 +7624,7 @@ function caminhoesNaRua(){
       /* só caminhão escolhido de verdade — sugestão da IA ainda não conta */
       if(!((f==='desm' && temFrotaDesm(e)) || (e.veiculos||[]).length)) return;
       const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(f==='mont' ? extraFica(e, x.v) : []).forEach(d=>{ if(d < desde || d > somaDiaISO(HOJE, JANELA_IA)) return; (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
+      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(xFica(e, x.v, f)).forEach(d=>{ if(d < desde || d > somaDiaISO(HOJE, JANELA_IA)) return; (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
     });
   });
   const lim = limiteCaminhao(), out = [];
@@ -7687,7 +7759,7 @@ function jMes(){
     ['mont','desm'].forEach(f=>{ if(f==='desm' && !ev.desm) return; const padrao = f==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
       escalaDo(ev, f).forEach(x=>{ if(x.motorista) (x.dia?[x.dia]:padrao).forEach(d=>marca(x.motorista, 'motorista', d, ev.cidade)); }); });
   });
-  (CONFIG.servicosBase||[]).forEach(s=>pessoasBase(s).forEach(p=>diasBase(s).forEach(d=>marca(p, produtores.some(x=>x.nome===p)?'produtor':'montador', d, ''))));
+  (CONFIG.servicosBase||[]).forEach(s=>{ pessoasBase(s).forEach(p=>diasBase(s).forEach(d=>marca(p, produtores.some(x=>x.nome===p)?'produtor':'montador', d, ''))); motoristasBase(s).forEach(m=>diasBase(s).forEach(d=>marca(m, 'motorista', d, ''))); });
   Object.values(dias).forEach(o=>{ if(o.tipo==='motorista') return; Object.keys(o.d).forEach(d=>{ if(folgaDe(o.nome, d)) delete o.d[d]; }); });
   const L = Object.values(dias).map(o=>{
     const ds = Object.keys(o.d).sort();
@@ -7853,7 +7925,7 @@ function ocupacaoDia(d){
     ['mont','desm'].forEach(f=>{
       if(f==='desm' && !e.desm) return;
       const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(x.v && ((x.dia ? [x.dia] : padrao).includes(d) || (f==='mont' && extraFica(e, x.v).includes(d)))) vs.add(x.v); });
+      escalaDo(e, f).forEach(x=>{ if(x.v && ((x.dia ? [x.dia] : padrao).includes(d) || xFica(e, x.v, f).includes(d))) vs.add(x.v); });
     });
     if(op) n++;
   });
@@ -8733,6 +8805,22 @@ function blocoFrota(ev, modo){
                  (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
                  (ate ? '<span class="tag" style="color:#1c4fa0">'+extraFica(ev, x.v).length+' dia(s) parado</span>' : '')+
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFica(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão — ele fica preso para outras viagens nesses dias"><input type="checkbox" '+(motFica(ev, x.v)?'checked':'')+' onchange="setFicaMot(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
+                 '</span></div>';
+             })() : '')+
+             (fase==='desm' && conta[x.v]===1 ? (function(){
+               const f = (ev.ficaD||{})[x.v], ate = ficaAteD(ev, x.v);
+               const val = !f ? 'nao' : f==='fim' ? 'fim' : 'data';
+               const multi = dia(fimDesm(ev)) && dia(fimDesm(ev)) !== dia(ev.desm);
+               return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local do evento?</span>'+
+                 '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+
+                 '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px'+(f?';border-color:#1c4fa0;color:#1c4fa0;font-weight:600':'')+'" onchange="setFicaD(\''+ev.id+'\',\''+x.v+'\',this.value)">'+
+                   '<option value="nao"'+(val==='nao'?' selected':'')+'>Não — vai e volta no dia</option>'+
+                   '<option value="data"'+(val==='data'?' selected':'')+'>Fica alguns dias…</option>'+
+                   (multi ? '<option value="fim"'+(val==='fim'?' selected':'')+'>Fica até o fim da desmontagem</option>' : '')+
+                 '</select>'+
+                 (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFicaD(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
+                 (ate ? '<span class="tag" style="color:#1c4fa0">'+extraFicaD(ev, x.v).length+' dia(s) no local</span>' : '')+
+                 (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFicaD(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão"><input type="checkbox" '+(motFicaD(ev, x.v)?'checked':'')+' onchange="setFicaMotD(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
              })() : '');
     }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>';
