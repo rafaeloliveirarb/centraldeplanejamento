@@ -157,6 +157,20 @@ body.letra{zoom:1.14}
 .livres span.lv{background:#e8f6ee;color:#0f8a4d;border:1px solid #bfe3cf;border-radius:12px;padding:2px 9px;font-weight:700;cursor:pointer}
 .plano-flat{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
 body.escuro .postit{filter:brightness(.9)}body.escuro .proxline.emenda{background:#3a2a14;color:#f3c58b}body.escuro .livres span.lv{background:#123324;border-color:#1f5a3c;color:#7ee2ab}
+.jtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.jtabs button{border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:18px;padding:7px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.jtabs button.on{background:#1c4fa0;border-color:#1c4fa0;color:#fff}
+.jt{width:100%;border-collapse:collapse;font-size:13px}
+.jt th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:7px 6px;border-bottom:2px solid var(--line)}
+.jt td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.jbar{height:8px;border-radius:5px;background:#1c4fa0;display:inline-block;vertical-align:middle;margin-right:6px}
+.chip-sub{display:inline-block;border:1px solid #bfe3cf;background:#e8f6ee;color:#0f8a4d;border-radius:12px;padding:2px 9px;font-size:12px;font-weight:700;cursor:pointer;margin:2px 4px 2px 0}
+.chip-sub:hover{background:#d3efdf}
+.contatos a{display:inline-block;text-decoration:none;border:1px solid var(--line);border-radius:12px;padding:2px 8px;font-size:12px;margin:2px 3px 2px 0;color:var(--ink2);font-weight:600}
+.contatos a:hover{border-color:#1c4fa0;color:#1c4fa0}
+.base-lin{grid-column:1/-1;font-size:12.5px;margin-top:8px;color:var(--ink2)}
+.base-lin span{display:inline-block;background:#f3ead9;color:#7a5418;border-radius:10px;padding:3px 10px;margin:2px 6px 2px 0;font-weight:600}
+body.escuro .base-lin span{background:#3a2e17;color:#f0cf8f}
 .kb{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start;min-height:60vh}
 .kb-col{flex:0 0 250px;background:var(--bg);border-radius:12px;padding:10px;border-top:4px solid #8892a4;min-height:200px;transition:background .15s}
 .kb-col.sobre{background:#e3ecfb}
@@ -584,15 +598,15 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <button class="pill" onclick="abrirMapa()" title="Os eventos no mapa, com a cor do semáforo">🗺 Mapa</button>
       <button class="pill" onclick="abrirLinha()" title="Os próximos dias na horizontal, cada evento numa barra: montagem, evento e desmontagem">🗓 Linha do tempo</button>
       <button class="pill" onclick="abrirSetor()" title="O que cada setor tem para resolver: só as seções de que ele cuida, no vermelho ou amarelo">👤 Por setor</button>
+      <button class="pill" id="btn-jornada" onclick="abrirJornada()" title="Dias seguidos sem folga, folgas, dias no mês, domingos, km dos motoristas e caminhões">😴 Jornada</button>
+      <button class="pill" onclick="abrirBase()" title="Equipe ou pessoas trabalhando no galpão (manutenção, lonas, organização) — a IA não escala elas em evento nesses dias">🏠 Serviço na base</button>
       <button class="pill" id="btn-risco" onclick="abrirRisco()" title="Eventos com alguma seção no vermelho, do mais perto para o mais longe">⚠️ Em risco</button>
-      <button class="pill" onclick="abrirSemaforo()" title="Para o comercial: antes de fechar um evento novo, veja se a data tem gente, caminhão e estrutura livres">🚦 Pode vender?</button>
       <button class="pill" onclick="abrirAmanha()" title="O que sai amanhã: caminhões, motoristas, equipes e destinos">🌙 Amanhã</button>
       <button class="pill" onclick="abrirSemana()" title="Resumo da semana para a diretoria: eventos, caminhões, riscos e a semana passada">📊 Semana</button>
       <div class="mais-wrap">
         <button class="pill" onclick="toggleMais(event)" title="Outras ferramentas">☰ Mais ▾</button>
         <div class="menu-mais" id="menu-mais" onclick="fecharMais()">
           <button onclick="toggleEscuro()">🌙 Modo escuro<small>liga e desliga neste aparelho</small></button>
-          <button onclick="toggleLetra()">🔠 Letra maior<small>aumenta tudo neste aparelho</small></button>
           <button onclick="abrirTV()">📺 Operações externas<small>tela grande para a TV: o que está na rua hoje e nos próximos dias</small></button>
           <button onclick="abrirLixeira()">🗑 Lixeira<small>eventos excluídos — traga de volta com um clique</small></button>
           <button onclick="abrirTerc()">🤝 Terceirizados do mês<small>equipe de fora, frete e locação — por evento e fornecedor</small></button>
@@ -807,6 +821,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <label>evento vai para finalizado <input id="cfg-autofin" type="number" min="0" style="width:64px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.autoFinalizarDias=Math.max(0,parseInt(this.value)||0);salvar();autoFinalizar()"> dia(s) depois do fim da desmontagem</label>
         <small style="color:var(--muted)">(0 = desligado) — sai do quadro, que fica só com o que está acontecendo e o que vem</small>
       </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:13px">
+        <b>😴 Dias seguidos</b>
+        <label>avisar quando montador, produtor ou motorista chegar a <input id="cfg-seguidos" type="number" min="3" max="14" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.limiteSeguidos=Math.max(3,parseInt(this.value)||7);salvar();renderQuadro()"> dias de trabalho sem folga</label>
+        <small style="color:var(--muted)">(um dia antes já avisa "chegando")</small>
+      </div>
     </div>
     <div class="panel" style="margin-bottom:18px">
       <h2 style="margin:0">🖼 Logo para documentos</h2>
@@ -989,6 +1008,36 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="perguntar('quantos km rodamos este mês?')">km deste mês</button>
         <button class="mini" onclick="perguntar('quantas montagens semana que vem?')">montagens da semana que vem</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-jornada" onclick="if(event.target===this)fechar('ov-jornada')">
+  <div class="modal" style="max-width:1000px">
+    <header><div><h2>😴 Jornada — folgas, dias e km</h2><div class="os">quem está há mais tempo sem folga, dias trabalhados no mês, domingos, km dos motoristas e caminhões</div></div><button class="x" onclick="fechar('ov-jornada')">✕</button></header>
+    <div class="mbody">
+      <div class="jtabs" id="j-tabs"></div>
+      <div id="j-res"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-base" onclick="if(event.target===this)fechar('ov-base')">
+  <div class="modal" style="max-width:860px">
+    <header><div><h2>🏠 Serviço na base</h2><div class="os">equipe ou pessoas trabalhando no galpão — manutenção, lonas, organização. Conta como dia trabalhado e a IA não escala em evento</div></div><button class="x" onclick="fechar('ov-base')">✕</button></header>
+    <div class="mbody">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <label class="f" style="flex:2 1 220px"><i>O que vão fazer</i><input id="sb-oque" placeholder="ex.: manutenção de lonas, organização do estoque"></label>
+          <label class="f"><i>De</i><input type="date" id="sb-ini"></label>
+          <label class="f"><i>Até</i><input type="date" id="sb-fim"></label>
+          <label class="f" style="flex:1 1 170px"><i>Equipe inteira</i><select id="sb-eq"></select></label>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin:10px 0 4px">Ou escolha as pessoas (soma com a equipe, se tiver):</div>
+        <div id="sb-pessoas" style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;max-height:150px;overflow:auto"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn-orange" onclick="addBase()">+ Lançar serviço na base</button></div>
+      </div>
+      <div id="sb-lista"></div>
     </div>
   </div>
 </div>
@@ -2369,7 +2418,12 @@ function reservar(ag, tipo, chave, dias, evId){
   if(tipo==='mt') dias.forEach(d => { const k = chave+'|'+d; if(!ag.mt[k]) ag.mt[k] = evId; });
   else dias.forEach(d => ag[tipo][chave+'|'+d] = evId);
 }
-const nomeDo = id => (eventos.find(e=>e.id===id)||{nome:'outro evento'}).nome;
+const nomeDo = id => {
+  if(typeof id === 'string' && id.startsWith('base:')){ const s = (CONFIG.servicosBase||[]).find(x=>'base:'+x.id===id); return 'SERVIÇO NA BASE' + (s && s.oque ? ' — ' + s.oque : ''); }
+  if(id === 'folga:FO') return 'FOLGA (Escala)';
+  if(id === 'folga:FE') return 'FÉRIAS (Escala)';
+  return (eventos.find(e=>e.id===id)||{nome:'outro evento'}).nome;
+};
 
 /* ---- escolha do veículo, com combinação quando não cabe em um só ----
    Evento longe puxa o agregado; evento perto fica com a frota própria. ---- */
@@ -2473,13 +2527,13 @@ function analisar(ev, ag){
     if(livres.length){
       livres.sort((a,b)=>
         (notaAprendida('equipe', ev, b) - notaAprendida('equipe', ev, a)) ||
-        (eventos.filter(e=>e.equipe===a).length - eventos.filter(e=>e.equipe===b).length));
+        (diasMesEquipe(a, dia(ev.mont)) - diasMesEquipe(b, dia(ev.mont))));
       r.equipe = livres[0];
       const nota = notaAprendida('equipe', ev, livres[0]);
       r.just.equipe = 'Nenhum material puxa a equipe Jailson. Entre as equipes livres nas duas datas, '
         + (nota > 0
           ? 'o histórico de confirmações aponta ' + livres[0] + ': em eventos parecidos (' + sinaisDe(ev).map(rotuloSinal).join(', ') + '), essa foi a escolha confirmada ' + nota + ' vez(es).'
-          : livres[0] + ' está com menos eventos no período.');
+          : livres[0] + ' é a que trabalhou menos dias no mês (' + diasMesEquipe(livres[0], dia(ev.mont)) + ').');
     } else {
       r.equipe = cand[0]; r.equipeConflito = true;
       const oc = ocupante(ag,'eq',cand[0],dEq,ev.id);
@@ -2638,9 +2692,19 @@ function replanejar(forcar){
   PLANO = {};
   const ag = novaAgenda();
   const ordem = [...eventos].sort((a,b)=> a.mont.localeCompare(b.mont));
+  /* folgas e férias da Escala prendem a pessoa (e a equipe, quando é o líder) */
+  try{ Object.keys(FOLGAS_ESC).forEach(nome=>Object.keys(FOLGAS_ESC[nome]).forEach(d=>{
+    const st = FOLGAS_ESC[nome][d];
+    reservar(ag, 'mt', nome, [d], 'folga:' + st);
+    if(equipes.some(q=>q.nome===nome)) reservar(ag, 'eq', nome, [d], 'folga:' + st);
+  })); }catch(e){}
+  /* serviço na base prende a equipe e as pessoas nesses dias */
+  try{ (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s);
+    if(s.equipe) reservar(ag, 'eq', s.equipe, ds, 'base:' + s.id);
+    pessoasBase(s).forEach(p=>reservar(ag, 'mt', p, ds, 'base:' + s.id)); }); }catch(e){}
   ordem.forEach(e=>{
     if(evSemNossaEquipe(e)) return; /* cancelado, finalizado ou tudo terceirizado: não prende ninguém */
-    reservar(ag,'eq', e.equipe===EQUIPE_TERC ? null : e.equipe, diasEquipe(e), e.id);
+    if(e.equipe && e.equipe !== EQUIPE_TERC) diasEquipe(e).forEach(d=>{ const k = e.equipe + '|' + d; if(!String(ag.eq[k]||'').startsWith('base:') && !String(ag.eq[k]||'').startsWith('folga:')) ag.eq[k] = e.id; });
     reservar(ag,'pr', (e.produtor && e.produtor!==SEM_PRODUTOR) ? e.produtor : null, diasEquipe(e), e.id);
     /* viagem com dia próprio (dias alternados) prende só naquele dia */
     const regDe = (arr, i) => (arr||[]).find(x=>x.i===i) || {};
@@ -5052,8 +5116,10 @@ function levantarPendencias(nDias, leves){
     a.conflitos.forEach(c=>{
       const m = String(c.msg);
       if(/montador\(es\) escalado\(s\) em dois lugares/.test(m)){
-        const nomes = (m.match(/: (.*)\.$/)||['',''])[1].split(';').map(s=>s.trim().split(' (')[0]).filter(Boolean);
-        nomes.forEach(n=>add({sev:3, ev:ev.id, dia:quando, ic:'👷', tipo:'montador', nome:n, txt:n + ' está em dois eventos no mesmo dia'}));
+        const partes = (m.match(/: (.*)\.$/)||['',''])[1].split(';').map(s=>s.trim()).filter(Boolean);
+        partes.forEach(pt=>{ const n = pt.split(' (')[0];
+          const mot = /FÉRIAS/.test(pt) ? ' está de FÉRIAS (Escala) e escalado neste evento' : /FOLGA \(Escala\)/.test(pt) ? ' está de FOLGA (Escala) e escalado neste evento' : /SERVIÇO NA BASE/.test(pt) ? ' está no SERVIÇO NA BASE e escalado neste evento' : ' está em dois eventos no mesmo dia';
+          add({sev:3, ev:ev.id, dia:quando, ic:'👷', tipo:'montador', nome:n, txt:n + mot + ((pt.match(/em (\d{2}\/\d{2})/)||[])[1] ? ' (' + pt.match(/em (\d{2}\/\d{2})/)[1] + ')' : '')}); });
       } else if(/equipes? .*comprometid|equipe Jailson já está/i.test(m)) add({sev:3, ev:ev.id, dia:quando, ic:'👷', tipo:'equipe', txt:m});
       else if(/não entra no local|manutenção|não cabe/.test(m)){
         const f = /não entra|não cabe/.test(m) ? 'mont' : 'mont';
@@ -5105,6 +5171,22 @@ function levantarPendencias(nDias, leves){
   try{ meusLembretes(true).forEach(({ev, l})=>add({sev:2, ev:ev.id, dia:HOJE, ic:'⏰', tipo:'info', txt:'Lembrete vencido (' + l.quando.slice(11,16) + ', para ' + l.para + '): ' + l.txt})); }catch(e){}
   Object.keys(RECADOS).forEach(id=>{ const ev = eventos.find(e=>e.id===id); if(!ev) return;
     naoLidos(id).filter(mencionaMim).forEach(r=>add({sev:2, ev:id, dia: HOJE, ic:'📣', tipo:'info', txt: r.quem + ' te marcou: ' + String(r.txt).slice(0, 120)})); });
+  /* dias seguidos de trabalho */
+  seguidos().forEach(s=>{
+    const d = s.passou ? (s.dLim < HOJE ? HOJE : s.dLim) : (s.fim < HOJE ? HOJE : s.fim);
+    if(d > fim) return;
+    if(!s.evLim) return;
+    add({sev: s.passou ? 3 : 2, ev: s.evLim, dia: d, ic: s.tipo==='motorista' ? '🚚' : '😴', tipo:'info', txt: txtSeguido(s) + (s.passou ? ' — programar folga (😴 Jornada sugere quem cobre)' : '')});
+  });
+  /* caminhão há muitos dias fora do galpão */
+  caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).forEach(c=>{
+    const d = c.dLim < HOJE ? HOJE : c.dLim; if(d > fim || !c.ev) return;
+    add({sev:2, ev:c.ev, dia:d, ic:'🚚', tipo:'info', txt: c.v.tipo + ' ' + c.v.placa + ': ' + c.n + ' dias seguidos fora do galpão (' + fmtD(c.ini).slice(0,5) + ' a ' + fmtD(c.fim).slice(0,5) + ') — programar revisão'});
+  });
+  /* folga/férias da Escala e serviço na base em choque com evento */
+  conflitosPessoas().forEach(c=>{ if(c.dia > fim || P.some(x=>x.ev===c.ev.id && x.tipo==='montador' && x.nome===c.nome)) return;
+    add({sev:3, ev:c.ev.id, dia: c.dia < HOJE ? HOJE : c.dia, ic:'👷', tipo:'montador', nome:c.nome, txt: c.nome + ' está ' + c.motivo + ' em ' + fmtD(c.dia).slice(0,5) + ' e escalado neste evento'});
+  });
   /* sem duplicar o mesmo aviso */
   const vistos = new Set();
   return P.filter(x=>{ const k = x.ev + '|' + x.tipo + '|' + (x.nome||'') + '|' + (x.vaga!=null?x.vaga:'') + '|' + x.txt; if(vistos.has(k)) return false; vistos.add(k); return true; })
@@ -6322,7 +6404,7 @@ function renderFases(){
 let climaUltimoLote = 0, pendBotaoT = 0;
 function renderQuadro(){
   limparSecCache();
-  try{ setTimeout(atualizarBtnRisco, 0); }catch(e){}
+  try{ setTimeout(atualizarBtnRisco, 0); setTimeout(atualizarBtnJornada, 0); }catch(e){}
   if(Date.now() - pendBotaoT > 20000){ pendBotaoT = Date.now(); setTimeout(()=>{ try{ atualizarBotaoPend(); }catch(e){} }, 300); }
   if(typeof window !== 'undefined' && !window.__semClimaAuto && Date.now() - climaUltimoLote > 60000){
     climaUltimoLote = Date.now(); setTimeout(()=>atualizarClima(false), 800);
@@ -6470,6 +6552,7 @@ function cardEvento(ev, soSetorJC, papel){
           (ev.montOp?' <span style="color:var(--blue);font-weight:500">com troca</span>':'')+'</b></div>'+
         (seloConfianca(ev, s.a) ? '<div class="row" style="border:none;padding-top:0"><span></span><b style="font-weight:500">'+seloConfianca(ev, s.a)+'</b></div>' : '')+
         '<div class="row"><span>Produtor</span><b>'+(produtorDo(ev)||'A definir')+(ev.produtor?'':' <span style="color:var(--amber);font-weight:500">sugerido</span>')+'</b></div>'+
+        (soSetorJC ? '' : contatosCard(ev))+
         '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (v ? v.tipo+' '+v.placa : 'A definir') : selCaminhao(ev, 'prodsel') + (v ? ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' : '')) + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
           ((ev.fretes||[]).length ? (v?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
           (v && mot.length ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+'</b></div>'+
@@ -6772,7 +6855,7 @@ const PRAZOS_PADRAO = {datas:10, equipes:7, caminhoes:3, estruturas:7, checklist
 function donoSec(k){ const d = (CONFIG.donosSec||{})[k]; return (d && String(d).trim()) || DONOS_PADRAO[k] || ''; }
 function prazoSec(k){ const p = (CONFIG.prazosSec||{})[k]; return (p === undefined || p === null || p === '') ? PRAZOS_PADRAO[k] : (+p || 0); }
 let SEC_CACHE = new Map();
-function limparSecCache(){ SEC_CACHE = new Map(); EMENDAS = null; OCUP_CACHE = {}; }
+function limparSecCache(){ SEC_CACHE = new Map(); EMENDAS = null; OCUP_CACHE = {}; SEGUIDOS = null; DIAS_PESSOA = null; CONF_PESSOAS = null; CAM_RUA = null; }
 function secoesStatus(ev){
   const ck = ev.id + '|' + HOJE;
   if(SEC_CACHE.has(ck)) return SEC_CACHE.get(ck);
@@ -6810,6 +6893,7 @@ function secoesStatusCalc(ev){
   else if(eq === EQUIPE_TERC) put('equipes', ev.tercEmpresa ? 'verde' : 'amar', ev.tercEmpresa ? 'terceirizada: ' + ev.tercEmpresa : 'terceirizada sem empresa definida');
   else if(!eq) put('equipes','verm','sem equipe');
   else if(confl.some(c=>/equipe|montador|l[ií]der/i.test(c.msg||''))) put('equipes','verm','equipe em conflito com outro evento');
+  else if(conflitosPessoas().some(c=>c.ev===ev)){ const cs = conflitosPessoas().filter(c=>c.ev===ev); put('equipes', cs.some(c=>c.nome===eq) ? 'verm' : 'amar', cs.slice(0,3).map(c=>c.nome+' '+c.motivo+' '+fmtD(c.dia).slice(0,5)).join(', ')+(cs.length>3?' e mais '+(cs.length-3):'')); }
   else if(!ev.equipe) put('equipes','amar','equipe sugerida pela IA — falta confirmar');
   else put('equipes','verde','equipe ' + eq);
   /* CAMINHÕES */
@@ -6835,6 +6919,10 @@ function secoesStatusCalc(ev){
     if(rCor==='verde' && ev.datasMudaram && ev.datasMudaram.avisar){ rCor = 'amar'; rTxt = 'datas mudaram depois da escala enviada'; }
     if(rCor==='verde'){ const ac = alertasClima(ev) || []; const forte = ac.find(x=>x.nivel >= 2); if(forte){ rCor = 'amar'; rTxt = 'previsão ruim em ' + fmtD(forte.d).slice(0,5) + ': ' + forte.txt.replace(/<[^>]+>/g,''); } }
   }catch(e){}
+  { const sq = seguidos().filter(s=>s.evs.includes(ev.id));
+    const passou = sq.filter(s=>s.passou), perto = sq.filter(s=>!s.passou);
+    if(passou.length && rCor !== 'verm'){ rCor = 'amar'; rTxt = passou.slice(0,3).map(s=>s.nome + ' ' + s.n + ' dias seguidos').join(', ') + (passou.length>3 ? ' e mais ' + (passou.length-3) : '') + ' — programar folga'; }
+    else if(perto.length && rCor === 'verde'){ rCor = 'amar'; rTxt = perto.map(s=>s.nome).join(', ') + ' chegando a ' + limiteSeguidos() + ' dias seguidos'; } }
   if(rCor === 'verde'){ const em = emendasDe(ev)[0]; if(em){ rCor = 'amar'; rTxt = 'equipe ' + em.eq + ' emenda com ' + em.outro.nome + ' (' + fmtD(em.dia2).slice(0,5) + (em.km ? ', ≈' + em.km + ' km' : '') + ') sem dia de folga'; } }
   put('riscos', rCor, rTxt);
   /* PRODUÇÃO */
@@ -6934,7 +7022,10 @@ function renderLinha(){
   }).join('');
   const cab = '<tr><th class="nm">Evento</th>'+dias.map(d=>{ const dt = new Date(d+'T12:00'), fds = [0,6].includes(dt.getDay()); return '<th class="'+(fds?'fds ':'')+(d===HOJE?'hj':'')+'">'+SEM1[dt.getDay()]+'<br>'+d.slice(8)+(d.slice(8)==='01'||d===dias[0]?'<br><span style="font-size:9px">'+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][dt.getMonth()]+'</span>':'')+'</th>'; }).join('')+'</tr>';
   const rod = '<tr><td class="nm" style="font-size:11px;color:var(--muted);font-weight:600">Equipes nossas em campo<br><small>(de '+nossasEq+')</small></td>'+dias.map(d=>{ const q = (emCampo[d]||new Set()).size; return '<td class="'+(d===HOJE?'hj':'')+'" style="color:'+(q > nossasEq ? '#c0392b' : q === nossasEq && q ? '#a86412' : q ? 'var(--ink)' : 'var(--line)')+'" title="'+q+' operação(ões) da casa em '+fmtD(d).slice(0,5)+'">'+(q||'·')+'</td>'; }).join('')+'</tr>';
-  box.innerHTML = '<div class="lt-wrap"><table class="lt"><thead>'+cab+'</thead><tbody>'+linhas+'</tbody><tfoot>'+rod+'</tfoot></table></div>'+
+  const linhasBase = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= ini && s.ini <= fim).map(s=>{ const ds = new Set(diasBase(s));
+    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');abrirBase()"><b>🏠 SERVIÇO NA BASE</b><small>'+esc(s.oque||'')+' · '+esc([s.equipe, ...(s.pessoas||[])].filter(Boolean).join(', '))+'</small></td>'+
+      dias.map(d=>'<td class="dc'+([0,6].includes(new Date(d+'T12:00').getDay())?' fds':'')+(d===HOJE?' hj':'')+'">'+(ds.has(d)?'<span class="bm" style="background:#a8783a"></span>':'')+'</td>').join('')+'</tr>'; }).join('');
+  box.innerHTML = '<div class="lt-wrap"><table class="lt"><thead>'+cab+'</thead><tbody>'+linhas+linhasBase+'</tbody><tfoot>'+rod+'</tfoot></table></div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:8px">A última linha conta montagens e desmontagens da casa no dia: <b style="color:#a86412">laranja</b> = todas as equipes ocupadas, <b style="color:#c0392b">vermelho</b> = mais operação que equipe. Clique numa barra para abrir o evento.</div>';
 }
 
@@ -7069,6 +7160,357 @@ function decidirTodos(lado){
   toast(lado === 'planilha' ? '📄 Datas da planilha aplicadas.' : '🏢 Ficaram as datas da Central.');
 }
 
+/* ===== DIAS SEGUIDOS DE TRABALHO (colaboradores e motoristas) =====
+   Junta todos os dias de cada pessoa em todos os eventos e acha as sequências sem folga.
+   Avisa quando chega perto do limite (padrão: 7 dias seguidos). */
+let SEGUIDOS = null;
+function limiteSeguidos(){ const v = +CONFIG.limiteSeguidos; return v >= 3 ? v : 7; }
+function calcSeguidos(){
+  const dias = {};   /* chave -> {nome, tipo, d:{iso: evId}} */
+  const marca = (nome, tipo, d, evId) => { if(!nome || !d) return; const k = tipo + '|' + nome; const o = dias[k] = dias[k] || {nome, tipo, d:{}}; if(!o.d[d]) o.d[d] = evId; };
+  const ini = somaDiaISO(HOJE, -20), fim = somaDiaISO(HOJE, 45);
+  eventos.forEach(ev=>{
+    if(!ev.mont || ev.esp === 'cancelado' || ev.esp === 'terceirizado') return;
+    const eq = ev.equipe || plano(ev).equipe;
+    if(eq !== EQUIPE_TERC) pessoasNaEscala(ev).forEach(p=>{
+      diasDe(ev, p.nome).forEach(d=>{ if(d < ini || d > fim) return; if(!p.prod && faltouDia(ev, p.nome, d)) return; marca(p.nome, p.prod ? 'produtor' : 'montador', d, ev.id); });
+    });
+    ['mont','desm'].forEach(f=>{
+      if(f === 'desm' && !ev.desm) return;
+      const padrao = f === 'desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
+      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
+    });
+  });
+  (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s).filter(d=>d >= ini && d <= fim); pessoasBase(s).forEach(p=>ds.forEach(d=>marca(p, produtores.some(x=>x.nome===p) ? 'produtor' : 'montador', d, 'base:' + s.id))); });
+  /* dia de folga ou férias na Escala não conta */
+  Object.values(dias).forEach(o=>{ if(o.tipo === 'motorista') return; Object.keys(o.d).forEach(d=>{ if(folgaDe(o.nome, d)) delete o.d[d]; }); });
+  DIAS_PESSOA = dias;
+  const lim = limiteSeguidos(), out = [];
+  Object.values(dias).forEach(o=>{
+    const L = Object.keys(o.d).sort();
+    let a = 0;
+    for(let i = 1; i <= L.length; i++){
+      if(i < L.length && somaDiaISO(L[i-1], 1) === L[i]) continue;
+      const seq = L.slice(a, i); a = i;
+      if(seq.length >= lim - 1 && seq[seq.length-1] >= HOJE){
+        const dLim = seq[lim - 1] || null;   /* o dia em que bate o limite */
+        const evsSeq = [...new Set(seq.map(d=>o.d[d]))], reais = evsSeq.filter(x=>!String(x).startsWith('base:'));
+        let evLim = dLim ? o.d[dLim] : o.d[seq[seq.length-1]];
+        if(String(evLim).startsWith('base:')) evLim = reais[reais.length-1] || null;
+        out.push({nome:o.nome, tipo:o.tipo, ini:seq[0], fim:seq[seq.length-1], n:seq.length, passou: seq.length >= lim, dLim, evLim, evs:evsSeq, dias:seq});
+      }
+    }
+  });
+  return out.sort((x,y)=>y.n - x.n || x.nome.localeCompare(y.nome, 'pt-BR'));
+}
+function seguidos(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return SEGUIDOS; }
+let DIAS_PESSOA = null;
+function diasPorPessoa(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return DIAS_PESSOA || {}; }
+const ROT_TIPO = {montador:'👷', produtor:'🎬', motorista:'🚚'};
+function txtSeguido(s){
+  return ROT_TIPO[s.tipo] + ' ' + s.nome + (s.tipo==='motorista' ? ' (motorista)' : s.tipo==='produtor' ? ' (produtor)' : '') + ': ' +
+    (s.passou ? s.n + ' dias seguidos sem folga' : 'chegando a ' + limiteSeguidos() + ' dias seguidos (' + s.n + ')') + ' — ' + fmtD(s.ini).slice(0,5) + ' a ' + fmtD(s.fim).slice(0,5);
+}
+
+/* ===== SERVIÇO NA BASE ===== */
+function diasBase(s){ return s && s.ini ? diasEntre(s.ini, s.fim || s.ini) : []; }
+function pessoasBase(s){
+  const out = [];
+  if(s.equipe){ out.push(s.equipe); membrosDe(s.equipe).forEach(m=>out.push(m)); }
+  (s.pessoas||[]).forEach(p=>out.push(p));
+  return [...new Set(out)].filter(Boolean);
+}
+function baseDoDia(d){ return (CONFIG.servicosBase||[]).filter(s=>diasBase(s).includes(d)); }
+function abrirBase(){
+  const sel = document.getElementById('sb-eq');
+  if(sel) sel.innerHTML = '<option value="">— nenhuma —</option>' + equipes.filter(e=>e.nome!==EQUIPE_TERC).map(e=>'<option>'+e.nome+'</option>').join('');
+  const i = document.getElementById('sb-ini'), f = document.getElementById('sb-fim');
+  if(i && !i.value) i.value = HOJE; if(f && !f.value) f.value = HOJE;
+  const pb = document.getElementById('sb-pessoas');
+  if(pb) pb.innerHTML = todosMontadores().map(t=>'<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" class="sb-p" value="'+t.nome.replace(/"/g,'&quot;')+'"> '+t.nome+' <small style="color:var(--muted)">'+(t.equipe==='piloto'?'piloto':t.equipe)+'</small></label>').join('');
+  renderBase();
+  document.getElementById('ov-base').classList.add('on');
+}
+function renderBase(){
+  const box = document.getElementById('sb-lista'); if(!box) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= somaDiaISO(HOJE, -7)).sort((a,b)=>a.ini.localeCompare(b.ini));
+  if(!L.length){ box.innerHTML = '<div style="font-size:13px;color:var(--muted)">Nenhum serviço na base lançado.</div>'; return; }
+  box.innerHTML = L.map(s=>{
+    const choques = eventos.filter(e=>!e.esp && e.mont && pessoasNaEscala(e).some(p=>!p.prod && pessoasBase(s).includes(p.nome) && diasDe(e, p.nome).some(d=>diasBase(s).includes(d))));
+    return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:110px"><b>'+fmtD(s.ini).slice(0,5)+(s.fim && s.fim!==s.ini?' a '+fmtD(s.fim).slice(0,5):'')+'</b><br><small style="color:var(--muted)">'+diasBase(s).length+' dia(s)</small></span>'+
+      '<span style="flex:1"><b>🏠 '+esc(s.oque||'Serviço na base')+'</b><br><small>'+(s.equipe?'👷 Equipe <b>'+esc(s.equipe)+'</b> (inteira)':'')+((s.pessoas||[]).length?(s.equipe?' + ':'')+esc(s.pessoas.join(', ')):'')+'</small>'+
+        (choques.length ? '<br><small style="color:#c0392b;font-weight:700">⚠ escalado(s) também em: '+choques.map(e=>esc(e.nome)).join(', ')+'</small>' : '')+'</span>'+
+      '<button class="mini danger" onclick="rmBase(\''+s.id+'\')">✕</button></div>';
+  }).join('');
+}
+function addBase(){
+  const g = id => (document.getElementById(id)||{}).value || '';
+  const ini = g('sb-ini'), fim = g('sb-fim') || ini, equipe = g('sb-eq');
+  const pessoas = [...document.querySelectorAll('.sb-p')].filter(x=>x.checked).map(x=>x.value);
+  if(!ini) return toast('Escolha a data.');
+  if(!equipe && !pessoas.length) return toast('Escolha a equipe ou as pessoas.');
+  let quem = ''; try{ quem = localStorage.getItem('cpl:quem') || ''; }catch(e){}
+  CONFIG.servicosBase = [...(CONFIG.servicosBase||[]), {id: Date.now().toString(36), oque: g('sb-oque').trim() || 'Manutenção', ini: fim < ini ? fim : ini, fim: fim < ini ? ini : fim, equipe: equipe || null, pessoas, quem, t: Date.now()}];
+  const o = document.getElementById('sb-oque'); if(o) o.value = '';
+  document.querySelectorAll('.sb-p').forEach(x=>x.checked=false);
+  salvar(); marcarPlanoSujo(); renderQuadro(); renderBase();
+  toast('🏠 Serviço na base lançado — a IA não escala essa gente em evento nesses dias.');
+}
+function rmBase(id){ CONFIG.servicosBase = (CONFIG.servicosBase||[]).filter(s=>s.id!==id); salvar(); marcarPlanoSujo(); renderQuadro(); renderBase(); }
+function baseHojeHtml(){
+  const L = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= HOJE && s.ini <= somaDiaISO(HOJE, 13));
+  if(!L.length) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="base-lin">🏠 <b>Serviço na base:</b> '+L.map(s=>'<span onclick="abrirBase()" style="cursor:pointer">'+fmtD(s.ini).slice(0,5)+(s.fim&&s.fim!==s.ini?'–'+fmtD(s.fim).slice(0,5):'')+' · '+esc([s.equipe, ...(s.pessoas||[])].filter(Boolean).join(', '))+' — '+esc(s.oque||'')+'</span>').join('')+'</div>';
+}
+function baseTV(D, curto){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return baseDoDia(D).map(s=>'<div class="tv-cont" style="border-left-color:#a8783a">🏠 <b>SERVIÇO NA BASE</b> — '+esc(s.oque||'')+
+    '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', '))+'</div></div>').join('');
+}
+
+/* ===== FOLGAS E FÉRIAS DA ESCALA DE MONTADORES ===== */
+let FOLGAS_ESC = {}, FOLGAS_T = 0;
+function folgaDe(nome, d){ return (FOLGAS_ESC[nome] || {})[d] || null; }
+async function carregarFolgasEsc(){
+  if(typeof ESCALA === 'undefined' || !ESCALA.url) return;
+  try{
+    const ini = somaDiaISO(HOJE, -20), fim = somaDiaISO(HOJE, 90);
+    const [lista, marcas] = await Promise.all([
+      escReq('escala_montadores?select=id,nome,funcao'),
+      escReq('escala_marcas?dia=gte.' + ini + '&dia=lte.' + fim + '&status=in.(FO,FE)&select=dia,montador_id,status')]);
+    const porId = {};
+    todosMontadores().forEach(t=>{ const m = casaMontadorEscala(t.nome, lista || []); if(m) porId[m.id] = t.nome; });
+    const novo = {};
+    (marcas||[]).forEach(x=>{ const n = porId[x.montador_id]; if(!n) return; (novo[n] = novo[n] || {})[x.dia] = x.status; });
+    FOLGAS_ESC = novo; FOLGAS_T = Date.now();
+    marcarPlanoSujo(); limparSecCache(); renderQuadro();
+  }catch(e){}
+}
+/* pessoa escalada em evento num dia de folga/férias da Escala ou de serviço na base */
+let CONF_PESSOAS = null;
+function conflitosPessoas(){
+  if(CONF_PESSOAS) return CONF_PESSOAS;
+  const out = [];
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    const eq = ev.equipe || plano(ev).equipe; if(!eq || eq === EQUIPE_TERC) return;
+    pessoasNaEscala(ev).filter(p=>!p.prod).forEach(p=>{
+      diasDe(ev, p.nome).filter(d=>d >= HOJE).forEach(d=>{
+        const f = folgaDe(p.nome, d);
+        if(f){ out.push({ev, nome:p.nome, dia:d, motivo: f==='FE' ? 'de FÉRIAS (Escala)' : 'de FOLGA (Escala)'}); return; }
+        const s = baseDoDia(d).find(s=>pessoasBase(s).includes(p.nome));
+        if(s) out.push({ev, nome:p.nome, dia:d, motivo: 'no SERVIÇO NA BASE (' + (s.oque||'') + ')'});
+      });
+    });
+  });
+  const vistos = new Set();
+  return CONF_PESSOAS = out.filter(c=>{ const k = c.ev.id + c.nome; if(vistos.has(k)) return false; vistos.add(k); return true; });
+}
+
+/* ===== EQUILÍBRIO / DIAS NO MÊS ===== */
+function diasMesEquipe(eq, ref){
+  const mes = (ref || HOJE).slice(0,7); let n = 0;
+  eventos.forEach(e=>{ if(e.esp || !e.mont || e.equipe !== eq) return; n += diasEquipe(e).filter(d=>d.slice(0,7)===mes).length; });
+  (CONFIG.servicosBase||[]).forEach(s=>{ if(s.equipe===eq) n += diasBase(s).filter(d=>d.slice(0,7)===mes).length; });
+  return n;
+}
+
+/* ===== CAMINHÃO MUITOS DIAS FORA DO GALPÃO ===== */
+let CAM_RUA = null;
+function limiteCaminhao(){ const v = +CONFIG.limiteCaminhaoRua; return v >= 3 ? v : 10; }
+function caminhoesNaRua(){
+  if(CAM_RUA) return CAM_RUA;
+  const porV = {};
+  eventos.forEach(e=>{
+    if(e.esp==='cancelado' || e.esp==='terceirizado' || !e.mont) return;
+    ['mont','desm'].forEach(f=>{
+      if(f==='desm' && !e.desm) return;
+      const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
+      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).forEach(d=>{ (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
+    });
+  });
+  const lim = limiteCaminhao(), out = [];
+  Object.keys(porV).forEach(vid=>{
+    const v = veiculos.find(x=>x.id===vid); if(!v) return;
+    const L = Object.keys(porV[vid]).sort(); let a = 0;
+    for(let i=1; i<=L.length; i++){
+      if(i < L.length && somaDiaISO(L[i-1],1) === L[i]) continue;
+      const seq = L.slice(a, i); a = i;
+      if(seq[seq.length-1] < somaDiaISO(HOJE,-3)) continue;
+      out.push({v, ini:seq[0], fim:seq[seq.length-1], n:seq.length, passou: seq.length >= lim, dLim: seq[lim-1] || seq[seq.length-1], ev: porV[vid][seq[Math.min(lim, seq.length)-1]]});
+    }
+  });
+  return CAM_RUA = out.sort((a,b)=>b.n - a.n);
+}
+
+/* ===== CONTATOS NO CARD ===== */
+function contatosCard(ev){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = [];
+  const link = (rot, tel) => { const d = soDigitos(tel||''); if(d.length < 8) return; const z = zap(tel);
+    L.push('<a href="tel:'+d+'" title="Ligar para '+esc(rot)+'" onclick="event.stopPropagation()">📞 '+esc(rot)+'</a>'+(z?'<a href="https://wa.me/'+z+'" target="_blank" title="WhatsApp de '+esc(rot)+'" onclick="event.stopPropagation()">💬</a>':'')); };
+  if(ev.respTel) link(ev.respNome ? ev.respNome.split(' ')[0] : 'local', ev.respTel);
+  const pr = produtores.find(p=>p.nome===produtorDo(ev)); if(pr && pr.tel) link(pr.nome, pr.tel);
+  const eq = ev.equipe || plano(ev).equipe; const q = equipes.find(e=>e.nome===eq); if(q && q.tel) link(q.nome, q.tel);
+  const m = (escalaDo(ev,'mont').find(x=>x.motorista)||{}).motorista; const mo = motoristas.find(x=>x.nome===m); if(mo && mo.tel) link(mo.nome, mo.tel);
+  return L.length ? '<div class="row contatos" style="border:none;padding-top:4px"><span>Contato</span><b style="font-weight:500">'+L.join('')+'</b></div>' : '';
+}
+
+/* ===== JORNADA: SEM FOLGA, MÊS, KM, CAMINHÕES ===== */
+let J_ABA = 'folga';
+function abrirJornada(aba){ if(aba) J_ABA = aba; renderJornada(); document.getElementById('ov-jornada').classList.add('on'); }
+function atualizarBtnJornada(){
+  const b = document.getElementById('btn-jornada'); if(!b) return;
+  const n = seguidos().filter(s=>s.passou).length + caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).length + conflitosPessoas().length;
+  b.innerHTML = '😴 Jornada' + (n ? '<span class="qtd">' + n + '</span>' : '');
+}
+function renderJornada(){
+  limparSecCache();
+  const tabs = [['folga','😴 Sem folga'],['mes','📅 Dias no mês'],['km','🚚 Km do mês'],['cam','🔧 Caminhões na rua']];
+  document.getElementById('j-tabs').innerHTML = tabs.map(([k,n])=>'<button class="'+(J_ABA===k?'on':'')+'" onclick="abrirJornada(\''+k+'\')">'+n+'</button>').join('') +
+    (Date.now() - FOLGAS_T > 60000 ? '<button onclick="carregarFolgasEsc().then(renderJornada)" title="Buscar folgas e férias na Escala de Montadores">↻ Folgas da Escala</button>' : '');
+  const box = document.getElementById('j-res');
+  box.innerHTML = J_ABA==='mes' ? jMes() : J_ABA==='km' ? jKm() : J_ABA==='cam' ? jCam() : jFolga();
+}
+/* sequências atuais (de hoje pra frente), do maior para o menor */
+function seqAtuais(){
+  const dp = diasPorPessoa(), out = [];
+  Object.values(dp).forEach(o=>{
+    const L = Object.keys(o.d).sort(); let a = 0;
+    for(let i=1; i<=L.length; i++){
+      if(i < L.length && somaDiaISO(L[i-1],1) === L[i]) continue;
+      const seq = L.slice(a, i); a = i;
+      if(seq[seq.length-1] >= HOJE && seq[0] <= somaDiaISO(HOJE, 14)) out.push({nome:o.nome, tipo:o.tipo, ini:seq[0], fim:seq[seq.length-1], n:seq.length, dias:seq, d:o.d});
+    }
+  });
+  return out.sort((a,b)=>b.n - a.n);
+}
+function livresParaCobrir(tipo, d, excluir){
+  if(tipo === 'motorista') return motoristas.filter(m=>!m.agregado && /ativ/i.test(m.situacao||'Ativo') && m.nome !== excluir && !ocupadoEm('mo', m.nome, [d], null)).map(m=>({nome:m.nome}));
+  return todosMontadores().filter(t=>t.nome !== excluir && !folgaDe(t.nome, d) && !ocupadoEm('mt', t.nome, [d], null) && !baseDoDia(d).some(s=>pessoasBase(s).includes(t.nome)))
+    .map(t=>({nome:t.nome, equipe:t.equipe}));
+}
+function jFolga(){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const lim = limiteSeguidos(), L = seqAtuais().slice(0, 25), conf = conflitosPessoas();
+  const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>esc(c.nome)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
+  if(!L.length) return cab + '<div class="alert green" style="margin:0">Ninguém trabalhando em sequência daqui pra frente.</div>';
+  return cab + '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sequências de trabalho sem folga que estão rolando ou vão começar. Limite: <b>'+lim+' dias</b> (muda em Integrações). Inclui serviço na base; folga e férias da Escala quebram a sequência.</div>'+
+    '<table class="jt"><thead><tr><th>Quem</th><th>Dias seguidos</th><th>Período</th><th>Folga sugerida / quem cobre</th></tr></thead><tbody>'+
+    L.map(s=>{
+      const passou = s.n >= lim, perto = s.n === lim - 1, dF = passou ? s.dias[lim-1] : null;
+      const evF = dF ? s.d[dF] : null, real = evF && !String(evF).startsWith('base:') ? eventos.find(e=>e.id===evF) : null;
+      let acao = '';
+      if(dF && dF >= HOJE){
+        const subs = livresParaCobrir(s.tipo, dF, s.nome);
+        const ordem = s.tipo==='motorista' ? subs : subs.sort((a,b)=>{ const t = (todosMontadores().find(x=>x.nome===s.nome)||{}).equipe; return (b.equipe===t?1:0)-(a.equipe===t?1:0); });
+        acao = '<b>💤 '+rotDia(dF)+'</b>'+(real ? ' <small style="color:var(--muted)">('+esc(real.nome)+')</small>' : '')+'<br>'+
+          (s.tipo!=='motorista' && real ? '<button class="mini" style="margin:4px 0" onclick="marcarFolga(\''+esc(s.nome).replace(/'/g,"\\'")+'\',\''+dF+'\',\''+real.id+'\')">💤 Dar folga e marcar na Escala</button><br>' : '')+
+          (ordem.length ? '<small style="color:var(--muted)">livres pra cobrir:</small> '+ordem.slice(0,6).map(x=>s.tipo!=='motorista' && real
+              ? '<span class="chip-sub" title="Dá folga para '+esc(s.nome)+' em '+fmtD(dF).slice(0,5)+' e põe '+esc(x.nome)+' no lugar só nesse dia" onclick="cobrirFolga(\''+real.id+'\',\''+esc(s.nome).replace(/'/g,"\\'")+'\',\''+esc(x.nome).replace(/'/g,"\\'")+'\',\''+dF+'\')">'+esc(x.nome)+'</span>'
+              : '<span class="chip-sub" style="cursor:default">'+esc(x.nome)+'</span>').join('') : '<small style="color:#c0392b">ninguém livre nesse dia</small>');
+      } else if(perto) acao = '<small style="color:#a86412">chegando no limite — vale programar a folga</small>';
+      return '<tr><td>'+ROT_TIPO[s.tipo]+' <b>'+esc(s.nome)+'</b><br><small style="color:var(--muted)">'+s.tipo+'</small></td>'+
+        '<td><span class="jbar" style="width:'+Math.min(160, s.n*12)+'px;background:'+(passou?'#c0392b':perto?'#e0a21b':'#1c4fa0')+'"></span><b style="color:'+(passou?'#c0392b':perto?'#a86412':'var(--ink)')+'">'+s.n+'</b></td>'+
+        '<td>'+fmtD(s.ini).slice(0,5)+' a '+fmtD(s.fim).slice(0,5)+'</td><td>'+acao+'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+function tirarDiaPessoa(ev, nome, d){
+  const ds = diasDe(ev, nome).filter(x=>x !== d);
+  ev.diasPessoa = ev.diasPessoa || {};
+  ev.diasPessoa[nome] = {dias: ds};
+}
+async function marcarFolga(nome, d, evId){
+  const ev = eventos.find(e=>e.id===evId);
+  if(ev){ tirarDiaPessoa(ev, nome, d); agendarEscalaEv(ev.id); }
+  (FOLGAS_ESC[nome] = FOLGAS_ESC[nome] || {})[d] = 'FO';
+  salvar(); marcarPlanoSujo(); limparSecCache(); renderQuadro(); renderJornada();
+  try{
+    const lista = await escReq('escala_montadores?select=id,nome,funcao');
+    const m = casaMontadorEscala(nome, lista || []);
+    if(!m) return toast('💤 Folga dada na Central. ' + nome + ' não foi achado na Escala de Montadores — marque lá na mão.');
+    const linha = {chave: d + '|' + m.id, dia: d, montador_id: m.id, status:'FO', obs:'Folga — ' + limiteSeguidos() + ' dias seguidos (Central)', atualizado_em: new Date().toISOString()};
+    try{ if(await checarColunaUsuario()) linha.usuario = 'central:folga'; }catch(e){}
+    await escReq('escala_marcas?on_conflict=chave', 'POST', [linha]);
+    toast('💤 Folga de ' + nome + ' em ' + fmtD(d).slice(0,5) + ' marcada na Central e na Escala.');
+  }catch(e){ toast('💤 Folga dada na Central, mas não consegui marcar na Escala (' + e.message + ').'); }
+}
+function cobrirFolga(evId, nome, sub, d){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const eq = ev.equipe || plano(ev).equipe;
+  const naDesm = ev.desm && diasEntre(ev.desm, fimDesm(ev)).includes(d) && temTimeDesm(ev);
+  if(naDesm){ if(!ev.timeD.includes(sub)) ev.timeD = [...ev.timeD, sub]; }
+  else { const base = [...montadoresBase(ev, eq)]; if(!base.includes(sub) && sub !== eq){ base.push(sub); ev.montOp = base; } }
+  ev.diasPessoa = ev.diasPessoa || {};
+  ev.diasPessoa[sub] = {dias: [...new Set([...((ev.diasPessoa[sub]||{}).dias||[]), d])].sort()};
+  marcarFolga(nome, d, evId);
+  toast('🔄 ' + sub + ' cobre ' + nome + ' em ' + fmtD(d).slice(0,5) + ' (' + ev.nome + ').');
+}
+function jMes(){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const mes = J_MES || HOJE.slice(0,7);
+  /* dias do mês inteiro, de qualquer data (não só a janela das sequências) */
+  const dias = {};
+  const marca = (nome, tipo, d, cid) => { if(!nome || d.slice(0,7) !== mes) return; const k = tipo+'|'+nome; const o = dias[k] = dias[k] || {nome, tipo, d:{}}; o.d[d] = cid || ''; };
+  eventos.forEach(ev=>{
+    if(!ev.mont || ev.esp==='cancelado' || ev.esp==='terceirizado') return;
+    const eq = ev.equipe || plano(ev).equipe;
+    if(eq !== EQUIPE_TERC) pessoasNaEscala(ev).forEach(p=>diasDe(ev, p.nome).forEach(d=>{ if(!p.prod && faltouDia(ev, p.nome, d)) return; marca(p.nome, p.prod?'produtor':'montador', d, ev.cidade); }));
+    ['mont','desm'].forEach(f=>{ if(f==='desm' && !ev.desm) return; const padrao = f==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
+      escalaDo(ev, f).forEach(x=>{ if(x.motorista) (x.dia?[x.dia]:padrao).forEach(d=>marca(x.motorista, 'motorista', d, ev.cidade)); }); });
+  });
+  (CONFIG.servicosBase||[]).forEach(s=>pessoasBase(s).forEach(p=>diasBase(s).forEach(d=>marca(p, produtores.some(x=>x.nome===p)?'produtor':'montador', d, ''))));
+  Object.values(dias).forEach(o=>{ if(o.tipo==='motorista') return; Object.keys(o.d).forEach(d=>{ if(folgaDe(o.nome, d)) delete o.d[d]; }); });
+  const L = Object.values(dias).map(o=>{
+    const ds = Object.keys(o.d).sort();
+    const dom = ds.filter(d=>new Date(d+'T12:00').getDay()===0), fer = ds.filter(d=>ehFeriado(d, o.d[d]));
+    const domSeg = dom.some(d=>dom.includes(somaDiaISO(d, 7)));
+    return {nome:o.nome, tipo:o.tipo, n:ds.length, dom, fer, domSeg};
+  }).sort((a,b)=>b.n - a.n);
+  const max = Math.max(1, ...L.map(x=>x.n));
+  const med = L.filter(x=>x.tipo==='montador').reduce((t,x)=>t+x.n,0) / Math.max(1, L.filter(x=>x.tipo==='montador').length);
+  return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:13px">Mês <input type="month" value="'+mes+'" onchange="J_MES=this.value;renderJornada()" style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit"> <span style="color:var(--muted)">média dos montadores: <b>'+med.toFixed(1)+'</b> dias · a IA prefere a equipe que trabalhou menos no mês</span></div>'+
+    (L.length ? '<table class="jt"><thead><tr><th>Quem</th><th>Dias trabalhados</th><th>Domingos</th><th>Feriados</th></tr></thead><tbody>'+
+      L.map(x=>'<tr><td>'+ROT_TIPO[x.tipo]+' <b>'+esc(x.nome)+'</b> <small style="color:var(--muted)">'+x.tipo+'</small></td>'+
+        '<td><span class="jbar" style="width:'+Math.round(x.n/max*180)+'px;background:'+(x.tipo==='montador' && x.n > med*1.25 ? '#e0851e' : x.tipo==='montador' && x.n < med*0.75 ? '#0f8a4d' : '#1c4fa0')+'"></span><b>'+x.n+'</b></td>'+
+        '<td>'+(x.dom.length ? '<b>'+x.dom.length+'</b> <small style="color:var(--muted)">('+x.dom.map(d=>d.slice(8)).join(', ')+')</small>'+(x.domSeg?' <b style="color:#c0392b">⚠ 2 domingos seguidos</b>':'') : '—')+'</td>'+
+        '<td>'+(x.fer.length ? '<b>'+x.fer.length+'</b> <small style="color:var(--muted)">('+x.fer.map(d=>d.slice(8)+'/'+d.slice(5,7)).join(', ')+')</small>' : '—')+'</td></tr>').join('')+'</tbody></table>'
+      : '<div class="alert" style="margin:0">Ninguém com dia lançado nesse mês.</div>')+
+    '<div style="font-size:12px;color:var(--muted);margin-top:8px">🟧 bem acima da média · 🟩 bem abaixo — bom para equilibrar. Conta eventos e serviço na base; dia de falta, folga ou férias da Escala não conta.</div>';
+}
+let J_MES = null;
+function jKm(){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const mes = J_MES || HOJE.slice(0,7), porM = {}, porV = {};
+  eventos.forEach(ev=>{
+    if(!ev.mont || ev.esp==='cancelado' || ev.esp==='terceirizado') return;
+    const km = (+ev.km || 0) * 2;
+    ['mont','desm'].forEach(f=>{
+      if(f==='desm' && (!ev.desm || (ev.permanece && !temFrotaDesm(ev)))) return;
+      escalaDo(ev, f).forEach(x=>{
+        const d = x.dia || dia(f==='desm' ? ev.desm : ev.mont); if(!d || d.slice(0,7) !== mes || x.jaLocal) return;
+        if(x.motorista){ const o = porM[x.motorista] = porM[x.motorista] || {n:0, km:0, evs:new Set()}; o.n++; o.km += km; o.evs.add(ev.nome); }
+        if(x.v){ const o = porV[x.v] = porV[x.v] || {n:0, km:0, evs:new Set()}; o.n++; o.km += km; o.evs.add(ev.nome); }
+      });
+    });
+  });
+  const tab = (tit, obj, rot) => { const L = Object.keys(obj).map(k=>({k, ...obj[k]})).sort((a,b)=>b.km - a.km); const max = Math.max(1, ...L.map(x=>x.km));
+    return '<h3 style="font-size:14px;margin:14px 0 6px">'+tit+'</h3>'+(L.length ? '<table class="jt"><thead><tr><th>'+rot+'</th><th>Viagens</th><th>Km (ida e volta)</th><th>Eventos</th></tr></thead><tbody>'+
+      L.map(x=>{ const v = veiculos.find(y=>y.id===x.k); return '<tr><td><b>'+esc(v ? v.tipo+' '+v.placa : x.k)+'</b></td><td>'+x.n+'</td><td><span class="jbar" style="width:'+Math.round(x.km/max*160)+'px"></span><b>'+num(x.km)+'</b></td><td><small>'+[...x.evs].slice(0,4).map(esc).join(', ')+(x.evs.size>4?'…':'')+'</small></td></tr>'; }).join('')+'</tbody></table>' : '<div style="font-size:13px;color:var(--muted)">Nada nesse mês.</div>'); };
+  return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:6px;font-size:13px">Mês <input type="month" value="'+mes+'" onchange="J_MES=this.value;renderJornada()" style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit"> <span style="color:var(--muted)">cada viagem conta ida e volta pela distância do evento</span></div>'+
+    tab('🧑‍✈️ Por motorista', porM, 'Motorista') + tab('🚚 Por caminhão', porV, 'Caminhão');
+}
+function jCam(){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = caminhoesNaRua().filter(c=>c.fim >= HOJE), lim = limiteCaminhao();
+  return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:13px;flex-wrap:wrap">Avisar quando o caminhão passar de <input type="number" min="3" value="'+lim+'" onchange="CONFIG.limiteCaminhaoRua=Math.max(3,parseInt(this.value)||10);salvar();renderJornada()" style="width:60px;border:1px solid var(--line);border-radius:8px;padding:6px 8px"> dias seguidos fora do galpão</div>'+
+    (L.length ? '<table class="jt"><thead><tr><th>Caminhão</th><th>Dias seguidos fora</th><th>Período</th></tr></thead><tbody>'+
+      L.map(c=>'<tr><td><b>'+esc(c.v.tipo+' '+c.v.placa)+'</b>'+(c.v.agregado?' <small>(agregado)</small>':'')+'</td><td><span class="jbar" style="width:'+Math.min(180,c.n*10)+'px;background:'+(c.passou?'#c0392b':'#1c4fa0')+'"></span><b style="color:'+(c.passou?'#c0392b':'var(--ink)')+'">'+c.n+'</b>'+(c.passou?' — programar revisão':'')+'</td><td>'+fmtD(c.ini).slice(0,5)+' a '+fmtD(c.fim).slice(0,5)+'</td></tr>').join('')+'</tbody></table>'
+      : '<div class="alert green" style="margin:0">Nenhum caminhão emendando dias fora daqui pra frente.</div>');
+}
+
 /* ===== ORDEM DO QUADRO ===== */
 let ORDEM = 'data';
 try{ ORDEM = localStorage.getItem('cpl:ordem') || 'data'; }catch(e){}
@@ -7189,6 +7631,7 @@ function ocupacaoDia(d){
     });
     if(op) n++;
   });
+  (CONFIG.servicosBase||[]).forEach(s=>{ if(s.equipe && diasBase(s).includes(d)) eqs.add(s.equipe); });
   const totE = equipes.filter(e=>e.nome!==EQUIPE_TERC).length || 1, totV = veiculos.filter(v=>!v.manut).length || 1;
   const pe = eqs.size / totE, pv = vs.size / totV, pior = Math.max(pe, pv);
   return OCUP_CACHE[d] = {eqs:eqs.size, totE, vs:vs.size, totV, n, nivel: !n ? 0 : pior < .6 ? 1 : pior < 1 ? 2 : 3};
@@ -7205,6 +7648,7 @@ function barraOcupacao(){
     '<div class="ocup-dias">'+dias.map(d=>{ const o = ocupacaoDia(d), dt = new Date(d+'T12:00');
       return '<div class="odia o'+o.nivel+(DIA_FILTRO===d?' sel':'')+'" onclick="filtrarDia(\''+d+'\')" title="'+fmtD(d)+': '+o.n+' evento(s) em operação · '+o.eqs+'/'+o.totE+' equipes · '+o.vs+'/'+o.totV+' caminhões">'+
         SEM[dt.getDay()]+'<b>'+d.slice(8)+'</b>'+(o.n ? o.eqs+'/'+o.totE+' eq' : 'livre')+'</div>'; }).join('')+'</div>'+
+    baseHojeHtml()+
     (avisos.length ? '<div class="mural">'+avisos.map(a=>'<div class="postit">'+esc(a.txt)+'<small>'+esc(a.quem||'')+(a.ate?' · até '+fmtD(a.ate).slice(0,5):'')+'</small><button title="Tirar aviso" onclick="tirarAviso(\''+a.id+'\')">✕</button></div>').join('')+'</div>' : '')+
   '</div>';
 }
@@ -7232,7 +7676,7 @@ function diasLivresHtml(seg){
   const SEM = ['dom','seg','ter','qua','qui','sex','sáb'];
   const L = Array.from({length:7}, (_,i)=>somaDiaISO(seg, i)).filter(d=>d >= HOJE && !ocupacaoDia(d).n);
   if(!L.length) return '';
-  return '<div class="livres">🟢 Dias livres:'+L.map(d=>'<span class="lv" title="Nenhuma montagem ou desmontagem — clique para ver no Pode vender?" onclick="abrirSemaforo();document.getElementById(\'sf-ini\').value=\''+d+'\';document.getElementById(\'sf-fim\').value=\''+d+'\';renderSemaforo()">'+SEM[new Date(d+'T12:00').getDay()]+' '+d.slice(8)+'/'+d.slice(5,7)+'</span>').join('')+'</div>';
+  return '<div class="livres">🟢 Dias livres:'+L.map(d=>'<span class="lv" title="Nenhuma montagem ou desmontagem neste dia">'+SEM[new Date(d+'T12:00').getDay()]+' '+d.slice(8)+'/'+d.slice(5,7)+'</span>').join('')+'</div>';
 }
 
 /* ===== PROGRESSO DO EVENTO NO CARD ===== */
@@ -7447,7 +7891,7 @@ function autoFinalizar(){
 /* ===== MODO ESCURO / LETRA MAIOR ===== */
 function toggleEscuro(){ const on = !document.body.classList.contains('escuro'); document.body.classList.toggle('escuro', on); try{ localStorage.setItem('cpl:escuro', on?'1':'0'); }catch(e){} }
 function toggleLetra(){ const on = !document.body.classList.contains('letra'); document.body.classList.toggle('letra', on); try{ localStorage.setItem('cpl:letra', on?'1':'0'); }catch(e){} }
-try{ if(typeof document !== 'undefined' && document.body && document.body.classList){ if(localStorage.getItem('cpl:escuro')==='1') document.body.classList.add('escuro'); if(localStorage.getItem('cpl:letra')==='1') document.body.classList.add('letra'); } }catch(e){}
+try{ if(typeof document !== 'undefined' && document.body && document.body.classList){ if(localStorage.getItem('cpl:escuro')==='1') document.body.classList.add('escuro'); } }catch(e){}
 
 /* ===== IA PREENCHE AS EQUIPES (7 DIAS AUTOMÁTICO / MÊS INTEIRO SOB DEMANDA) ===== */
 function fimDoMes(iso, mais){ const d = new Date(iso.slice(0,7) + '-15T12:00'); d.setMonth(d.getMonth() + 1 + (mais||0)); d.setDate(0); return isoLocal(d); }
@@ -9661,7 +10105,8 @@ function renderCadastros(){
   { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
   { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-ponte3',c.ponteSaida],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; });
     const p0 = document.getElementById('cfg-ponte0'); if(p0) p0.checked = !c.ponteManual;
-    const af = document.getElementById('cfg-autofin'); if(af && document.activeElement !== af) af.value = diasAutoFinal(); }
+    const af = document.getElementById('cfg-autofin'); if(af && document.activeElement !== af) af.value = diasAutoFinal();
+    const sg = document.getElementById('cfg-seguidos'); if(sg && document.activeElement !== sg) sg.value = limiteSeguidos(); }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
   const qs = document.getElementById('quem-sou');
@@ -11530,9 +11975,10 @@ function renderTV(){
       const novos = ops.filter(o=>!antes.has(o.ev.id + '|' + o.fase)), seguem = ops.filter(o=>antes.has(o.ev.id + '|' + o.fase));
       corpo = novos.map(o=>cardTV(o, D)).join('') + seguem.map(o=>contTV(o, D)).join('');
     }
+    corpo = (corpo || '') + baseTV(D, i > 0);
     return '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
-      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length || baseDoDia(D).length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
   };
   document.getElementById('tv-cols').innerHTML = listas.map(colHtml).join('');
   contagemTV(listas[0].r);
@@ -11551,6 +11997,8 @@ function renderTV(){
       else if(!x.motorista && !x.jaLocal) al.push({n:3, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + nomeTV(o.ev.nome) + ')'});
     }));
   });
+  seguidos().filter(s=>s.ini <= somaDiaISO(HOJE, 4)).forEach(s=>al.push({n: s.passou ? 2 : 1, t: txtSeguido(s)}));
+  caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).forEach(c=>al.push({n:1, t: c.v.tipo + ' ' + c.v.placa + ': ' + c.n + ' dias seguidos fora do galpão — programar revisão'}));
   const vistos = new Set();
   TV_ALERTAS = al.filter(a=>{ if(vistos.has(a.t)) return false; vistos.add(a.t); return true; }).sort((a,b)=>b.n - a.n);
   mostrarAlertaTV();
@@ -11625,7 +12073,9 @@ function contagemTV(r){
   r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe);
     (o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>{ const t = tods.find(x=>x.nome===pp.nome); if(t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC) eqs.add(t.equipe); }); });
   const tot = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
-  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span><span>🏠 <b>'+Math.max(0, tot - eqs.size)+'</b>livre'+(tot - eqs.size===1?'':'s')+'</span>';
+  const naBase = new Set(baseDoDia(HOJE).map(s=>s.equipe).filter(q=>q && !eqs.has(q)));
+  const liv = Math.max(0, tot - eqs.size - naBase.size);
+  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+(naBase.size?'<span>🔧 <b>'+naBase.size+'</b>na base</span>':'')+'<span>🏠 <b>'+liv+'</b>livre'+(liv===1?'':'s')+'</span>';
 }
 /* folgas e férias de hoje e amanhã, pela Escala de Montadores */
 let TV_FOLGAS = {t:0, html:''};
@@ -11932,6 +12382,8 @@ async function salvar(){
       nuvemEscutar(); escutando = true;
       carregarRecados();
       setTimeout(()=>{ try{ if(arredondarHorarios()){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
+      setTimeout(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 5000);
+      setInterval(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 600000);
       setTimeout(()=>{ try{ autoIA7(); }catch(e){} }, 15000);
       setTimeout(()=>{ try{ autoFinalizar(); }catch(e){} }, 20000);
       setInterval(()=>{ try{ autoFinalizar(); }catch(e){} }, 3600000);        /* IA preenche os próximos 7 dias ao abrir */
