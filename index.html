@@ -825,6 +825,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:13px">
         <b>😴 Dias seguidos</b>
         <label>avisar quando montador, produtor ou motorista chegar a <input id="cfg-seguidos" type="number" min="3" max="14" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.limiteSeguidos=Math.max(3,parseInt(this.value)||7);salvar();renderQuadro()"> dias de trabalho sem folga</label>
+        <label style="margin-left:14px">contar a partir de <input id="cfg-seg-desde" type="date" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px" onchange="CONFIG.seguidosDesde=this.value||'2026-10-01';salvar();limparSecCache();renderQuadro();try{renderJornada()}catch(e){}"></label>
         <small style="color:var(--muted)">(um dia antes já avisa "chegando")</small>
       </div>
     </div>
@@ -7339,7 +7340,9 @@ function limiteSeguidos(){ const v = +CONFIG.limiteSeguidos; return v >= 3 ? v :
 function calcSeguidos(){
   const dias = {};   /* chave -> {nome, tipo, d:{iso: evId}} */
   const marca = (nome, tipo, d, evId) => { if(!nome || !d) return; const k = tipo + '|' + nome; const o = dias[k] = dias[k] || {nome, tipo, d:{}}; if(!o.d[d]) o.d[d] = evId; };
-  const ini = somaDiaISO(HOJE, -20), fim = somaDiaISO(HOJE, 45);
+  /* a contagem só começa em CONFIG.seguidosDesde (padrão 01/10/2026): o que veio antes não conta */
+  const desde = CONFIG.seguidosDesde || '2026-10-01';
+  const ini = [somaDiaISO(HOJE, -20), desde].sort()[1], fim = somaDiaISO(HOJE, 45);
   eventos.forEach(ev=>{
     if(!ev.mont || ev.esp === 'cancelado' || ev.esp === 'terceirizado') return;
     const eq = ev.equipe || plano(ev).equipe;
@@ -7568,7 +7571,7 @@ function jFolga(){
   const lim = limiteSeguidos(), L = seqAtuais().slice(0, 25), conf = conflitosPessoas();
   const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>esc(c.nome)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
   if(!L.length) return cab + '<div class="alert green" style="margin:0">Ninguém trabalhando em sequência daqui pra frente.</div>';
-  return cab + '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sequências de trabalho sem folga que estão rolando ou vão começar. Limite: <b>'+lim+' dias</b> (muda em Integrações). Inclui serviço na base; folga e férias da Escala quebram a sequência.</div>'+
+  return cab + '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sequências de trabalho sem folga que estão rolando ou vão começar. Limite: <b>'+lim+' dias</b> · contando a partir de <b>'+fmtD(CONFIG.seguidosDesde || '2026-10-01').slice(0,5)+'</b> (os dois mudam em Integrações). Inclui serviço na base; folga e férias da Escala quebram a sequência.</div>'+
     '<table class="jt"><thead><tr><th>Quem</th><th>Dias seguidos</th><th>Período</th><th>Folga sugerida / quem cobre</th></tr></thead><tbody>'+
     L.map(s=>{
       const passou = s.n >= lim, perto = s.n === lim - 1, dF = passou ? s.dias[lim-1] : null;
@@ -10300,7 +10303,8 @@ function renderCadastros(){
   { const c = cfgSaida(); [['cfg-ponte',c.ponteAte],['cfg-ponte2',c.ponteDepois],['cfg-ponte3',c.ponteSaida],['cfg-margem',c.margem],['cfg-desc',c.descarga],['cfg-raio',c.raio]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v; });
     const p0 = document.getElementById('cfg-ponte0'); if(p0) p0.checked = !c.ponteManual;
     const af = document.getElementById('cfg-autofin'); if(af && document.activeElement !== af) af.value = diasAutoFinal();
-    const sg = document.getElementById('cfg-seguidos'); if(sg && document.activeElement !== sg) sg.value = limiteSeguidos(); }
+    const sg = document.getElementById('cfg-seguidos'); if(sg && document.activeElement !== sg) sg.value = limiteSeguidos();
+    const sd = document.getElementById('cfg-seg-desde'); if(sd && document.activeElement !== sd) sd.value = CONFIG.seguidosDesde || '2026-10-01'; }
   const lp = document.getElementById('logo-prev');
   if(lp) lp.innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'" style="max-height:56px;max-width:220px">' : 'sem logo';
   const qs = document.getElementById('quem-sou');
