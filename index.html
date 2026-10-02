@@ -3956,7 +3956,13 @@ function blocoSaida(ev){
   const hs = ev.hSaida || {};
   const autoM = saidaAuto(ev, 'mont'), autoD = ev.desm ? saidaAuto(ev, 'desm') : null;
   const sug = {montCam: autoM && autoM.saida, montEq: autoM && autoM.saida, desmCam: autoD && autoD.saida, desmEq: autoD && autoD.saida};
-  const campo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k] || sug[k] || '') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px;' + (hs[k] ? 'color:#1c4fa0;font-weight:700' : 'color:var(--muted)') + '" title="' + (hs[k] ? 'Hora marcada por você — apague para voltar à sugestão' : 'Sugestão da Central (estrada + margem + ponte) — troque para fixar na mão') + '" onchange="setSaidaManual(\'' + ev.id + '\',\'' + k + '\',this.value)">' + (hs[k] ? '' : '<small style="color:var(--muted);font-size:9.5px">sug.</small>') + '</span>';
+  const vi = minViagem(ev);
+  const campo = (k, rot) => { const val = hs[k] || sug[k] || '';
+    const chega = (val && vi != null) ? hm(minDe(val) + vi) : null;
+    const ini = String((/^desm/.test(k) ? ev.desm : ev.mont) || '').slice(11,16);
+    const tarde = chega && ini && chega > ini;
+    return '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + val + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px;' + (hs[k] ? 'color:#1c4fa0;font-weight:700' : 'color:var(--muted)') + '" title="' + (hs[k] ? 'Hora marcada por você — apague para voltar à sugestão' : 'Sugestão da Central (estrada + margem + ponte) — troque para fixar na mão') + '" onchange="setSaidaManual(\'' + ev.id + '\',\'' + k + '\',this.value)">' + (hs[k] ? '' : '<small style="color:var(--muted);font-size:9.5px">sug.</small>') +
+      (chega ? '<small style="font-size:10.5px;white-space:nowrap;color:' + (tarde ? '#b0483c;font-weight:700' : '#0f8a4d') + '" title="Previsão de chegada no local (' + durTxt(vi) + ' de estrada)">→ chega ' + chega + (tarde ? ' ⚠' : '') + '</small>' : '') + '</span>'; };
   const manualHtml = '<div style="font-size:11.5px;color:var(--muted);margin:6px 0;padding:7px 9px;border:1px dashed var(--line);border-radius:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">🕐 <b>Hora de saída</b> (cinza = sugestão da Central; troque para fixar, apague para voltar) <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">🔨 ' + campo('montCam','🚚 caminhões') + ' ' + campo('montEq','👷 equipe') + '</span>' +
     (ev.desm ? ' <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">📤 ' + campo('desmCam','🚚 caminhões') + ' ' + campo('desmEq','👷 equipe') + '</span>' : '') + '</div>' +
     avisoSaidaManual(ev, 'mont') + (ev.desm ? avisoSaidaManual(ev, 'desm') : '') + '</div>';
