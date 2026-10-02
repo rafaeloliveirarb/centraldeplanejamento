@@ -2975,12 +2975,15 @@ function renderCarga(){
   if(!box) return;
   const fim = new Date(); fim.setDate(fim.getDate() + cargaPeriodo);
   const ate = isoLocal(fim);
+  /* conta a partir da data de início (padrão 01/10) — o que veio antes zera */
+  const desde = CONFIG.seguidosDesde || '2026-10-01';
+  const ini0 = desde > HOJE ? desde : (desde < HOJE ? desde : HOJE);
   const dados = {};
   equipes.forEach(e=>{ if(e.nome!==EQUIPE_TERC) dados[e.nome] = {eventos:0, dias:new Set(), km:0, prox:null}; });
   let terceirizados = 0, semEquipe = 0;
   eventos.forEach(ev=>{
     if(evEncerrado(ev) || !ev.mont) return;
-    const dias = diasEquipe(ev).filter(d=>d>=HOJE && d<=ate);
+    const dias = diasEquipe(ev).filter(d=>d>=ini0 && d<=ate);
     if(!dias.length) return;
     if(ev.esp==='terceirizado' || ev.equipe===EQUIPE_TERC){ terceirizados++; return; }
     const eq = ev.equipe || plano(ev).equipe;
@@ -2997,7 +3000,7 @@ function renderCarga(){
   const media = nomes.length ? totalDias/nomes.length : 0;
 
   document.getElementById('carga-sub').textContent =
-    'Próximos ' + cargaPeriodo + ' dias · ' + totalDias + ' dia(s) de operação distribuídos · média de ' +
+    'De ' + fmtD(ini0).slice(0,5) + ' até ' + fmtD(ate).slice(0,5) + ' (o que veio antes de ' + fmtD(desde).slice(0,5) + ' não conta) · ' + totalDias + ' dia(s) de operação distribuídos · média de ' +
     media.toFixed(1) + ' por equipe' + (terceirizados ? ' · ' + terceirizados + ' evento(s) terceirizados' : '') +
     (semEquipe ? ' · ' + semEquipe + ' sem equipe definida' : '');
 
