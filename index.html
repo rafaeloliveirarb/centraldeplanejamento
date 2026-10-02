@@ -3850,6 +3850,37 @@ function setSaidaManual(id, campo, val){
   salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
   toast(val ? '🕐 Saída ' + (/Eq$/.test(campo) ? 'da equipe' : 'dos caminhões') + ' (' + (/^desm/.test(campo) ? 'desmontagem' : 'montagem') + ') marcada para ' + val + '.' : '🕐 Voltou para a conta automática.');
 }
+/* a conta automática, ignorando o que foi marcado na mão — é a sugestão mostrada nos campos */
+function saidaAuto(ev, fase){
+  const s = ev.hSaida; ev.hSaida = null;
+  let r = null; try{ r = horariosSaida(ev, fase); }catch(e){}
+  ev.hSaida = s;
+  return r;
+}
+/* avisos para a hora marcada na mão: ponte fechada e engarrafamento */
+function avisoSaidaManual(ev, fase){
+  const man = saidaManual(ev, fase, 'cam'); if(!man) return '';
+  const hs = horariosSaida(ev, fase); if(!hs) return '';
+  const msgs = [];
+  if(hs.atrasa) msgs.push('⚠ saindo às ' + man + ' o caminhão chega ' + hs.chegada + ' — DEPOIS do início (' + hs.inicio + ')');
+  if(passaPonte(ev)){
+    const base = dia(fase==='desm' ? ev.desm : ev.mont);
+    const jp = janelaPonte(ev, fase, base);
+    if(jp && !jp.livre){
+      const mp = minAtePonte(ev), ate = minDe(jp.ate), dep = minDe(jp.dep);
+      const cruza = (((minDe(man) + mp) % 1440) + 1440) % 1440;
+      const ok = cruza <= ate || (dep != null && cruza >= dep);
+      if(!ok){
+        const auto = saidaAuto(ev, fase);
+        msgs.push('🌉 a essa hora chega na ponte às ' + hm(cruza) + ', no horário PROIBIDO (' + jp.rot + ')' + (auto ? ' — a Central sugere sair ' + auto.saida : ''));
+      } else msgs.push('🌉 ponte ok: atravessa às ' + hm(cruza) + ' (' + jp.rot + ')');
+    }
+  }
+  try{ const t = resumoTransito(ev, fase, dia(fase==='desm' ? ev.desm : ev.mont)); if(t && t.nivel) msgs.push(t.txt); }catch(e){}
+  if(!msgs.length) return '';
+  const ruim = msgs.some(m=>/⚠|PROIBIDO|🚨/.test(m));
+  return '<div style="font-size:12px;color:' + (ruim ? '#b0483c' : '#0f8a4d') + ';margin:4px 0 0;line-height:1.5">' + (fase==='desm' ? '📤 ' : '🔨 ') + msgs.join(' · ') + '</div>';
+}
 function horariosSaida(ev, fase, D){
   const base = D || dia(fase==='desm' ? ev.desm : ev.mont);
   const ch = minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
@@ -3923,9 +3954,12 @@ function blocoSaida(ev){
   }
   const c = cfgSaida();
   const hs = ev.hSaida || {};
-  const campo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k]||'') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px' + (hs[k] ? ';color:#1c4fa0;font-weight:700' : '') + '" onchange="setSaidaManual(\'' + ev.id + '\',\'' + k + '\',this.value)"></span>';
-  const manualHtml = '<div style="font-size:11.5px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:7px 9px;border:1px dashed var(--line);border-radius:8px">🕐 <b>Marcar saída na mão</b> (vazio = automático) <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">🔨 ' + campo('montCam','🚚 caminhões') + ' ' + campo('montEq','👷 equipe') + '</span>' +
-    (ev.desm ? ' <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">📤 ' + campo('desmCam','🚚 caminhões') + ' ' + campo('desmEq','👷 equipe') + '</span>' : '') + '</div>';
+  const autoM = saidaAuto(ev, 'mont'), autoD = ev.desm ? saidaAuto(ev, 'desm') : null;
+  const sug = {montCam: autoM && autoM.saida, montEq: autoM && autoM.saida, desmCam: autoD && autoD.saida, desmEq: autoD && autoD.saida};
+  const campo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k] || sug[k] || '') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px;' + (hs[k] ? 'color:#1c4fa0;font-weight:700' : 'color:var(--muted)') + '" title="' + (hs[k] ? 'Hora marcada por você — apague para voltar à sugestão' : 'Sugestão da Central (estrada + margem + ponte) — troque para fixar na mão') + '" onchange="setSaidaManual(\'' + ev.id + '\',\'' + k + '\',this.value)">' + (hs[k] ? '' : '<small style="color:var(--muted);font-size:9.5px">sug.</small>') + '</span>';
+  const manualHtml = '<div style="font-size:11.5px;color:var(--muted);margin:6px 0;padding:7px 9px;border:1px dashed var(--line);border-radius:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">🕐 <b>Hora de saída</b> (cinza = sugestão da Central; troque para fixar, apague para voltar) <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">🔨 ' + campo('montCam','🚚 caminhões') + ' ' + campo('montEq','👷 equipe') + '</span>' +
+    (ev.desm ? ' <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">📤 ' + campo('desmCam','🚚 caminhões') + ' ' + campo('desmEq','👷 equipe') + '</span>' : '') + '</div>' +
+    avisoSaidaManual(ev, 'mont') + (ev.desm ? avisoSaidaManual(ev, 'desm') : '') + '</div>';
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' + manualHtml +
     ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
       ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (' + ((hM && hM.ponteAjustou && hM.jRot) || (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.jRot; })() || 'fora do horário permitido') + ') — os caminhões saem de madrugada (padrão ' + c.ponteSaida + '), chegam antes e esperam no local.</div>' : '') +
