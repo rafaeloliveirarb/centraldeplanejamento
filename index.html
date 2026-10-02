@@ -1035,6 +1035,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
           <label class="f" style="flex:2 1 220px"><i>O que vão fazer</i><input id="sb-oque" placeholder="ex.: manutenção de lonas, organização do estoque"></label>
           <label class="f"><i>De</i><input type="date" id="sb-ini"></label>
           <label class="f"><i>Até</i><input type="date" id="sb-fim"></label>
+          <label class="f"><i>Começa às</i><input type="time" id="sb-h1"></label>
+          <label class="f"><i>Termina às</i><input type="time" id="sb-h2"></label>
           <label class="f" style="flex:1 1 170px"><i>Equipe inteira</i><select id="sb-eq"></select></label>
         </div>
         <div style="font-size:12.5px;color:var(--muted);margin:10px 0 4px">Ou escolha as pessoas (soma com a equipe, se tiver):</div>
@@ -6965,6 +6967,9 @@ function verEvento(id){
       '<label class="f"><i>Equipe (montagem e desmontagem)</i><select onchange="setCampo(\''+ev.id+'\',\'equipe\',this.value)">'+
         equipes.map(e=>'<option '+(e.nome===eq?'selected':'')+'>'+e.nome+'</option>').join('')+
         '<option '+(eq===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option></select></label>'+
+      '<div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">🕐 <b>Horário dos montadores</b> (saída do galpão — vazio = junto com o caminhão)'+
+        (function(){ const hs = ev.hSaida || {}; const cpo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k]||'') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px' + (hs[k] ? ';color:#1c4fa0;font-weight:700' : '') + '" onchange="setSaidaManual(\''+ev.id+'\',\'' + k + '\',this.value)"></span>';
+          return cpo('montEq','🔨 montagem') + (ev.desm ? ' ' + cpo('desmEq','📤 desmontagem') : ''); })()+'</div>'+
       '<div class="f" style="grid-column:1/-1"><i>🔨 Equipe da montagem'+(ev.montOp?' — com troca':'')+(eq===EQUIPE_TERC?' — equipe do fornecedor':'')+
         (ev.mont?' · <b style="text-transform:none;letter-spacing:0">'+fmtD(ev.mont)+(dia(ev.mont)!==dia(fimMont(ev))?' a '+fmtD(fimMont(ev)):'')+'</b>':'')+'</i>'+
         (eq===EQUIPE_TERC && !montadoresOp(ev, eq).length ? '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Montagem por equipe terceirizada. Se algum montador da casa for acompanhar, adicione ao lado.</div>' : '')+
@@ -7320,7 +7325,7 @@ function renderLinha(){
   const cab = '<tr><th class="nm">Evento</th>'+dias.map(d=>{ const dt = new Date(d+'T12:00'), fds = [0,6].includes(dt.getDay()); return '<th class="'+(fds?'fds ':'')+(d===HOJE?'hj':'')+'">'+SEM1[dt.getDay()]+'<br>'+d.slice(8)+(d.slice(8)==='01'||d===dias[0]?'<br><span style="font-size:9px">'+['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][dt.getMonth()]+'</span>':'')+'</th>'; }).join('')+'</tr>';
   const rod = '<tr><td class="nm" style="font-size:11px;color:var(--muted);font-weight:600">Equipes nossas em campo<br><small>(de '+nossasEq+')</small></td>'+dias.map(d=>{ const q = (emCampo[d]||new Set()).size; return '<td class="'+(d===HOJE?'hj':'')+'" style="color:'+(q > nossasEq ? '#c0392b' : q === nossasEq && q ? '#a86412' : q ? 'var(--ink)' : 'var(--line)')+'" title="'+q+' operação(ões) da casa em '+fmtD(d).slice(0,5)+'">'+(q||'·')+'</td>'; }).join('')+'</tr>';
   const linhasBase = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= ini && s.ini <= fim).map(s=>{ const ds = new Set(diasBase(s));
-    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');abrirBase()"><b>🏠 SERVIÇO NA BASE</b><small>'+esc(s.oque||'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+'</small></td>'+
+    return '<tr><td class="nm" onclick="fechar(\'ov-linha\');abrirBase()"><b>🏠 SERVIÇO NA BASE</b><small>'+esc(s.oque||'')+(horaBase(s)?' · 🕐 '+horaBase(s):'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+'</small></td>'+
       dias.map(d=>'<td class="dc'+([0,6].includes(new Date(d+'T12:00').getDay())?' fds':'')+(d===HOJE?' hj':'')+'">'+(ds.has(d)?'<span class="bm" style="background:#a8783a"></span>':'')+'</td>').join('')+'</tr>'; }).join('');
   box.innerHTML = '<div class="lt-wrap"><table class="lt"><thead>'+cab+'</thead><tbody>'+linhas+linhasBase+'</tbody><tfoot>'+rod+'</tfoot></table></div>'+
     '<div style="font-size:12px;color:var(--muted);margin-top:8px">A última linha conta montagens e desmontagens da casa no dia: <b style="color:#a86412">laranja</b> = todas as equipes ocupadas, <b style="color:#c0392b">vermelho</b> = mais operação que equipe. Clique numa barra para abrir o evento.</div>';
@@ -7537,6 +7542,7 @@ function ocupadoEmEv(e, tipo, chave, dias){
 }
 /* motoristas que ficam na base (manutenção do caminhão, pátio, carga) */
 function motoristasBase(s){ return (s && s.motoristas || []).filter(Boolean); }
+function horaBase(s){ if(!s || (!s.h1 && !s.h2)) return ''; return s.h1 && s.h2 ? s.h1 + ' às ' + s.h2 : s.h1 ? 'a partir de ' + s.h1 : 'até ' + s.h2; }
 function motoristaNaBase(nome, d){ return baseDoDia(d).find(s=>motoristasBase(s).includes(nome)) || null; }
 function abrirBase(){
   const sel = document.getElementById('sb-eq');
@@ -7558,7 +7564,7 @@ function renderBase(){
   box.innerHTML = L.map(s=>{
     const choques = eventos.filter(e=>!e.esp && e.mont && (pessoasNaEscala(e).some(p=>!p.prod && pessoasBase(s).includes(p.nome) && diasDe(e, p.nome).some(d=>diasBase(s).includes(d)))
       || motoristasBase(s).some(m=>ocupadoEmEv(e, 'mo', m, diasBase(s)))));
-    return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:110px"><b>'+fmtD(s.ini).slice(0,5)+(s.fim && s.fim!==s.ini?' a '+fmtD(s.fim).slice(0,5):'')+'</b><br><small style="color:var(--muted)">'+diasBase(s).length+' dia(s)</small></span>'+
+    return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:110px"><b>'+fmtD(s.ini).slice(0,5)+(s.fim && s.fim!==s.ini?' a '+fmtD(s.fim).slice(0,5):'')+'</b><br><small style="color:var(--muted)">'+diasBase(s).length+' dia(s)'+(horaBase(s)?' · 🕐 '+horaBase(s):'')+'</small></span>'+
       '<span style="flex:1"><b>🏠 '+esc(s.oque||'Serviço na base')+'</b><br><small>'+(s.equipe?'👷 Equipe <b>'+esc(s.equipe)+'</b> (inteira)':'')+((s.pessoas||[]).length?(s.equipe?' + ':'')+esc(s.pessoas.join(', ')):'')+(motoristasBase(s).length?((s.equipe||(s.pessoas||[]).length)?'<br>':'')+'🚚 '+esc(motoristasBase(s).join(', ')):'')+'</small>'+
         (choques.length ? '<br><small style="color:#c0392b;font-weight:700">⚠ escalado(s) também em: '+choques.map(e=>esc(e.nome)).join(', ')+'</small>' : '')+'</span>'+
       '<button class="mini danger" onclick="rmBase(\''+s.id+'\')">✕</button></div>';
@@ -7572,8 +7578,9 @@ function addBase(){
   if(!ini) return toast('Escolha a data.');
   if(!equipe && !pessoas.length && !mots.length) return toast('Escolha a equipe, as pessoas ou os motoristas.');
   let quem = ''; try{ quem = localStorage.getItem('cpl:quem') || ''; }catch(e){}
-  CONFIG.servicosBase = [...(CONFIG.servicosBase||[]), {id: Date.now().toString(36), oque: g('sb-oque').trim() || 'Manutenção', ini: fim < ini ? fim : ini, fim: fim < ini ? ini : fim, equipe: equipe || null, pessoas, motoristas: mots, quem, t: Date.now()}];
+  CONFIG.servicosBase = [...(CONFIG.servicosBase||[]), {id: Date.now().toString(36), oque: g('sb-oque').trim() || 'Manutenção', ini: fim < ini ? fim : ini, fim: fim < ini ? ini : fim, h1: g('sb-h1') || null, h2: g('sb-h2') || null, equipe: equipe || null, pessoas, motoristas: mots, quem, t: Date.now()}];
   const o = document.getElementById('sb-oque'); if(o) o.value = '';
+  ['sb-h1','sb-h2'].forEach(k=>{ const x = document.getElementById(k); if(x) x.value = ''; });
   document.querySelectorAll('.sb-p,.sb-m').forEach(x=>x.checked=false);
   salvar(); marcarPlanoSujo(); renderQuadro(); renderBase();
   toast('🏠 Serviço na base lançado — a IA não escala essa gente em evento nesses dias.');
@@ -7583,11 +7590,11 @@ function baseHojeHtml(){
   const L = (CONFIG.servicosBase||[]).filter(s=>(s.fim||s.ini) >= HOJE && s.ini <= somaDiaISO(HOJE, 13));
   if(!L.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  return '<div class="base-lin">🏠 <b>Serviço na base:</b> '+L.map(s=>'<span onclick="abrirBase()" style="cursor:pointer">'+fmtD(s.ini).slice(0,5)+(s.fim&&s.fim!==s.ini?'–'+fmtD(s.fim).slice(0,5):'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+' — '+esc(s.oque||'')+'</span>').join('')+'</div>';
+  return '<div class="base-lin">🏠 <b>Serviço na base:</b> '+L.map(s=>'<span onclick="abrirBase()" style="cursor:pointer">'+fmtD(s.ini).slice(0,5)+(s.fim&&s.fim!==s.ini?'–'+fmtD(s.fim).slice(0,5):'')+(horaBase(s)?' '+horaBase(s):'')+' · '+esc([s.equipe, ...(s.pessoas||[]), ...motoristasBase(s).map(m=>'🚚 '+m)].filter(Boolean).join(', '))+' — '+esc(s.oque||'')+'</span>').join('')+'</div>';
 }
 function baseTV(D, curto){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  return baseDoDia(D).map(s=>'<div class="tv-cont" style="border-left-color:#a8783a">🏠 <b>SERVIÇO NA BASE</b> — '+esc(s.oque||'')+
+  return baseDoDia(D).map(s=>'<div class="tv-cont" style="border-left-color:#a8783a">🏠 <b>SERVIÇO NA BASE</b>'+(horaBase(s)?' · 🕐 '+horaBase(s):'')+' — '+esc(s.oque||'')+
     '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', '))+(motoristasBase(s).length?' · 🚚 '+esc(motoristasBase(s).join(', ')):'')+'</div></div>').join('');
 }
 
