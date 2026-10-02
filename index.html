@@ -5458,6 +5458,17 @@ function levantarPendencias(nDias, leves){
     if(!s.evLim) return;
     add({sev: s.passou ? 3 : 2, ev: s.evLim, dia: d, ic: s.tipo==='motorista' ? '🚚' : '😴', tipo:'info', txt: txtSeguido(s) + (s.passou ? ' — programar folga (😴 Jornada sugere quem cobre)' : '')});
   });
+  /* nota fiscal: 2 dias antes da montagem (remessa) e da desmontagem (retorno) */
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    [['mont', dia(ev.mont), 'nfM', '🧾 NOTA FISCAL DE REMESSA', 'a montagem'], ['desm', dia(ev.desm), 'nfD', '🧾 NOTA FISCAL DE RETORNO', 'a desmontagem']].forEach(([f, d, k, rot, fase])=>{
+      if(!d || ev[k] || d < HOJE || d > fim) return;
+      const falta = difDias(HOJE, d);
+      if(falta > 2) return;
+      add({sev: falta <= 1 ? 3 : 2, ev: ev.id, dia: HOJE, ic:'🧾', tipo:'nf',
+        txt: rot + ': ' + (falta === 0 ? fase.toUpperCase() + ' É HOJE' : 'falta' + (falta>1?'m':'') + ' ' + falta + ' dia(s) para ' + fase + ' (' + fmtD(d).slice(0,5) + ')') + ' — emitir a nota e marcar no evento (PRODUÇÃO)'});
+    });
+  });
   /* caminhão há muitos dias fora do galpão */
   caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).forEach(c=>{
     const d = c.dLim < HOJE ? HOJE : c.dLim; if(d > fim || !c.ev) return;
@@ -7093,7 +7104,13 @@ function verEvento(id){
     '</div>'+
 
     
-    '<div class="sec" id="sec-producao"><h4>'+dotSec(ev,'producao')+' 🎬 PRODUÇÃO</h4><div class="info">'+
+    '<div class="sec" id="sec-producao"><h4>'+dotSec(ev,'producao')+' 🎬 PRODUÇÃO</h4>'+
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;border:1px solid '+((ev.nfM&&(!ev.desm||ev.nfD))?'#bfe3cd;background:#f1faf4':'#f0d9a8;background:#fdf8ec')+';border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px">'+
+        '<b>🧾 Nota fiscal</b>'+
+        '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" '+(ev.nfM?'checked':'')+' onchange="setCampo(\''+ev.id+'\',\'nfM\',this.checked||null)"> remessa emitida (montagem'+(ev.mont?' '+fmtD(ev.mont).slice(0,5):'')+')</label>'+
+        (ev.desm ? '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" '+(ev.nfD?'checked':'')+' onchange="setCampo(\''+ev.id+'\',\'nfD\',this.checked||null)"> retorno emitida (desmontagem'+(ev.desm?' '+fmtD(ev.desm).slice(0,5):'')+')</label>' : '')+
+        '<small style="color:var(--muted)">a Central cobra 2 dias antes de cada fase até marcar aqui</small>'+
+      '</div><div class="info">'+
       '<div><i>Produtor</i><select class="sel-fase" onchange="setProdutor(\''+ev.id+'\',this.value,true)">'+
         (ev.produtor?'':'<option value="" selected>'+(a.produtor||'A definir')+' — sugestão da IA</option>')+
         [...new Set([...produtores.map(p=>p.nome), ...(ev.produtor && ev.produtor!==SEM_PRODUTOR ? [ev.produtor] : [])])]
@@ -7228,7 +7245,13 @@ function secoesStatusCalc(ev){
   if(rCor === 'verde'){ const em = emendasDe(ev)[0]; if(em){ rCor = 'amar'; rTxt = 'equipe ' + em.eq + ' emenda com ' + em.outro.nome + ' (' + fmtD(em.dia2).slice(0,5) + (em.km ? ', ≈' + em.km + ' km' : '') + ') sem dia de folga'; } }
   put('riscos', rCor, rTxt);
   /* PRODUÇÃO */
-  if(!produtorDo(ev) || ev.produtor===SEM_PRODUTOR) put('producao','verm','sem produtor');
+  const nfPend = [];
+  if(!terceiro){
+    if(ev.mont && !ev.nfM && dia(ev.mont) >= HOJE && difDias(HOJE, dia(ev.mont)) <= 2) nfPend.push('remessa (' + fmtD(ev.mont).slice(0,5) + ')');
+    if(ev.desm && !ev.nfD && dia(ev.desm) >= HOJE && difDias(HOJE, dia(ev.desm)) <= 2) nfPend.push('retorno (' + fmtD(ev.desm).slice(0,5) + ')');
+  }
+  if(nfPend.length) put('producao','verm','🧾 emitir nota fiscal de ' + nfPend.join(' e '));
+  else if(!produtorDo(ev) || ev.produtor===SEM_PRODUTOR) put('producao','verm','sem produtor');
   else if(!ev.produtor) put('producao','amar','produtor sugerido pela IA — falta confirmar');
   else if(!ev.respNome || !ev.respTel) put('producao','amar','falta o responsável no local (nome e telefone)');
   else put('producao','verde','produtor e responsável ok');
@@ -7482,7 +7505,7 @@ function calcSeguidos(){
     ['mont','desm'].forEach(f=>{
       if(f === 'desm' && !ev.desm) return;
       const padrao = f === 'desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
-      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; (x.dia ? [x.dia] : padrao).concat(xFicaMot(ev, x.v, f)).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
+      escalaDo(ev, f).forEach(x=>{ if(!x.motorista) return; diasViagemReal(ev, x, f).concat(xFicaMot(ev, x.v, f)).forEach(d=>{ if(d >= ini && d <= fim) marca(x.motorista, 'motorista', d, ev.id); }); });
     });
   });
   (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s).filter(d=>d >= ini && d <= fim); pessoasBase(s).forEach(p=>ds.forEach(d=>marca(p, produtores.some(x=>x.nome===p) ? 'produtor' : 'montador', d, 'base:' + s.id))); motoristasBase(s).forEach(m=>ds.forEach(d=>marca(m, 'motorista', d, 'base:' + s.id))); });
@@ -7496,7 +7519,7 @@ function calcSeguidos(){
     for(let i = 1; i <= L.length; i++){
       if(i < L.length && somaDiaISO(L[i-1], 1) === L[i]) continue;
       const seq = L.slice(a, i); a = i;
-      if(seq.length >= lim - 1 && seq[seq.length-1] >= HOJE){
+      if(seq.length >= lim - 2 && seq[seq.length-1] >= HOJE){
         const dLim = seq[lim - 1] || null;   /* o dia em que bate o limite */
         const evsSeq = [...new Set(seq.map(d=>o.d[d]))], reais = evsSeq.filter(x=>!String(x).startsWith('base:'));
         let evLim = dLim ? o.d[dLim] : o.d[seq[seq.length-1]];
@@ -7510,6 +7533,12 @@ function calcSeguidos(){
 function seguidos(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return SEGUIDOS; }
 let DIAS_PESSOA = null;
 function diasPorPessoa(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return DIAS_PESSOA || {}; }
+/* dias REAIS de viagem de uma linha da escala: o dia próprio da viagem, ou o 1º dia da fase.
+   Motorista e caminhão vão e voltam no dia — não trabalham a montagem inteira. */
+function diasViagemReal(e, x, f){
+  const d0 = x.dia || dia(f==='desm' ? e.desm : e.mont);
+  return d0 ? [d0] : [];
+}
 const ROT_TIPO = {montador:'👷', produtor:'🎬', motorista:'🚚'};
 /* clique no nome: abre a agenda do mês da pessoa, mostrando onde ela tem operação */
 function nomeAgenda(nome, tipo, esc){
@@ -7518,8 +7547,9 @@ function nomeAgenda(nome, tipo, esc){
   return '<b style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="Ver a agenda do mês de ' + e(nome) + ' — onde tem operação, dia a dia" onclick="fechar(\'ov-jornada\');abrirAgenda(\'' + t + '\',\'' + e(nome).replace(/'/g, "\\'") + '\')">' + e(nome) + '</b>';
 }
 function txtSeguido(s){
+  const lim = limiteSeguidos();
   return ROT_TIPO[s.tipo] + ' ' + s.nome + (s.tipo==='motorista' ? ' (motorista)' : s.tipo==='produtor' ? ' (produtor)' : '') + ': ' +
-    (s.passou ? s.n + ' dias seguidos sem folga' : 'chegando a ' + limiteSeguidos() + ' dias seguidos (' + s.n + ')') + ' — ' + fmtD(s.ini).slice(0,5) + ' a ' + fmtD(s.fim).slice(0,5);
+    (s.passou ? s.n + ' dias seguidos sem folga' : '⏳ chegando a ' + lim + ' dias seguidos — está com ' + s.n + ', falta' + (lim - s.n > 1 ? 'm' : '') + ' ' + (lim - s.n)) + ' — ' + fmtD(s.ini).slice(0,5) + ' a ' + fmtD(s.fim).slice(0,5);
 }
 
 /* ===== SERVIÇO NA BASE ===== */
@@ -7681,8 +7711,8 @@ function caminhoesNaRua(){
       if(f==='desm' && !e.desm) return;
       /* só caminhão escolhido de verdade — sugestão da IA ainda não conta */
       if(!((f==='desm' && temFrotaDesm(e)) || (e.veiculos||[]).length)) return;
-      const padrao = f==='desm' ? diasEntre(e.desm, fimDesm(e)) : (e.permanece ? diasVeiculo(e) : diasEntre(e.mont, fimMont(e)));
-      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : padrao).concat(xFica(e, x.v, f)).forEach(d=>{ if(d < desde || d > somaDiaISO(HOJE, JANELA_IA)) return; (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
+      const padrao = (f==='mont' && e.permanece) ? diasVeiculo(e) : null;   /* permanece: fica no local até a desmontagem */
+      escalaDo(e, f).forEach(x=>{ if(!x.v) return; (x.dia ? [x.dia] : (padrao || diasViagemReal(e, x, f))).concat(xFica(e, x.v, f)).forEach(d=>{ if(d < desde || d > somaDiaISO(HOJE, JANELA_IA)) return; (porV[x.v] = porV[x.v] || {})[d] = e.id; }); });
     });
   });
   const lim = limiteCaminhao(), out = [];
@@ -7815,7 +7845,7 @@ function jMes(){
     const eq = ev.equipe || plano(ev).equipe;
     if(eq !== EQUIPE_TERC) pessoasNaEscala(ev).forEach(p=>diasDe(ev, p.nome).forEach(d=>{ if(!p.prod && faltouDia(ev, p.nome, d)) return; marca(p.nome, p.prod?'produtor':'montador', d, ev.cidade); }));
     ['mont','desm'].forEach(f=>{ if(f==='desm' && !ev.desm) return; const padrao = f==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev));
-      escalaDo(ev, f).forEach(x=>{ if(x.motorista) (x.dia?[x.dia]:padrao).forEach(d=>marca(x.motorista, 'motorista', d, ev.cidade)); }); });
+      escalaDo(ev, f).forEach(x=>{ if(x.motorista) diasViagemReal(ev, x, f).concat(xFicaMot(ev, x.v, f)).forEach(d=>marca(x.motorista, 'motorista', d, ev.cidade)); }); });
   });
   (CONFIG.servicosBase||[]).forEach(s=>{ pessoasBase(s).forEach(p=>diasBase(s).forEach(d=>marca(p, produtores.some(x=>x.nome===p)?'produtor':'montador', d, ''))); motoristasBase(s).forEach(m=>diasBase(s).forEach(d=>marca(m, 'motorista', d, ''))); });
   Object.values(dias).forEach(o=>{ if(o.tipo==='motorista') return; Object.keys(o.d).forEach(d=>{ if(folgaDe(o.nome, d)) delete o.d[d]; }); });
@@ -12397,6 +12427,11 @@ function renderTV(){
     }));
   });
   seguidos().filter(s=>s.ini <= somaDiaISO(HOJE, 4)).forEach(s=>al.push({n: s.passou ? 2 : 1, t: txtSeguido(s)}));
+  eventos.forEach(ev=>{ if(ev.esp || !ev.mont) return;
+    [[dia(ev.mont), 'nfM', 'NF DE REMESSA', 'montagem'], [dia(ev.desm), 'nfD', 'NF DE RETORNO', 'desmontagem']].forEach(([d, k, rot, fase])=>{
+      if(!d || ev[k] || d < HOJE || difDias(HOJE, d) > 2) return;
+      al.push({n:2, t:'🧾 ' + rot + ': ' + nomeTV(ev.nome) + ' — ' + fase + ' ' + fmtD(d).slice(0,5)});
+    }); });
   caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).forEach(c=>al.push({n:1, t: txtCamRua(c, true)}));
   const vistos = new Set();
   TV_ALERTAS = al.filter(a=>{ if(vistos.has(a.t)) return false; vistos.add(a.t); return true; }).sort((a,b)=>b.n - a.n);
