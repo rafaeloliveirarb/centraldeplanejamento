@@ -2182,7 +2182,8 @@ function diasEntre(a,b){
 const difDias = (a, b) => Math.round((new Date(dia(b)+'T12:00') - new Date(dia(a)+'T12:00')) / 864e5);
 function fimMontInvalido(ev){
   if(!ev.montFim || !ev.mont || dia(ev.montFim) < dia(ev.mont)) return false;
-  const fimEvt = dia(ev.evtFim) || dia(ev.evt);
+  let fimEvt = dia(ev.evtFim) || dia(ev.evt);
+  if(fimEvt && fimEvt < dia(ev.mont)) fimEvt = null;   /* data do evento antes da montagem: é ELA que está errada, não o "até" */
   return difDias(ev.mont, ev.montFim) > 45 || (fimEvt && dia(ev.montFim) > fimEvt);
 }
 function fimDesmInvalido(ev){
@@ -2659,6 +2660,9 @@ function analisar(ev, ag){
   const datasRuins = [];
   if(fimMontInvalido(ev)) datasRuins.push({msg:'A montagem está de ' + fmtD(ev.mont) + ' até ' + fmtD(ev.montFim) + ' (' + (difDias(ev.mont, ev.montFim)+1) + ' dias)' + ((dia(ev.evtFim)||dia(ev.evt)) && dia(ev.montFim) > (dia(ev.evtFim)||dia(ev.evt)) ? ', terminando depois do evento' : '') + '. A Central está considerando só o dia ' + fmtD(ev.mont) + ' até você corrigir.',
     dica:'Abra o evento e corrija o "até" da montagem — provavelmente dia e mês trocados ou ano errado na planilha.'});
+  { const dE = dia(ev.evtFim) || dia(ev.evt);
+    if(dE && dia(ev.mont) && dE < dia(ev.mont)) datasRuins.push({msg:'A data do EVENTO está como ' + fmtD(dia(ev.evt)) + (dia(ev.evtFim) && dia(ev.evtFim)!==dia(ev.evt) ? ' a ' + fmtD(dia(ev.evtFim)) : '') + ' — antes da montagem (' + fmtD(ev.mont) + '). Provavelmente o ano veio errado da planilha.',
+      dica:'Abra o evento e corrija a data do evento na seção DATAS.'}); }
   if(fimDesmInvalido(ev)) datasRuins.push({msg:'A desmontagem está de ' + fmtD(ev.desm) + ' até ' + fmtD(ev.desmFim) + ' (' + (difDias(ev.desm, ev.desmFim)+1) + ' dias). A Central está considerando só o dia ' + fmtD(ev.desm) + ' até você corrigir.',
     dica:'Abra o evento e corrija o "até" da desmontagem.'});
   const quandoIA = aguardaIA(ev);
@@ -2873,6 +2877,26 @@ let PLANO = {};
 let planoSujo = true;
 function marcarPlanoSujo(){ planoSujo = true; }
 /* horários que vieram do Pipefy com minuto quebrado (08:01, 13:01, 17:59) voltam para o redondo */
+/* planilha com ano errado (10/10/2016 em vez de 2026): conserta sozinho quando o resto das datas deixa claro */
+function corrigirAnoErrado(ev){
+  const ref = dia(ev.mont) || dia(ev.desm); if(!ref) return 0;
+  const anoRef = +ref.slice(0,4); let n = 0;
+  ['evt','evtFim','mont','montFim','desm','desmFim'].forEach(k=>{
+    const v = ev[k]; const d = dia(v); if(!d) return;
+    const ano = +d.slice(0,4);
+    if(Math.abs(ano - anoRef) < 2) return;             /* diferença de 2+ anos = digitação errada */
+    const certo = String(anoRef) + String(v).slice(4);  /* troca só o ano */
+    const dC = dia(certo);
+    if(dC && Math.abs(difDias(ref, dC)) <= 60){ ev[k] = certo; n++; }  /* só conserta se cair perto das outras datas */
+  });
+  return n;
+}
+function corrigirAnosErrados(){
+  let n = 0, nomes = [];
+  eventos.forEach(ev=>{ const c = corrigirAnoErrado(ev); if(c){ n += c; nomes.push(ev.nome); } });
+  if(n){ marcarPlanoSujo(); toast('📅 Ano errado consertado em ' + nomes.length + ' evento(s): ' + nomes.slice(0,3).join(', ') + (nomes.length>3?'…':'') + ' — a planilha veio com o ano trocado.'); }
+  return n;
+}
 function arredondarHorarios(){
   let n = 0;
   eventos.forEach(ev=>['mont','desm','evt','montFim','desmFim','evtFim'].forEach(k=>{
@@ -3145,7 +3169,8 @@ function mensagemDia(o, D){
   if(o.viagens.length){
     L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
   }
-  { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt); }
+  { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt);
+    const se = saidaManual(ev, o.fase, 'eq'); if(se && !(hs && hs.saidaEq)) L.push('👷 Equipe sai às ' + se); }
   datasEspeciais(D, ev.cidade).forEach(x=>L.push((x.tipo==='feriado'?'📅 ':'🏟 ') + x.nome));
   o.viagens.filter(x=>x.junto).forEach(x=>{ const rt = rotaJunta(D, ev.id, x.junto, o.fase);
     if(rt) L.push('🔗 ' + x.v.tipo + ' ' + x.v.placa + ' leva também ' + nomesJunto(ev.id, x.junto) + ' — ' + (rt.paradas.findIndex(p=>p.ev.id===ev.id)+1) + 'ª parada' + ' (' + rt.paradas.map(pp=>pp.ev.nome).join(' → ') + ')'); });
@@ -3803,14 +3828,27 @@ function minViagem(ev){
 const hm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); };
 const minDe = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t||''); return m ? (+m[1])*60 + (+m[2]) : null; };
 const durTxt = m => m >= 60 ? Math.floor(m/60) + 'h' + (m%60 ? String(m%60).padStart(2,'0') : '') : m + ' min';
+/* ===== HORA DE SAÍDA MARCADA NA MÃO =====
+   ev.hSaida = {montCam, montEq, desmCam, desmEq} — o que você digitar manda; vazio = conta automática */
+function saidaManual(ev, fase, quem){ return ((ev && ev.hSaida) || {})[(fase==='desm'?'desm':'mont') + (quem==='eq'?'Eq':'Cam')] || null; }
+function setSaidaManual(id, campo, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(val && !/^\d{1,2}:\d{2}/.test(val)) return;
+  ev.hSaida = Object.assign({}, ev.hSaida || {});
+  if(val) ev.hSaida[campo] = val; else delete ev.hSaida[campo];
+  if(!Object.keys(ev.hSaida).length) delete ev.hSaida;
+  salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  toast(val ? '🕐 Saída ' + (/Eq$/.test(campo) ? 'da equipe' : 'dos caminhões') + ' (' + (/^desm/.test(campo) ? 'desmontagem' : 'montagem') + ') marcada para ' + val + '.' : '🕐 Voltou para a conta automática.');
+}
 function horariosSaida(ev, fase, D){
   const base = D || dia(fase==='desm' ? ev.desm : ev.mont);
   const ch = minDe(String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16));
   const vi = minViagem(ev);
   if(ch == null || vi == null || !base) return null;
   const c = cfgSaida();
-  let sai = ch - vi - c.margem, ponte = null, ponteAjustou = false, jp = null;
-  if(passaPonte(ev)){
+  const man = minDe(saidaManual(ev, fase, 'cam'));
+  let sai = man != null ? man : ch - vi - c.margem, ponte = null, ponteAjustou = false, jp = null;
+  if(man == null && passaPonte(ev)){
     const mp = minAtePonte(ev);
     jp = janelaPonte(ev, fase, base);
     if(!jp.livre){
@@ -3830,9 +3868,11 @@ function horariosSaida(ev, fase, D){
     }
     ponte = hm(sai + mp);
   }
+  if(man != null && passaPonte(ev)) ponte = hm(sai + minAtePonte(ev));
   const chegaMin = sai + vi;
   const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
-  return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0,
+  return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0, manual: man != null,
+    atrasa: man != null && chegaMin > ch ? hm(chegaMin) : null, saidaEq: saidaManual(ev, fase, 'eq'),
     diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou, jRot: jp && jp.rot,
     espera: ch - chegaMin > c.margem + 5 ? ch - chegaMin : 0};
 }
@@ -3855,9 +3895,10 @@ function txtSaida(hs){
   /* desmontagem: o caminhão vai vazio buscar o material — não tem carregamento */
   const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase();
   if(hs.parada >= 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
-  return car + ' · 🕐 sair ' + hs.saida + (hs.vespera ? ' (véspera)' : '') +
+  return car + ' · 🕐 sair ' + hs.saida + (hs.manual ? ' (marcada por você)' : '') + (hs.vespera ? ' (véspera)' : '') +
     (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : '') + ' · chegar ' + hs.chegada +
-    (hs.espera ? ' (início ' + hs.inicio + ')' : '');
+    (hs.atrasa ? ' ⚠ DEPOIS do início ' + hs.inicio : (hs.espera ? ' (início ' + hs.inicio + ')' : '')) +
+    (hs.saidaEq ? ' · 👷 equipe sai ' + hs.saidaEq : '');
 }
 function blocoSaida(ev){
   if(minViagem(ev) == null) return '<div style="font-size:12px;color:var(--muted)">Preencha a distância (ou use 📍 Calcular) para a Central dizer a hora de sair.</div>';
@@ -3871,7 +3912,11 @@ function blocoSaida(ev){
     else { const hD = horariosSaida(ev, 'desm'); if(hD) lin.push('<b>📤 Desmontagem</b> — ' + txtSaida(hD)); }
   }
   const c = cfgSaida();
-  return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' +
+  const hs = ev.hSaida || {};
+  const campo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k]||'') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px' + (hs[k] ? ';color:#1c4fa0;font-weight:700' : '') + '" onchange="setSaidaManual(\'' + ev.id + '\',\'' + k + '\',this.value)"></span>';
+  const manualHtml = '<div style="font-size:11.5px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:7px 9px;border:1px dashed var(--line);border-radius:8px">🕐 <b>Marcar saída na mão</b> (vazio = automático) <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">🔨 ' + campo('montCam','🚚 caminhões') + ' ' + campo('montEq','👷 equipe') + '</span>' +
+    (ev.desm ? ' <span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:nowrap">📤 ' + campo('desmCam','🚚 caminhões') + ' ' + campo('desmEq','👷 equipe') + '</span>' : '') + '</div>';
+  return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' + manualHtml +
     ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
       ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (' + ((hM && hM.ponteAjustou && hM.jRot) || (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.jRot; })() || 'fora do horário permitido') + ') — os caminhões saem de madrugada (padrão ' + c.ponteSaida + '), chegam antes e esperam no local.</div>' : '') +
     '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
@@ -7461,6 +7506,12 @@ function seguidos(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return SEGUIDOS; }
 let DIAS_PESSOA = null;
 function diasPorPessoa(){ if(!SEGUIDOS) SEGUIDOS = calcSeguidos(); return DIAS_PESSOA || {}; }
 const ROT_TIPO = {montador:'👷', produtor:'🎬', motorista:'🚚'};
+/* clique no nome: abre a agenda do mês da pessoa, mostrando onde ela tem operação */
+function nomeAgenda(nome, tipo, esc){
+  const t = {montador:'mont', produtor:'prod', motorista:'mot'}[tipo] || 'mont';
+  const e = esc || (s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;'));
+  return '<b style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="Ver a agenda do mês de ' + e(nome) + ' — onde tem operação, dia a dia" onclick="fechar(\'ov-jornada\');abrirAgenda(\'' + t + '\',\'' + e(nome).replace(/'/g, "\\'") + '\')">' + e(nome) + '</b>';
+}
 function txtSeguido(s){
   return ROT_TIPO[s.tipo] + ' ' + s.nome + (s.tipo==='motorista' ? ' (motorista)' : s.tipo==='produtor' ? ' (produtor)' : '') + ': ' +
     (s.passou ? s.n + ' dias seguidos sem folga' : 'chegando a ' + limiteSeguidos() + ' dias seguidos (' + s.n + ')') + ' — ' + fmtD(s.ini).slice(0,5) + ' a ' + fmtD(s.fim).slice(0,5);
@@ -7693,7 +7744,7 @@ function livresParaCobrir(tipo, d, excluir){
 function jFolga(){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const lim = limiteSeguidos(), L = seqAtuais().slice(0, 25), conf = conflitosPessoas();
-  const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>esc(c.nome)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
+  const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>nomeAgenda(c.nome, c.motorista ? 'motorista' : (produtores.some(x=>x.nome===c.nome) ? 'produtor' : 'montador'), esc)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
   if(!L.length) return cab + '<div class="alert green" style="margin:0">Ninguém trabalhando em sequência daqui pra frente.</div>';
   return cab + '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sequências de trabalho sem folga que estão rolando ou vão começar. Limite: <b>'+lim+' dias</b> · contando de <b>'+fmtD(CONFIG.seguidosDesde || '2026-10-01').slice(0,5)+'</b> até 7 dias pra frente (<b>'+fmtD(somaDiaISO(HOJE, JANELA_IA)).slice(0,5)+'</b>) (limite e início mudam em Integrações). <button class="mini" onclick="zerarContagem()">↺ Zerar contagem hoje</button> Inclui serviço na base; folga e férias da Escala quebram a sequência.</div>'+
     '<table class="jt"><thead><tr><th>Quem</th><th>Dias seguidos</th><th>Período</th><th>Folga sugerida / quem cobre</th></tr></thead><tbody>'+
@@ -7710,7 +7761,7 @@ function jFolga(){
               ? '<span class="chip-sub" title="Dá folga para '+esc(s.nome)+' em '+fmtD(dF).slice(0,5)+' e põe '+esc(x.nome)+' no lugar só nesse dia" onclick="cobrirFolga(\''+real.id+'\',\''+esc(s.nome).replace(/'/g,"\\'")+'\',\''+esc(x.nome).replace(/'/g,"\\'")+'\',\''+dF+'\')">'+esc(x.nome)+'</span>'
               : '<span class="chip-sub" style="cursor:default">'+esc(x.nome)+'</span>').join('') : '<small style="color:#c0392b">ninguém livre nesse dia</small>');
       } else if(perto) acao = '<small style="color:#a86412">chegando no limite — vale programar a folga</small>';
-      return '<tr><td>'+ROT_TIPO[s.tipo]+' <b>'+esc(s.nome)+'</b><br><small style="color:var(--muted)">'+s.tipo+'</small></td>'+
+      return '<tr><td>'+ROT_TIPO[s.tipo]+' '+nomeAgenda(s.nome, s.tipo, esc)+'<br><small style="color:var(--muted)">'+s.tipo+'</small></td>'+
         '<td><span class="jbar" style="width:'+Math.min(160, s.n*12)+'px;background:'+(passou?'#c0392b':perto?'#e0a21b':'#1c4fa0')+'"></span><b style="color:'+(passou?'#c0392b':perto?'#a86412':'var(--ink)')+'">'+s.n+'</b></td>'+
         '<td>'+fmtD(s.ini).slice(0,5)+' a '+fmtD(s.fim).slice(0,5)+'</td><td>'+acao+'</td></tr>';
     }).join('')+'</tbody></table>';
@@ -7771,7 +7822,7 @@ function jMes(){
   const med = L.filter(x=>x.tipo==='montador').reduce((t,x)=>t+x.n,0) / Math.max(1, L.filter(x=>x.tipo==='montador').length);
   return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;font-size:13px">Mês <input type="month" value="'+mes+'" onchange="J_MES=this.value;renderJornada()" style="border:1px solid var(--line);border-radius:8px;padding:6px 9px;font:inherit"> <span style="color:var(--muted)">média dos montadores: <b>'+med.toFixed(1)+'</b> dias · a IA prefere a equipe que trabalhou menos no mês</span></div>'+
     (L.length ? '<table class="jt"><thead><tr><th>Quem</th><th>Dias trabalhados</th><th>Domingos</th><th>Feriados</th></tr></thead><tbody>'+
-      L.map(x=>'<tr><td>'+ROT_TIPO[x.tipo]+' <b>'+esc(x.nome)+'</b> <small style="color:var(--muted)">'+x.tipo+'</small></td>'+
+      L.map(x=>'<tr><td>'+ROT_TIPO[x.tipo]+' '+nomeAgenda(x.nome, x.tipo, esc)+' <small style="color:var(--muted)">'+x.tipo+'</small></td>'+
         '<td><span class="jbar" style="width:'+Math.round(x.n/max*180)+'px;background:'+(x.tipo==='montador' && x.n > med*1.25 ? '#e0851e' : x.tipo==='montador' && x.n < med*0.75 ? '#0f8a4d' : '#1c4fa0')+'"></span><b>'+x.n+'</b></td>'+
         '<td>'+(x.dom.length ? '<b>'+x.dom.length+'</b> <small style="color:var(--muted)">('+x.dom.map(d=>d.slice(8)).join(', ')+')</small>'+(x.domSeg?' <b style="color:#c0392b">⚠ 2 domingos seguidos</b>':'') : '—')+'</td>'+
         '<td>'+(x.fer.length ? '<b>'+x.fer.length+'</b> <small style="color:var(--muted)">('+x.fer.map(d=>d.slice(8)+'/'+d.slice(5,7)).join(', ')+')</small>' : '—')+'</td></tr>').join('')+'</tbody></table>'
@@ -10260,6 +10311,7 @@ function gravarLote(auto){
   { const novosEv = eventos.slice(-n).filter(e=>n > 0);
     const fora = novosEv.filter(e=>!noPeriodo(e));
     if(fora.length) setTimeout(()=>toast('📅 ' + fora.length + ' evento(s) importado(s) ficam depois dos ' + (periodo===9999?'':periodo + ' dias do ') + 'quadro: ' + fora.slice(0,3).map(e=>e.nome).join(', ') + (fora.length>3?'…':'') + '.', 'Ver todos', ()=>{ periodo = 9999; try{ renderPeriodos(); }catch(e){} renderQuadro(); }), 1800); }
+  try{ if(corrigirAnosErrados()){ salvar(); renderQuadro(); } }catch(e){}
   if(CONFIG.galpao) setTimeout(()=>calcularKmEmLote(false), 1500);
 }
 
@@ -12721,7 +12773,7 @@ async function salvar(){
       marcarSync(true);
       nuvemEscutar(); escutando = true;
       carregarRecados();
-      setTimeout(()=>{ try{ if(arredondarHorarios()){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
+      setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} if(arredondarHorarios() + m){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
       setTimeout(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 5000);
       setTimeout(()=>{ try{ if(CONFIG.galpao) calcularKmEmLote(false); }catch(e){} }, 30000);   /* refaz o km de quem passou a ir por Magé */
       setInterval(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 600000);
