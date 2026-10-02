@@ -8814,11 +8814,33 @@ function setData(id, campo, valor){
   if(ev.montFim && dia(ev.montFim) < dia(ev.mont)) ev.montFim = null;
   if(ev.desmFim && dia(ev.desmFim) < dia(ev.desm)) ev.desmFim = null;
   if(ev.evtFim && ev.evtFim < ev.evt) ev.evtFim = null;
+  /* a data mudou: dias marcados por pessoa que ficaram fora da montagem/desmontagem saem sozinhos */
+  let podados = 0;
+  try{
+    const validos = new Set([...diasEquipe(ev), ...diasAntes(ev)]);
+    Object.keys(ev.diasPessoa || {}).forEach(n2=>{
+      const r = ev.diasPessoa[n2]; if(!r) return;
+      const lista = (r.dias && r.dias.length) ? r.dias : (r.ini ? diasEntre(r.ini, r.fim || r.ini) : []);
+      const dentro = lista.filter(d2=>validos.has(d2));
+      if(dentro.length !== lista.length){
+        podados += lista.length - dentro.length;
+        if(dentro.length) ev.diasPessoa[n2] = {dias: dentro};
+        else delete ev.diasPessoa[n2];
+      }
+    });
+    if(ev.diasPessoa && !Object.keys(ev.diasPessoa).length) ev.diasPessoa = null;
+    /* etapas e faltas/manutenções fora das novas datas também saem */
+    ['faltas','manuts'].forEach(k=>{ Object.keys(ev[k] || {}).forEach(n2=>{
+      ev[k][n2] = (ev[k][n2]||[]).filter(d2=>validos.has(d2));
+      if(!ev[k][n2].length) delete ev[k][n2];
+    }); if(ev[k] && !Object.keys(ev[k]).length) ev[k] = null; });
+  }catch(e){}
   const avisos = [];
   if(dia(ev.desm) < dia(ev.mont)) avisos.push('a desmontagem está antes da montagem');
   if(ev.evt && dia(ev.evt) < dia(ev.mont)) avisos.push('o evento começa antes da montagem');
   if(avisos.length) toast('Atenção: ' + avisos.join(' e ') + '. Confira as datas.');
-  else toast('Datas atualizadas — sugestões e conflitos foram recalculados.');
+  else toast('Datas atualizadas — sugestões e conflitos foram recalculados.' + (podados ? ' ' + podados + ' dia(s) marcados de pessoas ficaram fora das novas datas e foram tirados.' : ''));
+  try{ limparSecCache(); marcarPlanoSujo(); agendarEscalaEv(id); }catch(e){}
   salvar(); renderQuadro(); verEvento(id);
   if(!document.getElementById('v-calendario').classList.contains('hide')) renderCal();
 }
