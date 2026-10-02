@@ -3082,7 +3082,7 @@ function opsDoDia(D){
     const pegar = (fz, padrao, jaLocal) => escalaDo(ev, fz).forEach(x=>{
       if((x.dia || padrao) !== D) return;
       const v = veiculos.find(y=>y.id===x.v); if(!v) return;
-      viagens.push({v, i:x.i, motorista:x.motorista, fase: fz, jaLocal, manut: !!v.manut, junto: x.junto || null});
+      viagens.push({v, i:x.i, motorista:x.motorista, hSai: x.hora || null, fase: fz, jaLocal, manut: !!v.manut, junto: x.junto || null});
     });
     pegar('mont', dia(ev.mont), false);
     if(ev.desm){
@@ -3177,7 +3177,7 @@ function mensagemDia(o, D){
   { const et = etapasNoDia(ev, D); if(et.length) L.push('🧩 Etapas do dia: ' + et.map(x=>x.nome + ((x.pessoas||[]).length ? ' (' + x.pessoas.join(', ') + ')' : '') + (x.obs ? ' — ' + x.obs : '')).join('; ')); }
   const prod = o.pessoas.find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome);
   if(o.viagens.length){
-    L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
+    L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.hSai ? ' — sai ' + x.hSai : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
   }
   { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt);
     const se = saidaManual(ev, o.fase, 'eq'); if(se && !(hs && hs.saidaEq)) L.push('👷 Equipe sai às ' + se); }
@@ -3236,7 +3236,7 @@ function renderAmanha(){
             '<div style="flex:1;min-width:0"><b>'+esc(o.ev.nome)+'</b><small>'+esc(rotuloOp(o))+
               (o.ev.cidade && o.ev.cidade!=='—' ? ' · '+esc(o.ev.cidade) : '')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</small></div>'+
             (o.hora ? '<b class="hora">'+o.hora+'</b>' : '')+'</div>'+
-          (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.junto?' · 🔗 junto com '+esc(nomesJunto(o.ev.id, x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
+          (o.viagens.length ? '<div class="am-lin">🚚 '+o.viagens.map(x=>'<span class="am-tag'+(x.manut||(!x.motorista&&!x.jaLocal)?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'sem motorista'))+(x.hSai?' · 🕐 sai '+x.hSai:'')+(x.junto?' · 🔗 junto com '+esc(nomesJunto(o.ev.id, x.junto)):'')+'</span>').join(' ')+'</div>' : '')+
           (function(){ const hs = saidaDaOp(o, D); return hs ? '<div class="am-lin">'+txtSaida(hs)+(hs.parada>=2?'':' <small style="color:var(--muted)">('+durTxt(hs.viagem)+' de estrada)</small>')+'</div>' : ''; })()+
           (function(){ const f = fichaLocal(o.ev); return (f && resumoFicha(f)) ? '<div class="am-lin">🚧 '+esc(resumoFicha(f))+'</div>' : ''; })()+
           (function(){ const t = txtEtapasDia(o.ev, D); return t ? '<div class="am-lin">🧩 '+esc(t)+'</div>' : ''; })()+
@@ -5381,7 +5381,7 @@ function trocarVeiculoVaga(id, vaga, vid, fase){
   const dz = fase==='desm' && temFrotaDesm(ev);
   const frota = [...frotaDo(ev, dz?'desm':'mont')];
   const v = veiculos.find(x=>x.id===vid);
-  const esc = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
+  const esc = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null}));
   const alvo = esc.find(x=>x.i===+vaga); if(!alvo) return;
   const antes = veiculos.find(x=>x.id===alvo.v);
   frota[alvo.i] = vid; alvo.v = vid;
@@ -6329,7 +6329,7 @@ function marcarViagemJunto(ev, D, fase, V, motorista, grupo, trocar){
   }
   const padrao = dia(dz ? ev.desm : ev.mont);
   const frota = [...frotaDo(ev, dz ? 'desm' : 'mont')];
-  const esc = escalaDo(ev, dz ? 'desm' : 'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
+  const esc = escalaDo(ev, dz ? 'desm' : 'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null}));
   const alvo = esc.find(x=>(x.dia || padrao) === D);
   if(!alvo) return false;
   if(trocar && alvo.v !== V.id){ frota[alvo.i] = V.id; alvo.v = V.id; alvo.motorista = V.agregado ? V.motoristaFixo : (motorista || alvo.motorista); }
@@ -6602,10 +6602,11 @@ function escalaDo(ev, fase){
       if(reg) usadosMan.push(reg);
     }
     const diaProprio = (reg && reg.dia) || null; /* viagem em dia alternado */
+    const horaPropria = (reg && reg.hora) || null; /* hora de saída desta viagem */
     const junto = (reg && reg.junto) || null;  /* mesma viagem de outro evento */
-    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, dia:diaProprio, fixo:true, junto};
+    if(v && v.agregado) return {i, v:id, motorista:v.motoristaFixo, dia:diaProprio, hora:horaPropria, fixo:true, junto};
     const m = (reg || sug.find(x=>x.v===id) || {}).motorista || null;
-    return {i, v:id, motorista:m, dia:diaProprio, fixo:false, junto};
+    return {i, v:id, motorista:m, dia:diaProprio, hora:horaPropria, fixo:false, junto};
   });
 }
 /* junta repetidos numa linha só, marcando quantas viagens */
@@ -7049,6 +7050,7 @@ function verEvento(id){
 
       '<div style="grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)">'+
         '<b style="font-size:13px">🔨 Caminhões da montagem</b>'+
+        '<span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap">👷 equipe sai <input type="time" value="'+((ev.hSaida||{}).montEq||'')+'" style="border:1px solid '+((ev.hSaida||{}).montEq?'#1c4fa0':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11px'+((ev.hSaida||{}).montEq?';color:#1c4fa0;font-weight:700':'')+'" title="Hora de saída da equipe na montagem (vazio = junto com o caminhão)" onchange="setSaidaManual(\''+ev.id+'\',\'montEq\',this.value)"></span>'+
         '<span style="color:var(--muted);font-size:12px">levam o material'+
           (ev.mont ? ' · <b style="color:var(--ink2)">saem ' + fmtD(ev.mont) + '</b>' + (String(ev.mont).slice(11,16) ? ' às ' + String(ev.mont).slice(11,16) : '') : '')+
         '</span></div>'+
@@ -8887,6 +8889,7 @@ function blocoFrota(ev, modo){
              ((x.junto && (fase==='mont' || temFrotaDesm(ev))) ? ' <span class="tag" style="color:#1c4fa0" title="Mesmo caminhão, mesma viagem">🔗 junto com '+nomesJunto(ev.id, x.junto)+' <a href="#" onclick="event.preventDefault();desfazerJunto(\''+ev.id+'\',\''+x.junto+'\')" style="color:#b0483c">desfazer</a></span>' : '')+'</span>'+
              '<span style="display:flex;gap:10px;align-items:center">'+
              '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
+             '<input type="time" value="'+(x.hora||'')+'" style="border:1px solid '+(x.hora?'#1c4fa0':'var(--line)')+';border-radius:7px;padding:6px 8px;font-size:12px'+(x.hora?';color:#1c4fa0;font-weight:700':';color:var(--muted)')+'" title="Hora de saída DESTA viagem. Vazio = conta automática (estrada + margem)." onchange="setHoraViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              sel+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
              (fase==='mont' && conta[x.v]===1 ? (function(){
@@ -8927,6 +8930,7 @@ function blocoDesmontagem(ev){
   const separado = temFrotaDesm(ev);
   const cab = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">'+
     '<b style="font-size:13px">📤 Caminhões da desmontagem</b>'+
+    '<span style="display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap">👷 equipe sai <input type="time" value="'+((ev.hSaida||{}).desmEq||'')+'" style="border:1px solid '+((ev.hSaida||{}).desmEq?'#1c4fa0':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11px'+((ev.hSaida||{}).desmEq?';color:#1c4fa0;font-weight:700':'')+'" title="Hora de saída da equipe na desmontagem (vazio = junto com o caminhão)" onchange="setSaidaManual(\''+ev.id+'\',\'desmEq\',this.value)"></span>'+
     (ev.desm ? '<span style="color:var(--muted);font-size:12px">'+(ev.permanece?'já estão no local · voltam ':'saem ')+'<b style="color:var(--ink2)">'+fmtD(ev.desm)+'</b></span>' : '')+
     '<span style="flex:1"></span>'+
     (separado
@@ -8954,7 +8958,7 @@ function addVeiculo(id, vid, fase){
   if(!vid) return;
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
-  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null}));
+  const atual = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null}));
   const frota = [...frotaDo(ev, dz?'desm':'mont')];
   frota.push(vid); /* mesmo veículo pode entrar de novo: é outra viagem */
   const v = veiculos.find(x=>x.id===vid);
@@ -8969,10 +8973,21 @@ function setMotorista(id, vaga, nome, fase){
   const ev = eventos.find(e=>e.id===id);
   const dz = fase==='desm' && temFrotaDesm(ev);
   const nova = escalaDo(ev, dz?'desm':'mont')
-    .map(x=>({i:x.i, v:x.v, dia:x.dia||null, junto:x.junto||null, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
+    .map(x=>({i:x.i, v:x.v, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null, motorista: x.i===+vaga ? (nome||null) : x.motorista}));
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
+}
+/* hora de saída de UMA viagem: vazio volta à conta automática */
+function setHoraViagem(id, vaga, val, fase){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(val && !/^\d{1,2}:\d{2}/.test(val)) return;
+  const dz = fase==='desm' && temFrotaDesm(ev);
+  const nova = escalaDo(ev, dz?'desm':'mont')
+    .map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null, hora: x.i===+vaga ? (val||null) : (x.hora||null)}));
+  if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
+  else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
+  salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
 }
 /* dia próprio de uma viagem: vazio ou igual ao padrão volta a acompanhar a fase */
 function setDiaViagem(id, vaga, val, fase){
@@ -8980,7 +8995,7 @@ function setDiaViagem(id, vaga, val, fase){
   const dz = fase==='desm' && temFrotaDesm(ev);
   const padrao = dia(fase==='desm' ? ev.desm : ev.mont);
   const nova = escalaDo(ev, dz?'desm':'mont')
-    .map(x=>({i:x.i, v:x.v, motorista:x.motorista, junto:x.junto||null,
+    .map(x=>({i:x.i, v:x.v, motorista:x.motorista, hora:x.hora||null, junto:x.junto||null,
       dia: x.i===+vaga ? ((val && val!==padrao) ? val : null) : (x.dia||null)}));
   if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
   else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
@@ -9004,7 +9019,7 @@ function removerVeiculo(id, vaga, fase){
   const frota = frotaDo(ev, dz?'desm':'mont').filter((x,i)=>i!==+vaga);
   const nova = escalaDo(ev, dz?'desm':'mont')
     .filter(x=>x.i!==+vaga)
-    .map((x,i)=>({i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null})); /* renumera as vagas */
+    .map((x,i)=>({i, v:x.v, motorista:x.motorista, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null})); /* renumera as vagas */
   if(dz){ ev.veiculosD = frota; ev.escalaD = nova; }
   else  { ev.veiculos  = frota; ev.escala  = nova; }
   salvar(); renderQuadro(); verEvento(id);
@@ -12344,7 +12359,7 @@ function cardTV(o, D){
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
-    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
+    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
     tempo+
