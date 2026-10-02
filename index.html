@@ -1050,6 +1050,13 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
   </div>
 </div>
 
+<div class="overlay" id="ov-feq" onclick="if(event.target===this)fechar('ov-feq')">
+  <div class="modal" style="max-width:720px">
+    <header><div><h2 id="feq-tit">💤 Folga</h2><div class="os">folga pessoa a pessoa — a IA não escala, os dias seguidos zeram e a folga passa na TV</div></div><button class="x" onclick="fechar('ov-feq')">✕</button></header>
+    <div class="mbody"><div id="feq-corpo"></div></div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-div" onclick="if(event.target===this)fechar('ov-div')">
   <div class="modal" style="max-width:860px">
     <header><div><h2>📅 Data diferente da planilha — qual fica?</h2><div class="os">a Central não troca data sozinha: escolha, campo por campo, se fica a data da Central ou a que veio na planilha</div></div><button class="x" onclick="fechar('ov-div')">✕</button></header>
@@ -2927,6 +2934,11 @@ function replanejar(forcar){
     reservar(ag, 'mt', nome, [d], 'folga:' + st);
     if(equipes.some(q=>q.nome===nome)) reservar(ag, 'eq', nome, [d], 'folga:' + st);
   })); }catch(e){}
+  /* folga marcada pessoa a pessoa na Central */
+  try{ Object.keys(CONFIG.folgasPessoa || {}).forEach(nome=>(CONFIG.folgasPessoa[nome]||[]).forEach(d=>{
+    reservar(ag, 'mt', nome, [d], 'folga:FO');
+    if(equipes.some(q=>q.nome===nome)) reservar(ag, 'eq', nome, [d], 'folga:FO');
+  })); }catch(e){}
   /* serviço na base prende a equipe e as pessoas nesses dias */
   try{ (CONFIG.servicosBase||[]).forEach(s=>{ const ds = diasBase(s);
     if(s.equipe) reservar(ag, 'eq', s.equipe, ds, 'base:' + s.id);
@@ -3011,7 +3023,10 @@ function renderCarga(){
     const marca = desvio > 0.35 ? 'acima da média' : desvio < -0.35 ? 'abaixo da média' : 'equilibrada';
     return '<div style="margin-bottom:18px">'+
       '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
-        '<b style="color:'+corEquipe(n)+';font-size:15px">'+n+'</b>'+
+        '<b style="color:'+corEquipe(n)+';font-size:15px;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" title="Dar folga para as pessoas da equipe '+n+' em datas escolhidas" onclick="abrirFolgaEq(\''+n.replace(/'/g,"\\'")+'\')">'+n+'</b>'+
+        '<button class="mini" style="padding:3px 9px;font-size:11px" onclick="abrirFolgaEq(\''+n.replace(/'/g,"\\'")+'\')">💤 Folga</button>'+
+        (function(){ const fs = [n, ...membrosDe(n)].map(m=>({m, ds:((CONFIG.folgasPessoa||{})[m]||[]).filter(d=>d>=HOJE)})).filter(x=>x.ds.length);
+          return fs.length ? '<span style="font-size:12px;color:#6b5bb5;font-weight:700">💤 '+fs.slice(0,3).map(x=>x.m.split(' ')[0]+' '+x.ds.slice(0,2).map(d=>fmtD(d).slice(0,5)).join(',')+(x.ds.length>2?'…':'')).join(' · ')+(fs.length>3?' +'+(fs.length-3):'')+'</span>' : ''; })()+
         '<span style="color:var(--muted);font-size:12.5px">'+d.eventos+' evento(s) · '+d.dias.size+' dia(s) na rua'+
         (d.km ? ' · '+num(d.km)+' km' : '')+'</span>'+
         '<span style="margin-left:auto;font-size:12px;font-weight:700;color:'+cor+'">'+marca+'</span>'+
@@ -7680,7 +7695,50 @@ function baseTV(D, curto){
 
 /* ===== FOLGAS E FÉRIAS DA ESCALA DE MONTADORES ===== */
 let FOLGAS_ESC = {}, FOLGAS_T = 0;
-function folgaDe(nome, d){ return (FOLGAS_ESC[nome] || {})[d] || null; }
+/* folga marcada pessoa a pessoa na Central: CONFIG.folgasPessoa = {nome: [dias]} */
+function folgaPessoaDia(nome, d){ return !!(((CONFIG.folgasPessoa||{})[nome])||[]).includes(d); }
+function equipeDe(nome){ if(equipes.some(q=>q.nome===nome)) return nome; const t = todosMontadores().find(x=>x.nome===nome); return t && t.equipe !== 'piloto' ? t.equipe : null; }
+function folgaDe(nome, d){
+  const e = (FOLGAS_ESC[nome] || {})[d]; if(e) return e;
+  return folgaPessoaDia(nome, d) ? 'FO' : null;
+}
+function toggleFolgaPessoa(nome, d){
+  CONFIG.folgasPessoa = Object.assign({}, CONFIG.folgasPessoa || {});
+  const L = new Set(CONFIG.folgasPessoa[nome] || []);
+  if(L.has(d)) L.delete(d); else L.add(d);
+  CONFIG.folgasPessoa[nome] = [...L].sort();
+  if(!CONFIG.folgasPessoa[nome].length) delete CONFIG.folgasPessoa[nome];
+  TV_FOLGAS.t = 0;   /* a TV atualiza na hora */
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); renderFolgaEq(); try{ renderCarga(); }catch(e){}
+}
+let feqNome = null, feqPessoa = null;
+function abrirFolgaEq(eq, pessoa){ feqNome = eq; feqPessoa = pessoa || eq; renderFolgaEq(); document.getElementById('ov-feq').classList.add('on'); }
+function renderFolgaEq(){
+  const box = document.getElementById('feq-corpo'); if(!box || !feqNome) return;
+  const eq = feqNome, esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const time = [eq, ...membrosDe(eq)];
+  if(!time.includes(feqPessoa)) feqPessoa = eq;
+  const nome = feqPessoa;
+  document.getElementById('feq-tit').textContent = '💤 Folga — equipe ' + eq;
+  const dias = []; for(let i=0;i<28;i++) dias.push(somaDiaISO(HOJE, i));
+  const marc = new Set((CONFIG.folgasPessoa||{})[nome] || []);
+  const ocupados = {};
+  eventos.forEach(e=>{ if(e.esp || !e.mont) return; if((e.equipe || plano(e).equipe) !== eq) return; diasDe(e, nome).forEach(d=>ocupados[d] = e.nome); });
+  const chips = time.map(m=>{ const nF = ((CONFIG.folgasPessoa||{})[m]||[]).filter(d=>d>=HOJE).length;
+    return '<button class="mini" style="'+(m===nome?'background:#1c4fa0;border-color:#1c4fa0;color:#fff;':'')+'font-weight:700" onclick="feqPessoa=\''+esc(m).replace(/'/g,"\\'")+'\';renderFolgaEq()">'+(m===eq?'👑 ':'')+esc(m)+(nF?' 💤'+nF:'')+'</button>'; }).join(' ');
+  box.innerHTML = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Escolha a pessoa e clique nos dias de folga dela. No dia de folga a IA não escala, a sequência de dias seguidos quebra, aparece conflito se já tiver evento, e a folga passa na TV (Operações externas).</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+chips+'</div>'+
+    '<div style="font-size:13px;margin-bottom:8px">📅 Dias de folga de <b>'+esc(nome)+'</b>:</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:5px">'+dias.map(d=>{
+      const dt = new Date(d+'T12:00'), on = marc.has(d), temEv = ocupados[d];
+      const estilo = on ? 'background:#6b5bb5;color:#fff;border:1px solid #6b5bb5;font-weight:700' : 'background:#fff;color:'+((dt.getDay()===0||dt.getDay()===6)?'#c0392b':'var(--muted)')+';border:1px dashed var(--line)';
+      return '<button onclick="toggleFolgaPessoa(\''+esc(nome).replace(/'/g,"\\'")+'\',\''+d+'\')" title="'+(on?'FOLGA':'dar folga')+' em '+fmtD(d)+(temEv?' — escalado em '+String(temEv).replace(/"/g,'&quot;'):'')+'" style="min-width:52px;border-radius:8px;padding:5px 4px;cursor:pointer;font:inherit;font-size:11px;line-height:1.25;text-align:center;'+estilo+'">'+
+        ['dom','seg','ter','qua','qui','sex','sáb'][dt.getDay()]+'<br><b style="font-size:13px">'+String(dt.getDate()).padStart(2,'0')+'</b>'+(on?'<br><span style="font-size:8.5px;letter-spacing:.4px">FOLGA</span>':(temEv?'<br><span style="font-size:8px;color:#a86412">evento</span>':''))+'</button>';
+    }).join('')+'</div>'+
+    (function(){ const L = time.filter(m=>((CONFIG.folgasPessoa||{})[m]||[]).some(d=>d>=HOJE));
+      if(!L.length) return '';
+      return '<div style="margin-top:14px;font-size:13px;border-top:1px solid var(--line);padding-top:10px"><b>💤 Folgas marcadas na equipe:</b><br>'+L.map(m=>esc(m)+': '+CONFIG.folgasPessoa[m].filter(d=>d>=HOJE).map(d=>fmtD(d).slice(0,5)).join(', ')).join('<br>')+'</div>'; })();
+}
 async function carregarFolgasEsc(){
   if(typeof ESCALA === 'undefined' || !ESCALA.url) return;
   try{
@@ -7707,7 +7765,7 @@ function conflitosPessoas(){
     pessoasNaEscala(ev).filter(p=>!p.prod).forEach(p=>{
       diasDe(ev, p.nome).filter(d=>d >= HOJE).forEach(d=>{
         const f = folgaDe(p.nome, d);
-        if(f){ out.push({ev, nome:p.nome, dia:d, motivo: f==='FE' ? 'de FÉRIAS (Escala)' : 'de FOLGA (Escala)'}); return; }
+        if(f){ out.push({ev, nome:p.nome, dia:d, motivo: f==='FE' ? 'de FÉRIAS (Escala)' : (folgaPessoaDia(p.nome, d) && !(FOLGAS_ESC[p.nome]||{})[d] ? 'de FOLGA (marcada na Central)' : 'de FOLGA (Escala)')}); return; }
         const s = baseDoDia(d).find(s=>pessoasBase(s).includes(p.nome));
         if(s) out.push({ev, nome:p.nome, dia:d, motivo: 'no SERVIÇO NA BASE (' + (s.oque||'') + ')'});
       });
@@ -12589,7 +12647,8 @@ function folgasTV(){
     escReq('escala_marcas?dia=in.(' + HOJE + ',' + amanha + ')&status=in.(FO,FE)&select=dia,montador_id,status')
   ]).then(([mont, marcas])=>{
     const nome = id => { const m = (mont||[]).find(x=>String(x.id)===String(id)); return m ? String(m.nome).split(' ')[0].replace(/^./, c=>c.toUpperCase()).replace(/\B./g, c=>c.toLowerCase()) : null; };
-    const grupo = (d, st) => [...new Set((marcas||[]).filter(x=>x.dia===d && x.status===st).map(x=>nome(x.montador_id)).filter(Boolean))];
+    const daCentral = d => Object.keys(CONFIG.folgasPessoa || {}).filter(n2=>(CONFIG.folgasPessoa[n2]||[]).includes(d)).map(n2=>n2.split(' ')[0]);
+    const grupo = (d, st) => [...new Set([...(marcas||[]).filter(x=>x.dia===d && x.status===st).map(x=>nome(x.montador_id)).filter(Boolean), ...(st==='FO' ? daCentral(d) : [])])];
     const parte = (rot, d) => { const fo = grupo(d,'FO'), fe = grupo(d,'FE'); if(!fo.length && !fe.length) return ''; return '<b>'+rot+':</b> '+(fo.length?'💤 folga: '+fo.join(', '):'')+(fo.length&&fe.length?' · ':'')+(fe.length?'🏖 férias: '+fe.join(', '):''); };
     const L = [parte('Hoje', HOJE), parte('Amanhã', amanha)].filter(Boolean);
     TV_FOLGAS.html = L.join('&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;');
