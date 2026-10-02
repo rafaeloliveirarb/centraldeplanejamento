@@ -2477,6 +2477,11 @@ function esquecerAprendizado(){
   toast('Aprendizado zerado. A IA volta a aprender a partir das próximas confirmações.');
 }
 
+/* fase da planilha que significa "todo terceirizado": fornecedor monta, sem equipe nem caminhão nosso */
+function faseTerceirizada(f){
+  const n = semAcentoSimples(limpaFase(f));
+  return /pedido\s*servicos?\s*terceirizad|servicos?\s*terceirizad/.test(n);
+}
 function faseParaEstado(f){
   const n = semAcentoSimples(f);
   if(!n) return null;
@@ -8236,7 +8241,7 @@ function renderLoteBar(){
 function loteEvs(){ return [...SELEC].map(id=>eventos.find(e=>e.id===id)).filter(Boolean); }
 function loteFase(f){
   const L = loteEvs();
-  L.forEach(ev=>{ ev.fase = f==='SEM FASE' ? null : f; const est = faseParaEstado(ev.fase); if(est) ev.estado = est; try{ marcarVisto(ev.id); }catch(e){} });
+  L.forEach(ev=>{ ev.fase = f==='SEM FASE' ? null : f; const est = faseParaEstado(ev.fase); if(est) ev.estado = est; if(faseTerceirizada(ev.fase) && ev.esp !== 'terceirizado'){ ev.esp = 'terceirizado'; ev.equipe = EQUIPE_TERC; ev.montOp = null; } try{ marcarVisto(ev.id); }catch(e){} });
   salvar(); SELEC.clear(); renderQuadro(); toast('🗂 ' + L.length + ' evento(s) foram para ' + f + '.');
 }
 function loteAceitar(){
@@ -8397,6 +8402,7 @@ function moverFase(id, f){
   if(antes === f) return;
   ev.fase = f === 'SEM FASE' ? null : f;
   const est = faseParaEstado(ev.fase); if(est) ev.estado = est;
+  if(faseTerceirizada(ev.fase) && ev.esp !== 'terceirizado'){ ev.esp = 'terceirizado'; ev.equipe = EQUIPE_TERC; ev.montOp = null; toast('🤝 ' + ev.nome + ' marcado como todo terceirizado (fase de serviços terceirizados).'); }
   try{ marcarVisto(id); }catch(e){}
   salvar(); renderQuadro(); renderPorFase();
   toast('🗂 ' + ev.nome + ': ' + antes + ' → ' + f, 'Desfazer', ()=>{ ev.fase = antes==='SEM FASE' ? null : antes; const e2 = faseParaEstado(ev.fase); if(e2) ev.estado = e2; salvar(); renderQuadro(); renderPorFase(); });
@@ -10318,6 +10324,7 @@ function gravarLote(auto){
       if(e.produtor) ex.produtor = e.produtor;
       const est = faseParaEstado(ex.fase);
       if(est) ex.estado = est;
+      if(faseTerceirizada(ex.fase) && ex.esp !== 'terceirizado'){ ex.esp = 'terceirizado'; ex.equipe = EQUIPE_TERC; ex.montOp = null; }
       atualizados++;
       return;
     }
@@ -10329,6 +10336,7 @@ function gravarLote(auto){
       evt:e.evt || dia(e.mont), evtFim:e.evtFim || null,
       desm:e.desm, desmFim:e.desmFim || null,
       permanece:e.permanece, fase:e.fase || null, respNome:e.respNome || null, respTel:e.respTel || null,
+      esp: faseTerceirizada(e.fase) ? 'terceirizado' : null, equipe: faseTerceirizada(e.fase) ? EQUIPE_TERC : null,
       estado: faseParaEstado(e.fase) || 'backlog', aprovado:false, itens:e.itens
     });
   });
