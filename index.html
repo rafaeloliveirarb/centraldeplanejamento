@@ -3929,7 +3929,7 @@ function horariosSaida(ev, fase, D){
   const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
   return {fase: fase==='desm' ? 'desm' : 'mont', saida:hm(sai), chegada:hm(chegaMin), inicio:hm(ch), viagem:vi, vespera: sai < 0, manual: man != null,
     atrasa: man != null && chegaMin > ch ? hm(chegaMin) : null, saidaEq: saidaManual(ev, fase, 'eq'),
-    diaSaida: diaSai, carregarDia: somaDiaISO(diaSai, -1), ponte, ponteAjustou, jRot: jp && jp.rot,
+    diaSaida: diaSai, carregarDia: (fase!=='desm' && dia(ev.cargaMont)) || somaDiaISO(diaSai, -1), cargaManual: fase!=='desm' && !!dia(ev.cargaMont), ponte, ponteAjustou, jRot: jp && jp.rot,
     espera: ch - chegaMin > c.margem + 5 ? ch - chegaMin : 0};
 }
 /* horário de uma operação do dia: numa viagem combinada vale a saída da rota */
@@ -3949,7 +3949,7 @@ function saidaDaOp(o, D){
 function txtSaida(hs){
   if(!hs) return '';
   /* desmontagem: o caminhão vai vazio buscar o material — não tem carregamento */
-  const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase();
+  const car = hs.fase === 'desm' ? '📤 Vai buscar' : '📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase() + (hs.cargaManual ? ' (marcado)' : '');
   if(hs.parada >= 2) return car + ' · 🕐 caminhão sai ' + hs.saida + (hs.vespera ? ' (véspera)' : '') + ' — passa primeiro em ' + hs.primeira + ' — chega aqui ≈' + hs.chegada;
   return car + ' · 🕐 sair ' + hs.saida + (hs.manual ? ' (marcada por você)' : '') + (hs.vespera ? ' (véspera)' : '') +
     (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : '') + ' · chegar ' + hs.chegada +
@@ -3984,7 +3984,7 @@ function blocoSaida(ev){
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' + manualHtml +
     ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
       ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (' + ((hM && hM.ponteAjustou && hM.jRot) || (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.jRot; })() || 'fora do horário permitido') + ') — os caminhões saem de madrugada (padrão ' + c.ponteSaida + '), chegam antes e esperam no local.</div>' : '') +
-    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · carregamento na véspera' +
+    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · 📦 carregar em <input type="date" value="' + (dia(ev.cargaMont) || (hM ? hM.carregarDia : '') || '') + '" style="border:1px solid ' + (ev.cargaMont ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:2px 6px;font-size:11px' + (ev.cargaMont ? ';color:#1c4fa0;font-weight:700' : ';color:var(--muted)') + '" title="Dia do carregamento no galpão. Padrão: véspera da saída. Troque para fixar outro dia; apague para voltar ao padrão." onchange="setCampo(\'' + ev.id + '\',\'cargaMont\',/^20\\d\\d-/.test(this.value) ? this.value : null)">' + (ev.cargaMont ? '' : ' <small style="font-size:9.5px">véspera</small>') +
       ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
         '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
         '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select>' +
@@ -4002,7 +4002,7 @@ function setPonte(id, v){
 /* o que carrega num dia: viagens cuja saída é no dia seguinte (ou na madrugada do outro) */
 function carregarNoDia(Dc){
   const out = [];
-  [1, 2].forEach(n=>{
+  [1, 2, 3, 4].forEach(n=>{
     const D = somaDiaISO(Dc, n);
     opsDoDia(D).ops.forEach(o=>{
       const hs = saidaDaOp(o, D);
@@ -4019,7 +4019,7 @@ function htmlCarregarNoDia(Dc){
   const l = carregarNoDia(Dc);
   if(!l.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + ' (véspera da saída)</b><br>' +
+  return '<div class="alert" style="margin:0 0 12px;line-height:1.6"><b>📦 Carregar ' + (Dc===HOJE ? 'hoje' : rotDia(Dc)) + '</b><br>' +
     l.map(c=>'🚚 <b>' + esc(c.x.v.tipo + ' ' + c.x.v.placa) + '</b> — ' + esc(c.o.ev.nome) + (c.x.junto ? ' + ' + esc(nomesJunto(c.o.ev.id, c.x.junto)) : '') + ' · sai ' + rotDia(c.hs.diaSaida).toLowerCase() + ' às ' + c.hs.saida + (c.hs.ponte ? ' (🌉 ponte ' + c.hs.ponte + ')' : '')).join('<br>') + '</div>';
 }
 
