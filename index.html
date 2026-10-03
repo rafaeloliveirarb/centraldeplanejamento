@@ -3984,7 +3984,7 @@ function blocoSaida(ev){
   return '<div style="font-size:13px;line-height:1.7">' + (lin.join('<br>') || '<span style="color:var(--muted)">Coloque a hora de início da montagem.</span>') + '</div>' + manualHtml +
     ((hM && hM.ponteAjustou) || (ev.desm && (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.ponteAjustou; })())
       ? '<div style="font-size:12px;color:#a86412;margin:3px 0">🌉 Saída antecipada por causa da Ponte Rio-Niterói (' + ((hM && hM.ponteAjustou && hM.jRot) || (function(){ const hD = horariosSaida(ev,'desm'); return hD && hD.jRot; })() || 'fora do horário permitido') + ') — os caminhões saem de madrugada (padrão ' + c.ponteSaida + '), chegam antes e esperam no local.</div>' : '') +
-    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · 📦 carregar em <input type="date" value="' + (dia(ev.cargaMont) || (hM ? hM.carregarDia : '') || '') + '" style="border:1px solid ' + (ev.cargaMont ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:2px 6px;font-size:11px' + (ev.cargaMont ? ';color:#1c4fa0;font-weight:700' : ';color:var(--muted)') + '" title="Dia do carregamento no galpão. Padrão: véspera da saída. Troque para fixar outro dia; apague para voltar ao padrão." onchange="setCampo(\'' + ev.id + '\',\'cargaMont\',/^20\\d\\d-/.test(this.value) ? this.value : null)">' + (ev.cargaMont ? '' : ' <small style="font-size:9.5px">véspera</small>') +
+    '<div style="font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + durTxt(minViagem(ev)) + ' de estrada' + (+ev.kmMin ? ' (rota calculada)' : ' (estimado a ' + c.vel + ' km/h)') + ' + ' + c.margem + ' min de margem · 📦 carregar em <input type="date" value="' + (dia(ev.cargaMont) || (hM ? hM.carregarDia : '') || '') + '" style="border:1px solid ' + (ev.cargaMont ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:2px 6px;font-size:11px' + (ev.cargaMont ? ';color:#1c4fa0;font-weight:700' : ';color:var(--muted)') + '" title="Dia do carregamento no galpão. Padrão: véspera da saída. Troque para fixar outro dia; apague para voltar ao padrão." onchange="setCargaMont(\'' + ev.id + '\',this.value)">' + (ev.cargaMont ? '' : ' <small style="font-size:9.5px">véspera</small>') +
       ' · 🌉 Ponte Rio-Niterói: <select style="border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:11px" onchange="setPonte(\'' + ev.id + '\',this.value)">' +
         '<option value=""' + (!ev.ponte ? ' selected' : '') + '>automático (' + (passaPonteAuto(ev) ? 'passa' : 'não passa') + ')</option>' +
         '<option value="sim"' + (ev.ponte==='sim' ? ' selected' : '') + '>passa</option><option value="nao"' + (ev.ponte==='nao' ? ' selected' : '') + '>não passa</option></select>' +
@@ -4000,6 +4000,13 @@ function setPonte(id, v){
 }
 
 /* o que carrega num dia: viagens cuja saída é no dia seguinte (ou na madrugada do outro) */
+function setCargaMont(id, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev.cargaMont = (val && /^20\d\d-/.test(val)) ? val : null;
+  salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const hs = horariosSaida(ev, 'mont');
+  toast(ev.cargaMont ? '📦 Carregamento marcado para ' + fmtD(ev.cargaMont).slice(0,5) + '.' : '📦 Carregamento voltou para a véspera da saída' + (hs ? ' (' + fmtD(hs.carregarDia).slice(0,5) + ')' : '') + '.');
+}
 function carregarNoDia(Dc){
   const out = [];
   [1, 2, 3, 4].forEach(n=>{
