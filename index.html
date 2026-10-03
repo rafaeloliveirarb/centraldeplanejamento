@@ -12336,6 +12336,7 @@ function abrirTV(){
   clearInterval(tvRelogio); tvRelogio = setInterval(relogioTV, 1000); relogioTV();
   clearInterval(tvRola); tvRola = setInterval(rolarTV, 40);
   tvMostrarCards(); clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 40000);
+  { const b = document.getElementById('tv-btn-mapa'); if(b) b.textContent = CONFIG.tvMapa === 'nao' ? '🗺 mapa: desligado' : '🗺 mapa: ligado'; }
   carregarLeaflet().catch(()=>{});
   try{ if(location.hash !== '#tv') history.replaceState(null, '', '#tv'); }catch(e){}
 }
@@ -12377,9 +12378,17 @@ function destinosTV(){
   });
   return out;
 }
+function toggleMapaTV(){
+  CONFIG.tvMapa = CONFIG.tvMapa === 'nao' ? 'sim' : 'nao'; salvar();
+  const b = document.getElementById('tv-btn-mapa'); if(b) b.textContent = CONFIG.tvMapa === 'nao' ? '🗺 mapa: desligado' : '🗺 mapa: ligado';
+  if(CONFIG.tvMapa === 'nao') tvMostrarCards();
+  else { clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 1000); }
+}
 async function tvAlternar(){
   const box = document.getElementById('tv-mapa-box'), cols = document.getElementById('tv-cols');
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
+  /* o mapa entra na rotação, a não ser que esteja desligado no botão 🗺 */
+  if(CONFIG.tvMapa === 'nao'){ tvMostrarCards(); tvCarrossel = setTimeout(tvAlternar, 40000); return; }
   const noMapa = box && box.style.display !== 'none';
   if(noMapa){ tvMostrarCards(); tvCarrossel = setTimeout(tvAlternar, 40000); return; }
   const dest = destinosTV();
@@ -12388,7 +12397,7 @@ async function tvAlternar(){
   if(!pronto){ tvCarrossel = setTimeout(tvAlternar, 40000); return; }
   cols.style.display = 'none'; box.style.display = '';
   try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); }
-  tvCarrossel = setTimeout(tvAlternar, 20000);
+  tvCarrossel = setTimeout(tvAlternar, 40000);
 }
 async function desenharMapaTV(dest){
   const L = window.L, g0 = await coordGalpao();
@@ -12426,11 +12435,19 @@ async function desenharMapaTV(dest){
     pts.push([l.lat, l.lon]);
   });
   L.marker([g0.lat, g0.lon], {icon: L.divIcon({className:'', iconSize:[44,44], iconAnchor:[22,22], html:'<div style="width:44px;height:44px;border-radius:50%;background:#1c4fa0;border:4px solid #f0851e;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 2px 10px rgba(0,0,0,.5)">🏭</div>'})}).addTo(tvCamadas);
-  tvMapa.fitBounds(pts, {padding:[80, 80], maxZoom: 12});
+  /* enquadra deixando livre o canto da legenda e espaço para os rótulos dos pontos */
+  tvMapa.fitBounds(pts, {paddingTopLeft:[420, 130], paddingBottomRight:[230, 120], maxZoom: 11});
   const hoje = dest.filter(d=>d.n===0).length;
+  const linhas = dest.slice(0, 9).map(d=>{
+    const cor = d.n === 0 ? '#ffb25e' : (corEquipe(d.o.equipe) || '#9fc1ff');
+    return '<div style="display:flex;gap:7px;align-items:baseline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:440px">'+
+      '<span style="color:'+cor+'">●</span> <b>'+(d.n===0?'HOJE':rotDia(d.D))+'</b>'+(d.o.hora?' '+d.o.hora:'')+' · '+(d.o.fase==='desm'?'📤':'🔨')+' '+
+      esc(d.ev.nome.length>26 ? d.ev.nome.slice(0,25)+'…' : d.ev.nome)+' <small style="opacity:.8">'+esc(d.o.equipe||'')+'</small></div>';
+  }).join('');
   document.getElementById('tv-mapa-leg').innerHTML = '<b style="font-size:20px">🗺 MAPA DAS OPERAÇÕES</b><br>'+
-    '<span style="color:#ffb25e">● HOJE</span> ('+hoje+') &nbsp; <span style="color:#9fc1ff">● próximos 4 dias</span> ('+(dest.length-hoje)+')<br>'+
-    (key ? '<small style="opacity:.85">cores nas ruas = trânsito agora (verde livre · laranja lento · vermelho parado)</small>' : '');
+    '<span style="color:#ffb25e">● HOJE</span> ('+hoje+') &nbsp; <span style="color:#9fc1ff">● próximos 4 dias</span> ('+(dest.length-hoje)+')'+
+    '<div style="margin-top:7px;font-size:14.5px;line-height:1.75;border-top:1px solid rgba(255,255,255,.18);padding-top:7px">'+linhas+(dest.length>9?'<div style="opacity:.7">… e mais '+(dest.length-9)+'</div>':'')+'</div>'+
+    (key ? '<small style="opacity:.75">cores nas ruas = trânsito agora (verde livre · laranja lento · vermelho parado)</small>' : '');
 }
 function relogioTV(){
   const r = document.getElementById('tv-rel'); if(!r) return;
@@ -13062,7 +13079,7 @@ async function salvar(){
 </script>
 <div id="tv" ondblclick="fecharTV()">
   <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
-  <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-contagem" id="tv-contagem"></div><div class="tv-rel" id="tv-rel"></div></div>
+  <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-contagem" id="tv-contagem"></div><button id="tv-btn-mapa" onclick="toggleMapaTV()" style="border:1px solid #3a4a8a;background:#1a2550;color:#c9d2ee;border-radius:10px;padding:6px 12px;font:600 13px Segoe UI,Arial;cursor:pointer"></button><div class="tv-rel" id="tv-rel"></div></div>
   <div class="tv-cols" id="tv-cols"></div>
   <div id="tv-mapa-box" style="flex:1;position:relative;display:none;min-height:0">
     <div id="tv-mapa" style="position:absolute;inset:0"></div>
