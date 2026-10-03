@@ -3188,7 +3188,7 @@ function mensagemDia(o, D){
   else if(ev.cidade && ev.cidade!=='—') L.push('📍 ' + ev.cidade);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
   const equipeTxt = o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome + (pp.mt ? ' (manutenção)' : ''));
-  if(equipeTxt.length) L.push('👷 ' + equipeTxt.join(', '));
+  if(equipeTxt.length) L.push('👷 ' + equipeTxt.join(', ') + (ev.dorme && !o.fora ? ' — 🛏 equipe dorme no local' : ''));
   { const et = etapasNoDia(ev, D); if(et.length) L.push('🧩 Etapas do dia: ' + et.map(x=>x.nome + ((x.pessoas||[]).length ? ' (' + x.pessoas.join(', ') + ')' : '') + (x.obs ? ' — ' + x.obs : '')).join('; ')); }
   const prod = o.pessoas.find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome);
   if(o.viagens.length){
@@ -4344,8 +4344,9 @@ function custoFase(ev, fase, D){
     const eqN = ev.equipe || plano(ev).equipe;
     const eqCad = equipes.find(x=>x.nome===eqN);
     if(eqCad && eqCad.carro){
-      const nd = (fase==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev))).length;
-      if(nd){ carro = {placa: eqCad.carro, dias: nd, porDia: carroDia, val: carroDia * nd}; pedagio += carro.val; }
+      let nd = (fase==='desm' ? diasEntre(ev.desm, fimDesm(ev)) : diasEntre(ev.mont, fimMont(ev))).length;
+      if(ev.dorme && nd) nd = 1;   /* equipe dorme no local: o carro vai uma vez e volta no fim */
+      if(nd){ carro = {placa: eqCad.carro, dias: nd, porDia: carroDia, val: carroDia * nd, dorme: !!ev.dorme}; pedagio += carro.val; }
     }
   }
   return {litros: Math.round(litros), diesel, pedagio, carro, total: diesel + pedagio, km: Math.round(km), itens:[...new Set(itens)]};
@@ -4360,7 +4361,7 @@ function blocoCusto(ev){
   const lin = (rot, x) => x.km ? '<div><b>'+rot+'</b> — ≈'+x.km+' km · '+x.litros+' L de diesel · <b>'+reais(x.diesel)+'</b>'+(x.pedagio || x.itens.length ? ' + pedágio <b>'+reais(x.pedagio)+'</b> <small style="color:var(--muted)">('+x.itens.join(', ')+')</small>' : '')+'</div>' : '';
   const temG = !!(ev.pedagioG && ev.pedagioG.carro != null);
   const semValor = !temG && pedagiosDe(ev).some(p=>!+p.valorEixo);
-  const linCarro = x => x && x.carro ? '<div>🚗 <b>Carro da equipe ('+x.carro.placa+')</b> — pedágio '+reais2(x.carro.porDia)+' por dia (ida e volta) × '+x.carro.dias+' dia(s) = <b>'+reais2(x.carro.val)+'</b></div>' : '';
+  const linCarro = x => x && x.carro ? '<div>🚗 <b>Carro da equipe ('+x.carro.placa+')</b> — '+(x.carro.dorme ? 'pedágio '+reais2(x.carro.porDia)+' (1 ida e volta — 🛏 equipe dorme no local) = <b>'+reais2(x.carro.val)+'</b>' : 'pedágio '+reais2(x.carro.porDia)+' por dia (ida e volta) × '+x.carro.dias+' dia(s) = <b>'+reais2(x.carro.val)+'</b>')+'</div>' : '';
   return '<div style="font-size:13px;line-height:1.8">'+lin('🔨 Montagem', c.m)+linCarro(c.m)+lin('📤 Desmontagem', c.d)+linCarro(c.d)+
     '<div style="font-size:14px"><b>Total de frota ≈ '+reais(c.total)+'</b></div></div>'+
     '<div style="font-size:11px;color:var(--muted)">diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' o litro'+
@@ -7044,7 +7045,8 @@ function verEvento(id){
         '<option '+(eq===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option></select></label>'+
       '<div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px">🕐 <b>Horário dos montadores</b> (saída do galpão — vazio = junto com o caminhão)'+
         (function(){ const hs = ev.hSaida || {}; const cpo = (k, rot) => '<span style="display:inline-flex;gap:4px;align-items:center;white-space:nowrap">' + rot + ' <input type="time" value="' + (hs[k]||'') + '" style="border:1px solid ' + (hs[k] ? '#1c4fa0' : 'var(--line)') + ';border-radius:6px;padding:3px 6px;font-size:11px' + (hs[k] ? ';color:#1c4fa0;font-weight:700' : '') + '" onchange="setSaidaManual(\''+ev.id+'\',\'' + k + '\',this.value)"></span>';
-          return cpo('montEq','🔨 montagem') + (ev.desm ? ' ' + cpo('desmEq','📤 desmontagem') : ''); })()+'</div>'+
+          return cpo('montEq','🔨 montagem') + (ev.desm ? ' ' + cpo('desmEq','📤 desmontagem') : ''); })()+
+        '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap;'+(ev.dorme?'color:#1c4fa0;font-weight:700':'')+'" title="A equipe dorme no local durante a montagem — o carro da equipe faz só 1 ida e volta, não vai e volta todo dia"><input type="checkbox" '+(ev.dorme?'checked':'')+' onchange="setCampo(\''+ev.id+'\',\'dorme\',this.checked||null)">🛏 equipe dorme no local</label>'+'</div>'+
       '<div class="f" style="grid-column:1/-1"><i>🔨 Equipe da montagem'+(ev.montOp?' — com troca':'')+(eq===EQUIPE_TERC?' — equipe do fornecedor':'')+
         (ev.mont?' · <b style="text-transform:none;letter-spacing:0">'+fmtD(ev.mont)+(dia(ev.mont)!==dia(fimMont(ev))?' a '+fmtD(fimMont(ev)):'')+'</b>':'')+'</i>'+
         (eq===EQUIPE_TERC && !montadoresOp(ev, eq).length ? '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Montagem por equipe terceirizada. Se algum montador da casa for acompanhar, adicione ao lado.</div>' : '')+
