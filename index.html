@@ -7748,18 +7748,39 @@ function renderFolgaEq(){
       if(!L.length) return '';
       return '<div style="margin-top:14px;font-size:13px;border-top:1px solid var(--line);padding-top:10px"><b>💤 Folgas marcadas na equipe:</b><br>'+L.map(m=>esc(m)+': '+CONFIG.folgasPessoa[m].filter(d=>d>=HOJE).map(d=>fmtD(d).slice(0,5)).join(', ')).join('<br>')+'</div>'; })();
 }
+let FOLGAS_INFO = {};
+/* folga que está na Escala mas não devia: apaga a marca lá e na Central */
+async function apagarFolgaEsc(nome, d){
+  const inf = ((FOLGAS_INFO[nome]||{})[d]) || null;
+  if(!inf || !inf.chave) return toast('Não achei essa marca na Escala.');
+  if(typeof confirm === 'function' && !confirm('Apagar a ' + (FOLGAS_ESC[nome]&&FOLGAS_ESC[nome][d]==='FE'?'FÉRIAS':'FOLGA') + ' de ' + nome + ' em ' + fmtD(d).slice(0,5) + ' lá na Escala de Montadores?')) return;
+  try{
+    await escReq('escala_marcas?chave=eq.' + encodeURIComponent(inf.chave), 'DELETE');
+    if(FOLGAS_ESC[nome]) delete FOLGAS_ESC[nome][d];
+    if(FOLGAS_INFO[nome]) delete FOLGAS_INFO[nome][d];
+    TV_FOLGAS.t = 0; marcarPlanoSujo(); limparSecCache(); renderQuadro(); try{ renderJornada(); }catch(e){}
+    toast('🗑 Folga de ' + nome + ' em ' + fmtD(d).slice(0,5) + ' apagada da Escala.');
+  }catch(e){ toast('Não consegui apagar na Escala (' + e.message + ').'); }
+}
+function origemFolga(nome, d){
+  const i = ((FOLGAS_INFO[nome]||{})[d]); if(!i) return '';
+  const quem = /^central/.test(i.usuario||'') ? 'marcada pela Central' + (/folga/.test(i.usuario) ? ' (botão "Dar folga")' : '') : (i.usuario ? 'marcada por ' + i.usuario : '');
+  return [i.nomeEsc && semAcentoSimples(i.nomeEsc) !== semAcentoSimples(nome) ? 'na Escala como "' + i.nomeEsc + '" (id ' + i.id + ')' : 'id ' + i.id + ' na Escala', quem, i.obs ? '"' + i.obs + '"' : ''].filter(Boolean).join(' · ');
+}
 async function carregarFolgasEsc(){
   if(typeof ESCALA === 'undefined' || !ESCALA.url) return;
   try{
     const ini = somaDiaISO(HOJE, -20), fim = somaDiaISO(HOJE, 90);
     const [lista, marcas] = await Promise.all([
       escReq('escala_montadores?select=id,nome,funcao'),
-      escReq('escala_marcas?dia=gte.' + ini + '&dia=lte.' + fim + '&status=in.(FO,FE)&select=dia,montador_id,status')]);
+      escReq('escala_marcas?dia=gte.' + ini + '&dia=lte.' + fim + '&status=in.(FO,FE)&select=*')]);
     const porId = {};
     todosMontadores().forEach(t=>{ const m = casaMontadorEscala(t.nome, lista || []); if(m) porId[m.id] = t.nome; });
-    const novo = {};
-    (marcas||[]).forEach(x=>{ const n = porId[x.montador_id]; if(!n) return; (novo[n] = novo[n] || {})[x.dia] = x.status; });
-    FOLGAS_ESC = novo; FOLGAS_T = Date.now();
+    const novo = {}, info = {};
+    (marcas||[]).forEach(x=>{ const n = porId[x.montador_id]; if(!n) return; (novo[n] = novo[n] || {})[x.dia] = x.status;
+      const nm = ((lista||[]).find(y=>String(y.id)===String(x.montador_id))||{}).nome;
+      (info[n] = info[n] || {})[x.dia] = {chave: x.chave || (x.dia + '|' + x.montador_id), obs: x.obs || '', usuario: x.usuario || '', nomeEsc: nm || '', id: x.montador_id, quando: x.atualizado_em || ''}; });
+    FOLGAS_ESC = novo; FOLGAS_INFO = info; FOLGAS_T = Date.now();
     marcarPlanoSujo(); limparSecCache(); renderQuadro();
   }catch(e){}
 }
@@ -7898,7 +7919,8 @@ function livresParaCobrir(tipo, d, excluir){
 function jFolga(){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const lim = limiteSeguidos(), L = seqAtuais().slice(0, 25), conf = conflitosPessoas();
-  const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>nomeAgenda(c.nome, c.motorista ? 'motorista' : (produtores.some(x=>x.nome===c.nome) ? 'produtor' : 'montador'), esc)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
+  const cab = (conf.length ? '<div class="alert red" style="margin:0 0 12px">⛔ <b>Escalado em dia de folga, férias ou serviço na base:</b><br>'+conf.map(c=>nomeAgenda(c.nome, c.motorista ? 'motorista' : (produtores.some(x=>x.nome===c.nome) ? 'produtor' : 'montador'), esc)+' '+c.motivo+' em '+fmtD(c.dia).slice(0,5)+
+      (/\(Escala\)/.test(c.motivo) && (FOLGAS_INFO[c.nome]||{})[c.dia] ? ' <small style="color:#7d3a32">['+esc(origemFolga(c.nome, c.dia))+']</small> <button class="mini danger" style="padding:2px 8px;font-size:11px" onclick="apagarFolgaEsc(\''+esc(c.nome).replace(/'/g,"\\'")+'\',\''+c.dia+'\')">🗑 tirar folga da Escala</button>' : '')+' — <a href="#" onclick="event.preventDefault();fechar(\'ov-jornada\');verEvento(\''+c.ev.id+'\')">'+esc(c.ev.nome)+'</a>').join('<br>')+'</div>' : '');
   if(!L.length) return cab + '<div class="alert green" style="margin:0">Ninguém trabalhando em sequência daqui pra frente.</div>';
   return cab + '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sequências de trabalho sem folga que estão rolando ou vão começar. Limite: <b>'+lim+' dias</b> · contando de <b>'+fmtD(CONFIG.seguidosDesde || '2026-10-01').slice(0,5)+'</b> até 7 dias pra frente (<b>'+fmtD(somaDiaISO(HOJE, JANELA_IA)).slice(0,5)+'</b>) (limite e início mudam em Integrações). <button class="mini" onclick="zerarContagem()">↺ Zerar contagem hoje</button> Inclui serviço na base; folga e férias da Escala quebram a sequência.</div>'+
     '<table class="jt"><thead><tr><th>Quem</th><th>Dias seguidos</th><th>Período</th><th>Folga sugerida / quem cobre</th></tr></thead><tbody>'+
@@ -12599,7 +12621,7 @@ function renderTV(){
     }));
   });
   seguidos().filter(s=>s.ini <= somaDiaISO(HOJE, 4)).forEach(s=>al.push({n: s.passou ? 2 : 1, t: txtSeguido(s)}));
-  (TV_FOLGAS.conflito || []).forEach(c=>al.push({n:2, t:'📅 ' + c.nome + ': ' + (c.st==='FE'?'FÉRIAS':'FOLGA') + ' na Escala em ' + fmtD(c.dia).slice(0,5) + ', mas está escalado na Central — confira a Escala'}));
+
   eventos.forEach(ev=>{ if(ev.esp || !ev.mont) return;
     [[dia(ev.mont), 'nfM', 'NF DE REMESSA', 'montagem'], [dia(ev.desm), 'nfD', 'NF DE RETORNO', 'desmontagem']].forEach(([d, k, rot, fase])=>{
       if(!d || ev[k] || d < HOJE || difDias(HOJE, d) > 2) return;
