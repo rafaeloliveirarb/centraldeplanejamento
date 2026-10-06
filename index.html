@@ -12421,6 +12421,27 @@ async function tvAlternar(){
   try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); }
   tvCarrossel = setTimeout(tvAlternar, 40000);
 }
+/* frentes de trabalho da operação: líderes das equipes + quantas pessoas no local */
+function frentesTV(o){
+  const tods = todosMontadores();
+  const pess = (o.pessoas||[]).filter(pp=>!pp.prod).map(pp=>pp.nome);
+  const principal = (o.equipe && o.equipe !== EQUIPE_TERC) ? o.equipe : null;
+  const grupos = {}, ordem = [];
+  const add = (q, n2) => { if(!grupos[q]){ grupos[q] = []; ordem.push(q); } if(n2) grupos[q].push(n2); };
+  if(principal) add(principal);
+  pess.forEach(n2=>{
+    const t = tods.find(x=>x.nome===n2);
+    let q = t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC ? t.equipe : (principal || 'casa');
+    add(q, n2);
+  });
+  if(!ordem.length) return o.equipe === EQUIPE_TERC ? 'terceirizada' : '—';
+  /* "Jardel +2 · Leo Freitas +5": o líder e quantos da frente dele estão no local (sem contar ele) */
+  return ordem.map(q=>{
+    const outros = grupos[q].filter(n2=>n2 !== q).length;
+    if(q === 'casa') return (o.equipe === EQUIPE_TERC ? 'terceirizada + ' : '') + grupos[q].length + ' da casa';
+    return q + (outros ? ' +' + outros : '');
+  }).join(' · ');
+}
 async function desenharMapaTV(dest){
   const L = window.L, g0 = await coordGalpao();
   const key = CONFIG.tomtomKey;
@@ -12442,7 +12463,7 @@ async function desenharMapaTV(dest){
     if(ROTAS[d.ev.id]) L.polyline(ROTAS[d.ev.id], {color: cor, weight: d.n===0 ? 6 : 4, opacity: d.n===0 ? .95 : .6}).addTo(tvCamadas);
     const rot = '<div style="background:'+(d.n===0?'#f0851e':'#16234b')+';color:#fff;border:2px solid #fff;border-radius:9px;padding:5px 10px;font:700 15px Segoe UI,Arial;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)">'+
       (d.o.fase==='desm'?'📤 ':'🔨 ')+esc(d.ev.nome.length>28 ? d.ev.nome.slice(0,27)+'…' : d.ev.nome)+
-      '<div style="font-weight:500;font-size:12.5px;opacity:.9">'+(d.n===0?'HOJE':rotDia(d.D))+(d.o.hora?' · '+d.o.hora:'')+' · '+esc(d.o.equipe||'')+'</div></div>';
+      '<div style="font-weight:500;font-size:12.5px;opacity:.9">'+(d.n===0?'HOJE':rotDia(d.D))+(d.o.hora?' · '+d.o.hora:'')+' · '+esc(frentesTV(d.o))+'</div></div>';
     L.marker([d.g.lat, d.g.lon], {icon: L.divIcon({className:'', html: rot, iconSize:null, iconAnchor:[-14, 22]})}).addTo(tvCamadas);
     L.circleMarker([d.g.lat, d.g.lon], {radius:8, color:'#fff', weight:3, fillColor: cor, fillOpacity:1}).addTo(tvCamadas);
     pts.push([d.g.lat, d.g.lon]);
@@ -12462,9 +12483,9 @@ async function desenharMapaTV(dest){
   const hoje = dest.filter(d=>d.n===0).length;
   const linhas = dest.slice(0, 9).map(d=>{
     const cor = d.n === 0 ? '#ffb25e' : (corEquipe(d.o.equipe) || '#9fc1ff');
-    return '<div style="display:flex;gap:7px;align-items:baseline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:440px">'+
+    return '<div style="display:flex;gap:7px;align-items:baseline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:560px">'+
       '<span style="color:'+cor+'">●</span> <b>'+(d.n===0?'HOJE':rotDia(d.D))+'</b>'+(d.o.hora?' '+d.o.hora:'')+' · '+(d.o.fase==='desm'?'📤':'🔨')+' '+
-      esc(d.ev.nome.length>26 ? d.ev.nome.slice(0,25)+'…' : d.ev.nome)+' <small style="opacity:.8">'+esc(d.o.equipe||'')+'</small></div>';
+      esc(d.ev.nome.length>26 ? d.ev.nome.slice(0,25)+'…' : d.ev.nome)+' <small style="opacity:.8">'+esc(frentesTV(d.o))+'</small></div>';
   }).join('');
   document.getElementById('tv-mapa-leg').innerHTML = '<b style="font-size:20px">🗺 MAPA DAS OPERAÇÕES</b><br>'+
     '<span style="color:#ffb25e">● HOJE</span> ('+hoje+') &nbsp; <span style="color:#9fc1ff">● próximos 4 dias</span> ('+(dest.length-hoje)+')'+
