@@ -7699,7 +7699,7 @@ function baseHojeHtml(){
 function baseTV(D, curto){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return baseDoDia(D).map(s=>'<div class="tv-cont" style="border-left-color:#a8783a">🏠 <b>SERVIÇO NA BASE</b>'+(horaBase(s)?' · 🕐 '+horaBase(s):'')+' — '+esc(s.oque||'')+
-    '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', '))+(motoristasBase(s).length?' · 🚚 '+esc(motoristasBase(s).join(', ')):'')+'</div></div>').join('');
+    '<div class="tv-lin" style="'+(curto?'font-size:13.5px;margin-top:4px':'')+'">'+[pessoasBase(s).length ? '👷 '+(s.equipe?'<b>'+esc(s.equipe)+'</b>: ':'')+esc(pessoasBase(s).join(', ')) : '', motoristasBase(s).length ? '🚚 motorista: <b>'+esc(motoristasBase(s).join(', '))+'</b>' : ''].filter(Boolean).join(' · ')+'</div></div>').join('');
 }
 
 /* ===== FOLGAS E FÉRIAS DA ESCALA DE MONTADORES ===== */
@@ -12505,7 +12505,7 @@ function cardTV(o, D){
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
-    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
+    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
     tempo+
@@ -12599,6 +12599,7 @@ function renderTV(){
     }));
   });
   seguidos().filter(s=>s.ini <= somaDiaISO(HOJE, 4)).forEach(s=>al.push({n: s.passou ? 2 : 1, t: txtSeguido(s)}));
+  (TV_FOLGAS.conflito || []).forEach(c=>al.push({n:2, t:'📅 ' + c.nome + ': ' + (c.st==='FE'?'FÉRIAS':'FOLGA') + ' na Escala em ' + fmtD(c.dia).slice(0,5) + ', mas está escalado na Central — confira a Escala'}));
   eventos.forEach(ev=>{ if(ev.esp || !ev.mont) return;
     [[dia(ev.mont), 'nfM', 'NF DE REMESSA', 'montagem'], [dia(ev.desm), 'nfD', 'NF DE RETORNO', 'desmontagem']].forEach(([d, k, rot, fase])=>{
       if(!d || ev[k] || d < HOJE || difDias(HOJE, d) > 2) return;
@@ -12679,9 +12680,10 @@ function contagemTV(r){
   r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe);
     (o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>{ const t = tods.find(x=>x.nome===pp.nome); if(t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC) eqs.add(t.equipe); }); });
   const tot = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
-  const naBase = new Set(baseDoDia(HOJE).map(s=>s.equipe).filter(q=>q && !eqs.has(q)));
-  const liv = Math.max(0, tot - eqs.size - naBase.size);
-  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+(naBase.size?'<span>🔧 <b>'+naBase.size+'</b>na base</span>':'')+'<span>🏠 <b>'+liv+'</b>livre'+(liv===1?'':'s')+'</span>';
+  const eqBase = new Set(baseDoDia(HOJE).map(s=>s.equipe).filter(q=>q && !eqs.has(q)));
+  const pessBase = new Set(); baseDoDia(HOJE).forEach(s=>{ pessoasBase(s).forEach(p2=>pessBase.add(p2)); motoristasBase(s).forEach(m=>pessBase.add(m)); });
+  const liv = Math.max(0, tot - eqs.size - eqBase.size);
+  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+(pessBase.size?'<span title="'+[...pessBase].join(', ').replace(/"/g,'&quot;')+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'')+'<span>🏠 <b>'+liv+'</b>livre'+(liv===1?'':'s')+'</span>';
 }
 /* folgas e férias de hoje e amanhã, pela Escala de Montadores */
 let TV_FOLGAS = {t:0, html:''};
@@ -12704,7 +12706,16 @@ function folgasTV(){
   ]).then(([mont, marcas])=>{
     const nome = id => { const m = (mont||[]).find(x=>String(x.id)===String(id)); return m ? String(m.nome).trim().toLowerCase().replace(/(^|\s)./g, c=>c.toUpperCase()) : null; };
     const daCentral = d => Object.keys(CONFIG.folgasPessoa || {}).filter(n2=>(CONFIG.folgasPessoa[n2]||[]).includes(d));
-    const grupo = (d, st) => [...new Set([...(marcas||[]).filter(x=>x.dia===d && x.status===st).map(x=>nome(x.montador_id)).filter(Boolean), ...(st==='FO' ? daCentral(d) : [])])];
+    /* quem a Central tem trabalhando no dia (evento, viagem ou base) */
+    const sa = s => semAcentoSimples(s).replace(/\s+/g,' ').trim();
+    const trabalhando = d => { const S = new Set();
+      try{ opsDoDia(d).ops.forEach(o=>{ if(o.ev.esp) return; (o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>S.add(sa(pp.nome))); (o.viagens||[]).forEach(x=>{ if(x.motorista && !x.jaLocal) S.add(sa(x.motorista)); }); });
+        baseDoDia(d).forEach(s=>{ pessoasBase(s).forEach(p2=>S.add(sa(p2))); motoristasBase(s).forEach(m=>S.add(sa(m))); }); }catch(e){}
+      return S; };
+    TV_FOLGAS.conflito = [];
+    const grupo = (d, st) => { const W = trabalhando(d);
+      return [...new Set([...(marcas||[]).filter(x=>x.dia===d && x.status===st).map(x=>nome(x.montador_id)).filter(Boolean), ...(st==='FO' ? daCentral(d) : [])])]
+        .filter(n2=>{ if(!W.has(sa(n2))) return true; TV_FOLGAS.conflito.push({nome:n2, dia:d, st}); return false; }); };
     const parte = (rot, d) => { const fo = grupo(d,'FO'), fe = grupo(d,'FE'); if(!fo.length && !fe.length) return ''; return '<b>'+rot+':</b> '+(fo.length?'💤 folga: '+fo.join(', '):'')+(fo.length&&fe.length?' · ':'')+(fe.length?'🏖 férias: '+fe.join(', '):''); };
     const L = [parte('Hoje', HOJE), parte('Amanhã', amanha)].filter(Boolean);
     TV_FOLGAS.html = L.join('&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;');
