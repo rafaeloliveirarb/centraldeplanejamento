@@ -12626,7 +12626,7 @@ function renderTV(){
   };
   document.getElementById('tv-cols').innerHTML = listas.map(colHtml).join('');
   contagemTV(listas[0].r);
-  folgasTV(); try{ muralTV(); }catch(e){}
+  folgasTV(); try{ muralTV(); }catch(e){} try{ baseFixaTV(); }catch(e){}
   document.querySelectorAll('#tv .tv-lista').forEach((e2,i)=>{ e2.scrollTop = guarda[i] || 0; });
   /* rodapé: o que precisa de atenção — um por vez, do mais grave para o menos */
   const al = [];
@@ -12730,6 +12730,20 @@ function contagemTV(r){
 }
 /* folgas e férias de hoje e amanhã, pela Escala de Montadores */
 let TV_FOLGAS = {t:0, html:''};
+/* faixa fixa: o que tem na base hoje (acima dos avisos que rodam) */
+function baseFixaTV(){
+  const box = document.getElementById('tv-basefx'); if(!box) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = baseDoDia(HOJE);
+  if(!L.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = '🏠 <b>NA BASE HOJE:</b> ' + L.map(s=>{
+    const quem = [s.equipe ? 'equipe <b>' + esc(s.equipe) + '</b>' + (membrosDe(s.equipe).length ? ' +' + membrosDe(s.equipe).length : '') : '',
+      (s.pessoas||[]).filter(p2=>!s.equipe || !membrosDe(s.equipe).includes(p2)).map(esc).join(', '),
+      motoristasBase(s).length ? '🚚 ' + motoristasBase(s).map(esc).join(', ') : ''].filter(Boolean).join(' · ');
+    return (horaBase(s) ? '<span style="opacity:.8">' + horaBase(s) + '</span> ' : '') + '<b>' + esc(s.oque || 'Serviço na base') + '</b> — ' + quem;
+  }).join(' &nbsp;|&nbsp; ');
+  box.style.display = '';
+}
 function muralTV(){
   const box = document.getElementById('tv-mural'); if(!box) return;
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -13141,6 +13155,7 @@ async function salvar(){
   </div>
   <div class="tv-folgas" id="tv-mural" style="display:none;background:#5a4a12;color:#ffe9b0;border-top:1px solid #8a6f1e;font-size:17px"></div>
   <div class="tv-folgas" id="tv-folgas" style="display:none"></div>
+  <div class="tv-folgas" id="tv-basefx" style="display:none;background:#3a2c14;color:#f3dfb8;border-top:1px solid #6b5326;font-size:16.5px"></div>
   <div class="tv-rod" id="tv-rod"></div>
 </div>
 </body>
