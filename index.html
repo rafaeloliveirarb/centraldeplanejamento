@@ -12428,7 +12428,6 @@ function frentesTV(o){
   const principal = (o.equipe && o.equipe !== EQUIPE_TERC) ? o.equipe : null;
   const grupos = {}, ordem = [];
   const add = (q, n2) => { if(!grupos[q]){ grupos[q] = []; ordem.push(q); } if(n2) grupos[q].push(n2); };
-  if(principal) add(principal);
   pess.forEach(n2=>{
     const t = tods.find(x=>x.nome===n2);
     let q = t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC ? t.equipe : (principal || 'casa');
@@ -12436,10 +12435,12 @@ function frentesTV(o){
   });
   if(!ordem.length) return o.equipe === EQUIPE_TERC ? 'terceirizada' : '—';
   /* "Jardel +2 · Leo Freitas +5": o líder e quantos da frente dele estão no local (sem contar ele) */
+  /* só entra quem está escalado NO DIA: líder de folga/fora do dia não aparece — a frente vai pelo 1º que estiver lá */
   return ordem.map(q=>{
-    const outros = grupos[q].filter(n2=>n2 !== q).length;
     if(q === 'casa') return (o.equipe === EQUIPE_TERC ? 'terceirizada + ' : '') + grupos[q].length + ' da casa';
-    return q + (outros ? ' +' + outros : '');
+    const g = grupos[q], cab = g.includes(q) ? q : g[0];
+    const outros = g.filter(n2=>n2 !== cab).length;
+    return cab + (outros ? ' +' + outros : '');
   }).join(' · ');
 }
 async function desenharMapaTV(dest){
