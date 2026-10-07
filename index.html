@@ -4992,16 +4992,18 @@ async function pipefyGQL(query, variables, parcial){
 }
 /* nome do evento vindo do Pipefy: campo de nome do evento ou o título do card.
    NUNCA a descrição/escopo (piso, grid, backdrop...) — essa ia parar no nome. */
-const nomePareceDescricao = s => { s = String(s||'').trim(); return s.length > 70 || ((s.match(/ - /g)||[]).length >= 2 && s.length > 50) || (/\d+(,\d+)?x\d+/.test(s) && s.length > 40); };
+const nomePareceDescricao = s => { s = String(s||'').trim(); return s.length > 140 || ((s.match(/ - /g)||[]).length >= 3 && s.length > 60) || (/\d+(,\d+)?x\d+/.test(s) && s.length > 40); };
+/* nome limpo: sem "(1443406687)", sem "OS 123 -" no começo — só o nome do evento */
+const limparNomeEvento = s => String(s||'').replace(/\s*[-–]?\s*\(\s*\d{5,}\s*\)\s*/g, ' ').replace(/^\s*OS\s*:?\s*\d{5,}\s*[-–—:]?\s*/i, '').replace(/\s{2,}/g,' ').trim();
 function nomeDoCard(card, o){
   const certos = ['evento','nomedoevento','nomeevento','nome','cliente','nomedocliente'];
   for(const k of Object.keys(o||{})){
     if(k === 'Título do card' || k === 'Fase atual' || k === '__nomePf') continue;
     const v = o[k]; if(v == null || typeof v === 'object') continue;
-    if(certos.includes(semAcento(k)) && String(v).trim() && !nomePareceDescricao(v)){ nomeDoCard.origem = 'campo'; return String(v).trim(); }
+    if(certos.includes(semAcento(k)) && String(v).trim() && !nomePareceDescricao(v) && limparNomeEvento(v)){ nomeDoCard.origem = 'campo'; return limparNomeEvento(v); }
   }
   const t = String(card && card.title || '').trim();
-  if(t && !nomePareceDescricao(t)){ nomeDoCard.origem = 'titulo'; return t; }
+  if(t && !nomePareceDescricao(t) && limparNomeEvento(t)){ nomeDoCard.origem = 'titulo'; return limparNomeEvento(t); }
   nomeDoCard.origem = 'pedaco';
   if(t) return t.split(/ - |\. /)[0].slice(0, 60).trim();
   return 'Evento sem nome';
@@ -5038,7 +5040,7 @@ function repararNomesDescricao(cardsPorId){
       const os0 = osDigitos(ev), os = os0 && os0.length <= 8 ? os0 : null;   /* 9+ dígitos é o número interno do card do Pipefy, não OS */
       const lugar = tem(ev.local) && String(ev.local).length <= 45 ? String(ev.local).trim() : (tem(ev.cidade) ? String(ev.cidade).trim() : '');
       const pedaco = String(ev.nome).split(/ - |\(|\.\s/)[0].trim().slice(0, 40);
-      antigo = [os ? 'OS ' + os : '', lugar].filter(Boolean).join(' — ') || pedaco;
+      antigo = lugar || pedaco;   /* sem OS no nome */
       ev.nomeAuto = true;
     }
     if(antigo && antigo !== ev.nome && !nomePareceDescricao(antigo)){
@@ -5052,7 +5054,12 @@ function repararNomesDescricao(cardsPorId){
    montado/descrição: busca o card no Pipefy e pega o nome e a OS de verdade */
 const pareceIdCard = v => /^\d{9,}$/.test(String(v||'').trim());
 async function consertarPeloCardPipefy(){
+  /* nome com "(número)" ou "OS número": só limpa, sem precisar do Pipefy */
+  let limpos = 0;
+  eventos.forEach(e => { if(/\(\s*\d{5,}\s*\)|^\s*OS\s*:?\s*\d{5,}\s*[-–—]/i.test(e.nome||'') && !/^OS \d{9,} —/.test(e.nome||'')){ const nn = limparNomeEvento(e.nome); if(nn && nn !== e.nome){ e.nome = nn; limpos++; } } });
+  if(limpos){ salvar(); renderQuadro(); }
   const alvo = eventos.filter(e => !evEncerrado(e) && (pareceIdCard(e.os) || e.nomeAuto || nomePareceDescricao(e.nome) || /OS \d{9,}/.test(e.nome||'')));
+  if(!alvo.length) return limpos;
   if(!alvo.length) return 0;
   let n = 0;
   for(let i=0; i<alvo.length; i+=25){
@@ -5067,7 +5074,7 @@ async function consertarPeloCardPipefy(){
       const o = {}; (c.fields||[]).forEach(f=>{ if(f && f.name) o[f.name] = f.value; });
       const nome = nomeDoCard(c, o), nomeBom = nomeDoCard.origem !== 'pedaco';
       const osTxt = String(acha(o,'os')||'').match(/\d{5,}/), osTit = String(c.title||'').match(/\d{5,}/);
-      const osReal = osTxt ? osTxt[0] : (osTit ? osTit[0] : '');
+      const osReal = osTxt && osTxt[0] !== String(c.id) && osTxt[0].length <= 8 ? osTxt[0] : '';
       let mudou = false;
       if(!ev.pipefyId){ ev.pipefyId = String(c.id); mudou = true; }
       if(pareceIdCard(ev.os) && String(ev.os).trim() === String(c.id)){ ev.os = osReal || ''; mudou = true; }
@@ -5076,7 +5083,7 @@ async function consertarPeloCardPipefy(){
         ev.nome = nome; delete ev.nomeAuto; mudou = true;
       }
       if(ev.nomeAuto && /OS \d{9,}/.test(ev.nome||'')){
-        ev.nome = ev.nome.replace(/OS \d{9,}( — )?/, osReal ? 'OS ' + osReal + '$1' : '').trim() || ev.nome; mudou = true;
+        ev.nome = ev.nome.replace(/OS \d{9,}( — )?/, '').trim() || ev.nome; mudou = true;
       }
       if(mudou) n++;
     });
@@ -5218,7 +5225,7 @@ function cardParaLote(card, pendentes){
   const prod = limpa(acha(o,'produtor'));
   return {marcado:true, arquivo:'Pipefy', pipefyId: card.id,
     nome: o.__nomePf,
-    os: (function(){ const o1 = String(acha(o,'os')||'').trim(); if(/\d{5,}/.test(o1)) return o1; const m = String(card.title||'').match(/\d{5,}/); return m ? m[0] : o1; })(),
+    os: (function(){ const o1 = String(acha(o,'os')||'').trim(); const m1 = o1.match(/\d{5,}/); return m1 && m1[0] !== String(card.id) && m1[0].length <= 8 ? o1 : ''; })(),   /* OS só do campo OS; número do card nunca */
     produtor: produtores.find(p => semAcento(p.nome) === semAcento(prod)) ? String(prod).trim() : null,
     cidade: String(limpa(acha(o,'cidade')) || '—').trim(), local: String(limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
     mont: comHora(mont,'08:00'), montFim: (montFim||'').slice(0,10) || null,
