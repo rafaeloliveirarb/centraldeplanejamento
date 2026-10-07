@@ -4977,7 +4977,7 @@ let pipefyRodando = false;
 const pipefyViaSupa = () => CONFIG.pipefyViaSupa !== false;
 const URL_FUNC_PIPEFY = () => (String(CONFIG.pipefyFuncUrl||'').trim() || (NUVEM.url + '/functions/v1/pipefy'));
 const funcPipefyOutroProjeto = () => { try{ return new URL(URL_FUNC_PIPEFY()).host !== new URL(NUVEM.url).host; }catch(e){ return false; } };
-async function pipefyGQL(query, variables){
+async function pipefyGQL(query, variables, parcial){
   const supa = pipefyViaSupa();
   const r = supa
     ? await fetch(URL_FUNC_PIPEFY(), {method:'POST', headers: funcPipefyOutroProjeto() ? {'Content-Type':'application/json'} : {'Content-Type':'application/json', 'apikey': NUVEM.key, 'Authorization':'Bearer ' + NUVEM.key}, body: JSON.stringify({query, variables})})
@@ -4987,7 +4987,7 @@ async function pipefyGQL(query, variables){
   if(r.status === 401 || r.status === 403) throw new Error(supa ? 'o token do Pipefy guardado no Supabase (PIPEFY_TOKEN) está errado ou sem acesso ao pipe' : 'token inválido ou sem acesso ao pipe');
   if(!r.ok) throw new Error('Pipefy respondeu ' + r.status);
   const j = await r.json();
-  if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
+  if(j.errors && j.errors.length && !(parcial && j.data)) throw new Error(j.errors[0].message);
   return j.data;
 }
 /* nome do evento vindo do Pipefy: campo de nome do evento ou o título do card.
@@ -4998,10 +4998,11 @@ function nomeDoCard(card, o){
   for(const k of Object.keys(o||{})){
     if(k === 'Título do card' || k === 'Fase atual' || k === '__nomePf') continue;
     const v = o[k]; if(v == null || typeof v === 'object') continue;
-    if(certos.includes(semAcento(k)) && String(v).trim() && !nomePareceDescricao(v)) return String(v).trim();
+    if(certos.includes(semAcento(k)) && String(v).trim() && !nomePareceDescricao(v)){ nomeDoCard.origem = 'campo'; return String(v).trim(); }
   }
   const t = String(card && card.title || '').trim();
-  if(t && !nomePareceDescricao(t)) return t;
+  if(t && !nomePareceDescricao(t)){ nomeDoCard.origem = 'titulo'; return t; }
+  nomeDoCard.origem = 'pedaco';
   if(t) return t.split(/ - |\. /)[0].slice(0, 60).trim();
   return 'Evento sem nome';
 }
@@ -5034,16 +5035,53 @@ function repararNomesDescricao(cardsPorId){
     /* sem nome antigo nenhum: monta um nome curto com a OS e o local, e a descrição fica guardada no evento */
     if(!antigo || nomePareceDescricao(antigo)){
       const tem = v => v != null && String(v).trim() && String(v).trim() !== '—';
-      const os = osDigitos(ev);
+      const os0 = osDigitos(ev), os = os0 && os0.length <= 8 ? os0 : null;   /* 9+ dígitos é o número interno do card do Pipefy, não OS */
       const lugar = tem(ev.local) && String(ev.local).length <= 45 ? String(ev.local).trim() : (tem(ev.cidade) ? String(ev.cidade).trim() : '');
       const pedaco = String(ev.nome).split(/ - |\(|\.\s/)[0].trim().slice(0, 40);
       antigo = [os ? 'OS ' + os : '', lugar].filter(Boolean).join(' — ') || pedaco;
+      ev.nomeAuto = true;
     }
     if(antigo && antigo !== ev.nome && !nomePareceDescricao(antigo)){
       ev.descricaoPipefy = ev.descricaoPipefy || ev.nome;   /* a descrição não se perde: fica guardada no evento */
       ev.nome = antigo; n++;
     }
   });
+  return n;
+}
+/* evento que ficou com o número interno do card no lugar da OS (versão antiga) ou com nome
+   montado/descrição: busca o card no Pipefy e pega o nome e a OS de verdade */
+const pareceIdCard = v => /^\d{9,}$/.test(String(v||'').trim());
+async function consertarPeloCardPipefy(){
+  const alvo = eventos.filter(e => !evEncerrado(e) && (pareceIdCard(e.os) || e.nomeAuto || nomePareceDescricao(e.nome) || /OS \d{9,}/.test(e.nome||'')));
+  if(!alvo.length) return 0;
+  let n = 0;
+  for(let i=0; i<alvo.length; i+=25){
+    const lt = alvo.slice(i, i+25);
+    const ids = lt.map(e => String(e.pipefyId || (pareceIdCard(e.os) ? String(e.os).trim() : '') || ((String(e.nome||'').match(/OS (\d{9,})/)||[])[1] || '')));
+    const q = 'query{ ' + lt.map((e,k)=> ids[k] ? 'c' + k + ': card(id: ' + JSON.stringify(ids[k]) + '){ id title current_phase{ name } fields{ name value } }' : '').filter(Boolean).join(' ') + ' }';
+    if(q === 'query{  }') continue;
+    let d = null;
+    try{ d = await pipefyGQL(q, {}, true); }catch(err){ console.warn('consertar pelo card', err); continue; }
+    lt.forEach((ev,k) => {
+      const c = d && d['c' + k]; if(!c) return;
+      const o = {}; (c.fields||[]).forEach(f=>{ if(f && f.name) o[f.name] = f.value; });
+      const nome = nomeDoCard(c, o), nomeBom = nomeDoCard.origem !== 'pedaco';
+      const osTxt = String(acha(o,'os')||'').match(/\d{5,}/), osTit = String(c.title||'').match(/\d{5,}/);
+      const osReal = osTxt ? osTxt[0] : (osTit ? osTit[0] : '');
+      let mudou = false;
+      if(!ev.pipefyId){ ev.pipefyId = String(c.id); mudou = true; }
+      if(pareceIdCard(ev.os) && String(ev.os).trim() === String(c.id)){ ev.os = osReal || ''; mudou = true; }
+      if((ev.nomeAuto || nomePareceDescricao(ev.nome) || /OS \d{9,}/.test(ev.nome||'')) && nomeBom && nome && !nomePareceDescricao(nome)){
+        if(nomePareceDescricao(ev.nome) && !ev.descricaoPipefy) ev.descricaoPipefy = ev.nome;
+        ev.nome = nome; delete ev.nomeAuto; mudou = true;
+      }
+      if(ev.nomeAuto && /OS \d{9,}/.test(ev.nome||'')){
+        ev.nome = ev.nome.replace(/OS \d{9,}( — )?/, osReal ? 'OS ' + osReal + '$1' : '').trim() || ev.nome; mudou = true;
+      }
+      if(mudou) n++;
+    });
+  }
+  if(n){ salvar(); renderQuadro(); toast('✏️ ' + n + ' evento(s) corrigidos pelo card do Pipefy (nome e OS de verdade).'); }
   return n;
 }
 /* o card já existe na Central? pelo card, pela OS, ou pelo mesmo nome com a mesma data de montagem */
@@ -5104,7 +5142,7 @@ async function sincronizarFasesPipefy(){
       const lote2 = alvo.slice(i, i+30);
       const q = 'query{ ' + lote2.map((e,k)=>'c' + k + ': card(id: ' + JSON.stringify(String(e.pipefyId)) + '){ id current_phase{ name } }').join(' ') + ' }';
       let d = null;
-      try{ d = await pipefyGQL(q, {}); }catch(err){ if(!/not found|não encontrad|Permission|permiss/i.test(err.message)) throw err; }
+      try{ d = await pipefyGQL(q, {}, true); }catch(err){ if(!/not found|não encontrad|Permission|permiss/i.test(err.message)) throw err; }
       lote2.forEach((ev,k)=>{
         const c = d && d['c' + k]; if(!c || !c.current_phase) return;
         const nova = normalizaFase(c.current_phase.name); if(!nova) return;
@@ -5252,6 +5290,7 @@ async function puxarPipefy(manual){
     else salvar();
     let mudFase = [];
     try{ mudFase = await sincronizarFasesPipefy(); }catch(e){ console.warn('fases pipefy', e); }
+    try{ await consertarPeloCardPipefy(); }catch(e){ console.warn('consertar card', e); }
     const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' evento(s) novo(s) do BACKLOG acrescentado(s) na Central: ' + alvo.map(e=>e.nome).join(', ') : 'Pipefy conferido — nenhum card novo no BACKLOG.';
     if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos em ' + usadas.join(', ') + (mudFase.length ? ' · ' + mudFase.length + ' evento(s) mudaram de fase' : '') + ' · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(manual || alvo.length) toast(msg);
@@ -5266,6 +5305,7 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMoto
   setTimeout(()=>{ try{ carregarQRLib(); }catch(e){} }, 7000);
   setTimeout(()=>{ try{ if(window.__abrirEvHash && eventos.some(e=>e.id===window.__abrirEvHash)){ verEvento(window.__abrirEvHash); window.__abrirEvHash = null; } }catch(e){} }, 3000);
   setTimeout(()=>{ try{ puxarPipefy(false); }catch(e){} }, 30000);
+  setTimeout(()=>{ try{ if(CONFIG.pipefyPipe) consertarPeloCardPipefy(); }catch(e){} }, 15000);
   setInterval(()=>{ try{ puxarPipefy(false); }catch(e){} }, 15*60*1000);
 }
 
