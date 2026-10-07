@@ -880,8 +880,9 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <div class="fgrid">
         <label class="f"><i>Nº do pipe (ou vários, separados por vírgula)</i><input id="pf-pipe" placeholder="302123456" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar();renderCadastros()"></label>
-        <label class="f"><i>Endereço da função</i><code id="pf-func-url" style="font-size:11.5px;padding:9px 0;display:block;word-break:break-all"></code></label>
+        <label class="f"><i>Endereço da função (cole o que aparece no Supabase)</i><input id="pf-func-in" placeholder="https://….supabase.co/functions/v1/pipefy" onchange="CONFIG.pipefyFuncUrl=this.value.trim();salvar();renderCadastros()"><small id="pf-func-url" style="font-size:11px;color:var(--muted);word-break:break-all"></small></label>
       </div>
+      <div style="font-size:12px;margin-top:8px;color:#8a5a00">Se a função foi criada num projeto do Supabase diferente do da Central, cole o endereço dela acima e, no Supabase, abra a função <b>pipefy</b> → <b>Details</b> → desligue <b>Verify JWT</b> → Save.</div>
       <div id="pf-ultimo" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
       <h4 style="margin:26px 0 12px;font-size:12px;letter-spacing:.7px;color:#8b95a7">DE / PARA DOS CAMPOS</h4>
       <table><thead><tr><th>Campo no Pipefy</th><th>Campo aqui</th></tr></thead><tbody id="tb-pipefy"></tbody></table>
@@ -892,6 +893,22 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="verPayload()">Ver consulta GraphQL</button>
       </div>
       <pre id="pf-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:16px;line-height:1.55"></pre>
+    </div>
+    <div class="panel">
+      <h2>Mudar de Supabase</h2>
+      <p class="sub">Tira uma cópia de tudo que está no Supabase atual da Central (eventos, cadastros, configurações, recados e localização). Escala de Montadores e Gestão de Tempo não entram. Não precisa entrar no painel do Supabase antigo: a Central usa a chave que já tem.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <button class="mini" onclick="baixarSQLMigracao()">⬇ Baixar SQL com todos os dados</button>
+        <button class="mini" onclick="baixarBackupJSON()">⬇ Baixar backup (.json)</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:8px">O SQL baixado você cola no SQL Editor do Supabase <b>novo</b> (depois de criar as tabelas) e clica em Run.</div>
+      <h4 style="margin:20px 0 8px;font-size:12px;letter-spacing:.7px;color:#8b95a7">OU COPIAR DIRETO PARA O NOVO</h4>
+      <div class="fgrid">
+        <label class="f"><i>Endereço do Supabase novo</i><input id="mg-url" placeholder="https://xxxx.supabase.co"></label>
+        <label class="f"><i>Chave anon do novo</i><input id="mg-key" type="password" placeholder="eyJ... ou sb_publishable_..."></label>
+      </div>
+      <div style="margin-top:10px"><button class="mini" onclick="copiarParaNovoSupabase()">☁ Copiar tudo para o Supabase novo</button></div>
+      <pre id="mg-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:14px;line-height:1.55;white-space:pre-wrap"></pre>
     </div>
   </section>
 
@@ -4916,13 +4933,15 @@ function htmlRestricoes(){
 /* ================= PIPEFY AUTOMÁTICO ================= */
 let pipefyRodando = false;
 const pipefyViaSupa = () => CONFIG.pipefyViaSupa !== false;
-const URL_FUNC_PIPEFY = () => NUVEM.url + '/functions/v1/pipefy';
+const URL_FUNC_PIPEFY = () => (String(CONFIG.pipefyFuncUrl||'').trim() || (NUVEM.url + '/functions/v1/pipefy'));
+const funcPipefyOutroProjeto = () => { try{ return new URL(URL_FUNC_PIPEFY()).host !== new URL(NUVEM.url).host; }catch(e){ return false; } };
 async function pipefyGQL(query, variables){
   const supa = pipefyViaSupa();
   const r = supa
-    ? await fetch(URL_FUNC_PIPEFY(), {method:'POST', headers:{'Content-Type':'application/json', 'apikey': NUVEM.key, 'Authorization':'Bearer ' + NUVEM.key}, body: JSON.stringify({query, variables})})
+    ? await fetch(URL_FUNC_PIPEFY(), {method:'POST', headers: funcPipefyOutroProjeto() ? {'Content-Type':'application/json'} : {'Content-Type':'application/json', 'apikey': NUVEM.key, 'Authorization':'Bearer ' + NUVEM.key}, body: JSON.stringify({query, variables})})
     : await fetch('https://api.pipefy.com/graphql', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + CONFIG.pipefyToken}, body: JSON.stringify({query, variables})});
   if(supa && r.status === 404) throw new Error('a função "pipefy" ainda não foi criada no Supabase (Edge Functions)');
+  if(supa && r.status === 401 && funcPipefyOutroProjeto()) throw new Error('a função está em outro projeto do Supabase e pediu senha. Abra a função pipefy → Details → desligue "Verify JWT with legacy secret" (Enforce JWT) e salve');
   if(r.status === 401 || r.status === 403) throw new Error(supa ? 'o token do Pipefy guardado no Supabase (PIPEFY_TOKEN) está errado ou sem acesso ao pipe' : 'token inválido ou sem acesso ao pipe');
   if(!r.ok) throw new Error('Pipefy respondeu ' + r.status);
   const j = await r.json();
@@ -10726,7 +10745,8 @@ function renderCadastros(){
   { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || '';
     const sp = document.getElementById('cfg-pf-supa'); if(sp) sp.checked = pipefyViaSupa(); if(t1) t1.style.display = pipefyViaSupa() ? 'none' : '';
     const p2 = document.getElementById('pf-pipe'); if(p2 && document.activeElement !== p2) p2.value = CONFIG.pipefyPipe || '';
-    const fu = document.getElementById('pf-func-url'); if(fu) fu.textContent = URL_FUNC_PIPEFY();
+    const fi = document.getElementById('pf-func-in'); if(fi && document.activeElement !== fi) fi.value = CONFIG.pipefyFuncUrl || '';
+    const fu = document.getElementById('pf-func-url'); if(fu) fu.innerHTML = 'usando: ' + URL_FUNC_PIPEFY() + (funcPipefyOutroProjeto() ? ' <b style="color:#b07a10">· outro projeto — desligue o "Verify JWT" da função</b>' : '');
     const ul = document.getElementById('pf-ultimo'); if(ul) ul.textContent = CONFIG.pipefyQuando ? 'Última busca: ' + new Date(CONFIG.pipefyQuando).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Ainda não buscou nenhuma vez.'; }
   { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
   { const m1 = document.getElementById('cfg-mage'); if(m1) m1.checked = CONFIG.viaMage !== false;
@@ -10994,7 +11014,7 @@ async function testarPipefy(){
   o.textContent = 'Testando ' + (pipefyViaSupa() ? URL_FUNC_PIPEFY() : 'api.pipefy.com (direto)') + ' ...';
   try{
     const me = await pipefyGQL('query{ me{ name email } }', {});
-    let txt = '✅ Conectado ao Pipefy como ' + ((me&&me.me&&me.me.name)||'?') + '.';
+    let txt = '✅ Função OK (' + URL_FUNC_PIPEFY() + ')\n✅ Conectado ao Pipefy como ' + ((me&&me.me&&me.me.name)||'?') + '.';
     if(pipe){
       const d = await pipefyGQL('query($p: ID!){ pipe(id: $p){ name cards_count phases{ name } } }', {p: pipe});
       const p = d && d.pipe;
@@ -11006,6 +11026,87 @@ async function testarPipefy(){
     const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? (pipefyViaSupa() ? 'não achei a função "pipefy" no Supabase — confira o passo 1 e 2 (nome exatamente pipefy)' : 'o navegador bloqueia a chamada direta ao Pipefy (CORS) — use "via Supabase"') : e.message;
     o.textContent = '❌ ' + m;
   }
+}
+/* ---------- mudar de Supabase: lê tudo com a chave atual ---------- */
+const TABELAS_MIGRA = [['plan_config','chave'], ['plan_eventos','id']];
+function mgLog(t, limpa){ const o = document.getElementById('mg-out'); if(!o) return; o.classList.remove('hide'); o.textContent = (limpa ? '' : o.textContent) + t + '\n'; }
+function cabSupa(key){ const h = {'apikey': key, 'Content-Type':'application/json'}; if(/^eyJ/.test(key)) h.Authorization = 'Bearer ' + key; return h; }
+async function lerTabelaAntiga(tab, pk){
+  const todas = []; let de = 0; const passo = 1000;
+  for(let volta=0; volta<500; volta++){
+    const r = await fetch(NUVEM.url + '/rest/v1/' + tab + '?select=*&order=' + pk + '.asc&limit=' + passo + '&offset=' + de, {headers: cabSupa(NUVEM.key)});
+    if(r.status === 404) return null;           /* tabela não existe no antigo */
+    if(!r.ok) throw new Error(tab + ' respondeu ' + r.status);
+    const j = await r.json(); todas.push(...j);
+    if(j.length < passo) break; de += passo;
+  }
+  return todas;
+}
+async function lerTudoAntigo(){
+  const dados = {};
+  for(const [tab, pk] of TABELAS_MIGRA){
+    mgLog('lendo ' + tab + '...');
+    const linhas = await lerTabelaAntiga(tab, pk);
+    if(linhas === null){ mgLog('  ' + tab + ': não existe no antigo, pulei'); continue; }
+    dados[tab] = linhas; mgLog('  ' + tab + ': ' + linhas.length + ' linha(s)');
+  }
+  return dados;
+}
+function baixarArquivo(nome, texto, tipo){
+  const b = new Blob([texto], {type: tipo || 'text/plain'}); const a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = nome; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+function sqlDosDados(dados){
+  let s = '-- Dados copiados do Supabase antigo em ' + new Date().toLocaleString('pt-BR') + '\n' +
+          '-- Rode no SQL Editor do Supabase NOVO, depois do 1-criar-tabelas-supabase-novo.sql\n\n';
+  TABELAS_MIGRA.forEach(([tab])=>{
+    const linhas = dados[tab]; if(!linhas || !linhas.length) return;
+    for(let i=0; i<linhas.length; i+=500){
+      const json = JSON.stringify(linhas.slice(i, i+500));
+      let tag = 'migra'; while(json.includes('$' + tag + '$')) tag += 'x';
+      s += 'insert into public.' + tab + ' select * from json_populate_recordset(null::public.' + tab + ', $' + tag + '$' + json + '$' + tag + '$) on conflict do nothing;\n';
+    }
+    s += '\n';
+  });
+  s += "select 'plan_config' t, count(*) from plan_config union all select 'plan_eventos', count(*) from plan_eventos;\n";
+  return s;
+}
+async function baixarSQLMigracao(){
+  mgLog('Lendo o Supabase atual (' + NUVEM.url + ')', true);
+  try{
+    const dados = await lerTudoAntigo();
+    baixarArquivo('dados-supabase-antigo.sql', sqlDosDados(dados), 'application/sql');
+    mgLog('\n✅ Baixado: dados-supabase-antigo.sql — cola no SQL Editor do Supabase novo e clica em Run.\nNo fim ele mostra quantas linhas ficaram em cada tabela; tem que bater com os números acima.');
+  }catch(e){ mgLog('❌ ' + e.message); }
+}
+async function baixarBackupJSON(){
+  mgLog('Lendo o Supabase atual (' + NUVEM.url + ')', true);
+  try{ const dados = await lerTudoAntigo(); baixarArquivo('backup-supabase-' + HOJE + '.json', JSON.stringify(dados), 'application/json'); mgLog('\n✅ Backup baixado.'); }
+  catch(e){ mgLog('❌ ' + e.message); }
+}
+async function copiarParaNovoSupabase(){
+  const url = String(document.getElementById('mg-url').value||'').trim().replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
+  const key = String(document.getElementById('mg-key').value||'').trim();
+  if(!/^https:\/\/.+\.supabase\.co$/.test(url) || !key){ mgLog('Coloque o endereço (https://xxxx.supabase.co) e a chave anon do Supabase novo.', true); return; }
+  if(url === NUVEM.url){ mgLog('Esse é o mesmo Supabase que a Central já usa.', true); return; }
+  mgLog('Lendo o Supabase atual...', true);
+  try{
+    const dados = await lerTudoAntigo();
+    mgLog('\nGravando no novo (' + url + ')...');
+    for(const [tab, pk] of TABELAS_MIGRA){
+      const linhas = dados[tab]; if(!linhas || !linhas.length) continue;
+      for(let i=0; i<linhas.length; i+=500){
+        const r = await fetch(url + '/rest/v1/' + tab + '?on_conflict=' + pk, {method:'POST',
+          headers: Object.assign(cabSupa(key), {'Prefer':'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify(linhas.slice(i, i+500))});
+        if(r.status === 404) throw new Error('a tabela ' + tab + ' não existe no novo — rode primeiro o 1-criar-tabelas-supabase-novo.sql');
+        if(r.status === 401 || r.status === 403) throw new Error('o Supabase novo recusou a chave (' + r.status + ') — confira a chave anon');
+        if(!r.ok){ let t = ''; try{ t = await r.text(); }catch(e){} throw new Error(tab + ' respondeu ' + r.status + ' ' + t.slice(0,200)); }
+      }
+      mgLog('  ✅ ' + tab + ': ' + linhas.length + ' linha(s) copiadas');
+    }
+    mgLog('\n✅ Pronto. Tudo copiado. Agora me manda o endereço e a chave do novo pra eu trocar na Central.');
+  }catch(e){ mgLog('❌ ' + e.message); }
 }
 function verPayload(){
   const o = document.getElementById('pf-out'); o.classList.remove('hide');
