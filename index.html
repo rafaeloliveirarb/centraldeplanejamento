@@ -4979,6 +4979,38 @@ async function pipefyGQL(query, variables){
   if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
   return j.data;
 }
+/* nome do evento vindo do Pipefy: campo de nome do evento ou o título do card.
+   NUNCA a descrição/escopo (piso, grid, backdrop...) — essa ia parar no nome. */
+const nomePareceDescricao = s => { s = String(s||'').trim(); return s.length > 70 || ((s.match(/ - /g)||[]).length >= 2 && s.length > 50) || (/\d+(,\d+)?x\d+/.test(s) && s.length > 40); };
+function nomeDoCard(card, o){
+  const certos = ['evento','nomedoevento','nomeevento','nome','cliente','nomedocliente'];
+  for(const k of Object.keys(o||{})){
+    if(k === 'Título do card' || k === 'Fase atual' || k === '__nomePf') continue;
+    const v = o[k]; if(v == null || typeof v === 'object') continue;
+    if(certos.includes(semAcento(k)) && String(v).trim() && !nomePareceDescricao(v)) return String(v).trim();
+  }
+  const t = String(card && card.title || '').trim();
+  if(t && !nomePareceDescricao(t)) return t;
+  if(t) return t.split(/ - |\. /)[0].slice(0, 60).trim();
+  return 'Evento sem nome';
+}
+/* conserta nome que virou descrição: volta o nome anterior guardado no histórico do evento */
+function repararNomesDescricao(cardsPorId){
+  let n = 0;
+  eventos.forEach(ev => {
+    if(!nomePareceDescricao(ev.nome)) return;
+    const fim = ' → ' + ev.nome;
+    const h = (ev.hist || []).find(x => (x.o || []).some(t => typeof t === 'string' && t.startsWith('Nome: ') && t.endsWith(fim)));
+    let antigo = null;
+    if(h){ const t = h.o.find(t => t.startsWith('Nome: ') && t.endsWith(fim)); antigo = t.slice(6, t.length - fim.length).trim(); }
+    if((!antigo || nomePareceDescricao(antigo)) && cardsPorId && ev.pipefyId && cardsPorId[ev.pipefyId]) antigo = nomeDoCard(cardsPorId[ev.pipefyId], {});
+    if(antigo && antigo !== ev.nome && !nomePareceDescricao(antigo)){
+      ev.descricaoPipefy = ev.descricaoPipefy || ev.nome;   /* a descrição não se perde: fica guardada no evento */
+      ev.nome = antigo; n++;
+    }
+  });
+  return n;
+}
 /* o card já existe na Central? pelo card, pela OS, ou pelo mesmo nome com a mesma data de montagem */
 function jaNoPrograma(e){
   if(e.pipefyId && eventos.some(x=>String(x.pipefyId||'')===String(e.pipefyId) || x.id === 'pf' + e.pipefyId)) return true;
@@ -5024,7 +5056,7 @@ function faseCasaFiltro(nome, filtro){ const n = semEmoji(nome); return !filtro.
 function cardParaLote(card, pendentes){
   const o = {'Título do card': card.title, 'Fase atual': card.current_phase && card.current_phase.name};
   (card.fields||[]).forEach(f=>{ if(f && f.name) o[f.name] = f.value; });
-  if(!acha(o,'nome')) o['Evento'] = card.title;
+  o.__nomePf = nomeDoCard(card, o);
   const cM = colunasData(o,'mont'), cE = colunasData(o,'evt'), cD = colunasData(o,'desm');
   const limpa = v => { if(v == null) return v; const s = String(v).trim(); return /^\[.*\]$/.test(s) ? s.replace(/^\[|\]$/g,'').replace(/"/g,'') : s; };
   const mont = dataBR(limpa(cM.ini)) || dataBR(limpa(acha(o,'mont')));
@@ -5040,7 +5072,7 @@ function cardParaLote(card, pendentes){
   });
   const prod = limpa(acha(o,'produtor'));
   return {marcado:true, arquivo:'Pipefy', pipefyId: card.id,
-    nome: String(acha(o,'nome') || card.title || 'Evento sem nome').trim(),
+    nome: o.__nomePf,
     os: (function(){ const o1 = String(acha(o,'os')||'').trim(); if(/\d{5,}/.test(o1)) return o1; const m = String(card.title||'').match(/\d{5,}/); return m ? m[0] : o1; })(),
     produtor: produtores.find(p => semAcento(p.nome) === semAcento(prod)) ? String(prod).trim() : null,
     cidade: String(limpa(acha(o,'cidade')) || '—').trim(), local: String(limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
@@ -5075,6 +5107,7 @@ async function puxarPipefy(manual){
         } while(after && ++voltas < 200);
       }
     }
+    { const porId = {}; cards.forEach(c=>porId[String(c.id)] = c); if(repararNomesDescricao(porId)){ salvar(); renderQuadro(); } }
     if(!usadas.length) throw new Error('nenhuma fase do pipe bate com "' + filtroFases.join(', ') + '" — confira o nome em "Fases que entram"');
     /* SÓ ACRESCENTA: o que já estava no BACKLOG quando ligou fica de fora, e evento que já
        existe na Central nunca é mexido nem apagado pelo Pipefy. Entra só card novo na fase. */
@@ -10619,7 +10652,7 @@ function gravarLote(auto){
       const temTxt = v => v != null && String(v).trim() !== '' && String(v).trim() !== '—';
       const mantemEnd = {cidade: temTxt(ex.cidade) ? ex.cidade : e.cidade, local: temTxt(ex.local) ? ex.local : e.local, km: (+ex.km > 0) ? ex.km : e.km};
       Object.assign(ex, {
-        nome:e.nome, os: osDigitos(e) || e.os, cidade:mantemEnd.cidade,
+        nome: nomePareceDescricao(e.nome) ? ex.nome : e.nome, os: osDigitos(e) || e.os, cidade:mantemEnd.cidade,
         local:mantemEnd.local, km:mantemEnd.km,
         permanece:e.permanece, fase:e.fase || ex.fase || null,
         respNome:e.respNome || ex.respNome || null,
@@ -13337,7 +13370,7 @@ async function salvar(){
       marcarSync(true);
       nuvemEscutar(); escutando = true;
       carregarRecados();
-      setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} if(arredondarHorarios() + m){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
+      setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} try{ const r = repararNomesDescricao(null); if(r){ m += r; toast('✏️ ' + r + ' evento(s) estavam com a descrição do Pipefy no lugar do nome — o nome voltou.'); } }catch(e){} if(arredondarHorarios() + m){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
       setTimeout(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 5000);
       setTimeout(()=>{ try{ if(CONFIG.galpao) calcularKmEmLote(false); }catch(e){} }, 30000);   /* refaz o km de quem passou a ir por Magé */
       setInterval(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 600000);
