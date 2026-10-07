@@ -904,6 +904,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
         <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button>
         <button class="mini" onclick="ligarTodosPipefy(true).then(()=>sincronizarFasesPipefy())">🔗 Ligar eventos ao Pipefy</button>
+        <button class="mini" onclick="carregarTabelaEnderecos(true).then(()=>preencherEnderecosDaTabela(true)).catch(e=>toast('Database: '+e.message))">📍 Puxar endereços (Evento / Obra)</button>
         <button class="mini" onclick="verPayload()">Ver consulta GraphQL</button>
       </div>
       <pre id="pf-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:16px;line-height:1.55"></pre>
@@ -4991,11 +4992,89 @@ async function pipefyGQL(query, variables, parcial){
     throw e;
   }
 }
+/* ===== DATABASE "03-Evento / Obra" DO PIPEFY: de onde vêm os endereços =====
+   lê a tabela inteira (uns 4 mil registros), guarda por 6 horas e casa pelo nome do evento */
+const TABELA_END_PADRAO = '302294668';
+let TAB_END = null, tabEndCarregando = null;
+function idTabelaEnd(){ return String(CONFIG.pipefyTabelaEnd || TABELA_END_PADRAO).replace(/\D/g,''); }
+async function carregarTabelaEnderecos(forcar){
+  if(tabEndCarregando) return tabEndCarregando;
+  if(!forcar && TAB_END && TAB_END.quando > Date.now() - 6*3600*1000) return TAB_END;
+  if(!forcar && !TAB_END){ try{ const c = JSON.parse(localStorage.getItem('cpl:tabEnd')||'null'); if(c && c.id === idTabelaEnd() && c.quando > Date.now() - 6*3600*1000){ TAB_END = c; return TAB_END; } }catch(e){} }
+  tabEndCarregando = (async () => {
+    const regs = []; let after = null, voltas = 0;
+    do{
+      const d = await pipefyGQL0('query($t: ID!, $a: String){ table_records(table_id: $t, first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title record_fields{ name value } } } } }', {t: idTabelaEnd(), a: after});
+      const tr = d && d.table_records; if(!tr) break;
+      (tr.edges||[]).forEach(e => {
+        const r = e.node; const o = {}; (r.record_fields||[]).forEach(f=>{ if(f && f.name) o[semAcento(f.name)] = f.value; });
+        const nomeK = Object.keys(o).find(k => k.includes('nomedoevento') || k.includes('nomeevento'));
+        const iniK = Object.keys(o).find(k => k.includes('inicio'));
+        const en = enderecoDoCard({fields:[{name:'r', connectedRepoItems:[r]}]});
+        if(!en) return;
+        regs.push({id: r.id, t: limparNomeEvento(r.title), n: limparNomeEvento(nomeK ? o[nomeK] : ''), i: iniK ? (dia(dataBR(String(o[iniK]||''))) || '') : '', l: en.local || '', c: en.cidade || ''});
+      });
+      after = tr.pageInfo && tr.pageInfo.hasNextPage ? tr.pageInfo.endCursor : null;
+    } while(after && ++voltas < 200);
+    TAB_END = {id: idTabelaEnd(), quando: Date.now(), regs};
+    try{ localStorage.setItem('cpl:tabEnd', JSON.stringify(TAB_END)); }catch(e){}
+    return TAB_END;
+  })();
+  try{ return await tabEndCarregando; } finally { tabEndCarregando = null; }
+}
+function enderecoDaTabela(ev){
+  if(!TAB_END || !TAB_END.regs) return null;
+  const alvo = nomeBase(limparNomeEvento(ev.nome)); if(!alvo || alvo.length < 4) return null;
+  const casa = r => { const a = nomeBase(r.t), b = nomeBase(r.n);
+    if(a === alvo || b === alvo) return 3;
+    const longo = x => x && x.length >= 10;
+    if((longo(a) && (alvo.includes(a) || a.includes(alvo))) || (longo(b) && (alvo.includes(b) || b.includes(alvo)))) return 2;
+    return 0; };
+  const ref = dia(ev.mont) || dia(ev.evt) || HOJE;
+  const cands = TAB_END.regs.map(r => ({r, s: casa(r)})).filter(x => x.s > 0);
+  if(!cands.length) return null;
+  const dist = r => r.i ? Math.abs(difDias(r.i, ref)) : 9999;
+  cands.sort((x,y) => (y.s - x.s) || (dist(x.r) - dist(y.r)));
+  const m = cands[0].r;
+  return {local: m.l, cidade: m.c, registro: m.t};
+}
+async function preencherEnderecosDaTabela(manual){
+  const vazio = v => !v || String(v).trim() === '' || String(v).trim() === '—';
+  const alvo = eventos.filter(e => !evEncerrado(e) && (vazio(e.local) || vazio(e.cidade)));
+  if(!alvo.length){ if(manual) toast('Todos os eventos já têm endereço.'); return 0; }
+  try{ await carregarTabelaEnderecos(false); }catch(e){ console.warn('tabela endereços', e); if(manual) toast('Não consegui ler a database Evento / Obra: ' + e.message); return 0; }
+  let n = 0;
+  alvo.forEach(ev => {
+    const en = enderecoDaTabela(ev); if(!en) return;
+    let mud = false;
+    if(en.local && vazio(ev.local)){ ev.local = en.local; ev.km = 0; mud = true; }
+    if(en.cidade && vazio(ev.cidade)){ ev.cidade = en.cidade; mud = true; }
+    if(mud) n++;
+  });
+  if(n){
+    salvar(); renderQuadro();
+    toast('📍 Endereço de ' + n + ' evento(s) puxado da database Evento / Obra do Pipefy.');
+    if(CONFIG.galpao) setTimeout(()=>{ try{ calcularKmEmLote(false); }catch(e){} }, 1500);
+  } else if(manual) toast('Não achei na database Evento / Obra nenhum registro com o nome desses eventos.');
+  return n;
+}
 /* botão do evento: acha o card, lê o Evento / Obra (ou o card pai) e preenche o endereço; se não achar, mostra o que veio */
 async function buscarEnderecoPipefy(id){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   toast('📍 Procurando o endereço no Pipefy...');
   try{
+    try{
+      await carregarTabelaEnderecos(false);
+      const et = enderecoDaTabela(ev);
+      if(et && (et.local || et.cidade)){
+        if(et.local) ev.local = et.local;
+        if(et.cidade) ev.cidade = et.cidade;
+        ev.km = 0; salvar(); renderQuadro(); verEvento(id);
+        toast('📍 Endereço da database Evento / Obra (' + et.registro + '): ' + (et.local||'') + (et.cidade ? ' · ' + et.cidade : ''));
+        try{ if(CONFIG.galpao){ await calcularKm(id, true); verEvento(id); } }catch(e){}
+        return;
+      }
+    }catch(e){ console.warn('tabela', e); }
     let cid = ev.pipefyId || (pareceIdCard(ev.os) ? String(ev.os).trim() : '');
     if(!cid){
       const nomeBusca = limparNomeEvento(ev.nome).slice(0, 60);
@@ -5416,6 +5495,7 @@ async function puxarPipefy(manual){
     let mudFase = [];
     try{ mudFase = await sincronizarFasesPipefy(); }catch(e){ console.warn('fases pipefy', e); }
     try{ await consertarPeloCardPipefy(); }catch(e){ console.warn('consertar card', e); }
+    try{ await preencherEnderecosDaTabela(false); }catch(e){ console.warn('enderecos tabela', e); }
     const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' evento(s) novo(s) do BACKLOG acrescentado(s) na Central: ' + alvo.map(e=>e.nome).join(', ') : 'Pipefy conferido — nenhum card novo no BACKLOG.';
     if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos em ' + usadas.join(', ') + (mudFase.length ? ' · ' + mudFase.length + ' evento(s) mudaram de fase' : '') + ' · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(manual || alvo.length) toast(msg);
