@@ -4991,10 +4991,67 @@ async function pipefyGQL(query, variables, parcial){
     throw e;
   }
 }
+/* botão do evento: acha o card, lê o Evento / Obra (ou o card pai) e preenche o endereço; se não achar, mostra o que veio */
+async function buscarEnderecoPipefy(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  toast('📍 Procurando o endereço no Pipefy...');
+  try{
+    let cid = ev.pipefyId || (pareceIdCard(ev.os) ? String(ev.os).trim() : '');
+    if(!cid){
+      const nomeBusca = limparNomeEvento(ev.nome).slice(0, 60);
+      for(const pipe of String(CONFIG.pipefyPipe||'').split(/[,;\s]+/).filter(Boolean)){
+        try{
+          const d = await pipefyGQL('query($p: ID!, $t: String){ cards(pipe_id: $p, first: 5, search: {title: $t}){ edges{ node{ id title } } } }', {p: pipe, t: nomeBusca});
+          const ac = (d && d.cards && d.cards.edges || []).map(e=>e.node);
+          const ach = ac.find(c => nomeBase(limparNomeEvento(c.title)) === nomeBase(limparNomeEvento(ev.nome))) || ac[0];
+          if(ach){ cid = String(ach.id); break; }
+        }catch(e){ console.warn('busca card', e); }
+      }
+      if(!cid){ alert('Não achei o card desse evento no Pipefy pelo nome "' + nomeBusca + '".'); return; }
+      ev.pipefyId = cid;
+    }
+    const conect = 'connectedRepoItems{ ... on TableRecord { id title record_fields{ name value } } ... on Card { id title fields{ name value } } }';
+    let card = null;
+    const tenta = async q => { try{ const d = await pipefyGQL0(q, {}, true); return d && d.card; }catch(e){ console.warn('card', e); return null; } };
+    card = await tenta('query{ card(id: ' + JSON.stringify(cid) + '){ id title fields{ name value ' + conect + ' } parent_relations{ name cards{ id title fields{ name value ' + conect + ' } } } } }')
+        || await tenta('query{ card(id: ' + JSON.stringify(cid) + '){ id title fields{ name value ' + conect + ' } } }')
+        || await tenta('query{ card(id: ' + JSON.stringify(cid) + '){ id title fields{ name value connectedRepoItems{ ... on TableRecord { id title record_fields{ name value } } } } } }')
+        || await tenta('query{ card(id: ' + JSON.stringify(cid) + '){ id title fields{ name value } } }');
+    if(!card){ alert('Não consegui abrir o card ' + cid + ' no Pipefy.'); return; }
+    const en = enderecoDoCard(card);
+    if(en && (en.local || en.cidade)){
+      if(en.local) ev.local = en.local;
+      if(en.cidade) ev.cidade = en.cidade;
+      ev.km = 0;
+      salvar(); renderQuadro(); verEvento(id);
+      toast('📍 Endereço do Pipefy: ' + (en.local || '') + (en.cidade ? ' · ' + en.cidade : ''));
+      try{ if(CONFIG.galpao) await calcularKm(id, true); verEvento(id); }catch(e){}
+      return;
+    }
+    /* não achou: mostra o que o card trouxe, para ajustar */
+    const linhas = [];
+    (card.fields||[]).forEach(f => {
+      linhas.push('• ' + f.name + ': ' + String(f.value||'').slice(0,60));
+      (f.connectedRepoItems||[]).forEach(r => { linhas.push('   ↳ ligado: ' + (r.title||'?')); (r.record_fields || r.fields || []).forEach(x => linhas.push('      - ' + x.name + ': ' + String(x.value||'').slice(0,60))); });
+    });
+    (card.parent_relations||[]).forEach(pr => (pr.cards||[]).forEach(pc => linhas.push('   ↳ card pai: ' + pc.title)));
+    console.log('Pipefy card ' + cid, card);
+    alert('Não achei campo de endereço no card "' + card.title + '".\n\nCampos que vieram:\n' + linhas.slice(0,60).join('\n') + '\n\nTire um print desta tela e mande para ajustar.');
+  }catch(e){ alert('Pipefy: ' + e.message); }
+}
 /* endereço que vem do registro "Evento / Obra" ligado ao card */
 function enderecoDoCard(card){
   const regs = [];
-  (card && card.fields || []).forEach(f => (f && f.connectedRepoItems || []).forEach(r => { if(r && r.record_fields) regs.push(r); }));
+  (card && card.fields || []).forEach(f => (f && f.connectedRepoItems || []).forEach(r => {
+    if(r && r.record_fields) regs.push(r);
+    else if(r && r.fields) regs.push({title: r.title, record_fields: r.fields});
+  }));
+  (card && card.parent_relations || []).forEach(pr => (pr && pr.cards || []).forEach(pc => {
+    (pc.fields || []).forEach(f => (f && f.connectedRepoItems || []).forEach(r => { if(r && r.record_fields) regs.push(r); else if(r && r.fields) regs.push({title:r.title, record_fields:r.fields}); }));
+    regs.push({title: pc.title, record_fields: pc.fields || []});
+  }));
+  /* por último o próprio card (campo "Endereço..." direto nele) */
+  if(card && (card.fields||[]).some(f => f && /endereco|logradouro/.test(semAcento(f.name||'')))) regs.push({title: card.title, record_fields: card.fields});
   for(const r of regs){
     const o = {}; (r.record_fields||[]).forEach(f=>{ if(f && f.name && f.value != null && String(f.value).trim()) o[semAcento(f.name)] = String(f.value).trim(); });
     const pega = (...ps) => { const k = Object.keys(o).find(k2 => ps.every(p => k2.includes(p))); return k ? o[k].replace(/^\[|\]$/g,'').replace(/^"|"$/g,'') : ''; };
@@ -7421,6 +7478,7 @@ function verEvento(id){
       '<div style="grid-column:1/-1"><i>📍 Local do evento</i><div style="display:flex;gap:8px;flex-wrap:wrap">'+
         '<input value="'+String(ev.local && ev.local!=='—' ? ev.local : '').replace(/"/g,'&quot;')+'" placeholder="Local — ex.: Caminho Niemeyer, Marina da Glória" style="flex:2;min-width:220px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'local\',this.value)">'+
         '<input value="'+String(ev.cidade && ev.cidade!=='—' ? ev.cidade : '').replace(/"/g,'&quot;')+'" placeholder="Cidade" style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:inherit;font-size:13px" onchange="setLocalEvento(\''+ev.id+'\',\'cidade\',this.value)">'+
+      (CONFIG.pipefyPipe ? '<div style="width:100%;margin-top:4px"><button class="mini" onclick="buscarEnderecoPipefy(\''+ev.id+'\')">📍 Buscar endereço no Pipefy</button></div>' : '')+
       '</div></div>'+
       '<div><i>Distância até a montagem</i><div style="display:flex;align-items:center;gap:7px">'+
         '<input type="number" min="0" step="1" value="'+(+ev.km||0)+'" '+
