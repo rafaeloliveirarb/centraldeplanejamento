@@ -5020,6 +5020,14 @@ function repararNomesDescricao(cardsPorId){
       if(!card) card = Object.values(cardsPorId).find(c => String(c.title||'').trim() === ev.nome || (c.fields||[]).some(f => f && String(f.value||'').trim() === ev.nome));
       if(card){ antigo = nomeDoCard(card, Object.fromEntries((card.fields||[]).filter(f=>f&&f.name).map(f=>[f.name, f.value]))); if(!ev.pipefyId) ev.pipefyId = card.id; }
     }
+    /* sem nome antigo nenhum: monta um nome curto com a OS e o local, e a descrição fica guardada no evento */
+    if(!antigo || nomePareceDescricao(antigo)){
+      const tem = v => v != null && String(v).trim() && String(v).trim() !== '—';
+      const os = osDigitos(ev);
+      const lugar = tem(ev.local) && String(ev.local).length <= 45 ? String(ev.local).trim() : (tem(ev.cidade) ? String(ev.cidade).trim() : '');
+      const pedaco = String(ev.nome).split(/ - |\(|\.\s/)[0].trim().slice(0, 40);
+      antigo = [os ? 'OS ' + os : '', lugar].filter(Boolean).join(' — ') || pedaco;
+    }
     if(antigo && antigo !== ev.nome && !nomePareceDescricao(antigo)){
       ev.descricaoPipefy = ev.descricaoPipefy || ev.nome;   /* a descrição não se perde: fica guardada no evento */
       ev.nome = antigo; n++;
@@ -6232,6 +6240,7 @@ function pastaEvento(id){
     '</div>'+
     '<h2>Local e contatos</h2><div class="grade">'+
       dado('Local', esc(ev.local))+dado('Cidade', esc(ev.cidade))+
+      (ev.descricaoPipefy ? dado('Escopo (Pipefy)', esc(ev.descricaoPipefy)) : '')+
       dado('Responsável no local', esc(ev.respNome||'')+(ev.respTel?' · '+esc(ev.respTel):''))+
       dado('Produtor', esc(produtorDo(ev)||''))+
       dado('Líder', esc(eq||'')+(eqCad && eqCad.tel ? ' · '+esc(eqCad.tel) : ''))+
@@ -7382,6 +7391,7 @@ function verEvento(id){
             (((ev.diasPessoa||{})[produtorDo(ev)]) ? ' <small style="color:#a86412;font-weight:700">📅 '+resumoDias(diasDe(ev, produtorDo(ev)))+'</small>' : '')+'</div>'
           : '<div style="font-size:12px;color:var(--muted);margin-top:5px">Sugerido pela IA. Aceite a sugestão do evento ou escolha acima para fixar.</div>')+
         '</div>'+
+      (ev.descricaoPipefy ? '<div style="grid-column:1/-1"><i>Escopo (Pipefy)</i><div style="font-size:12.5px;line-height:1.5;background:#f6f8fc;border:1px solid var(--line);border-radius:8px;padding:8px 10px">'+String(ev.descricaoPipefy).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</div></div>' : '')+
       '<div><i>Nome do Responsável</i><input value="'+String(ev.respNome||'').replace(/"/g,'&quot;')+'" placeholder="quem responde no local" '+
         'style="width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 10px;font-weight:600" '+
         'onchange="setCampo(\''+ev.id+'\',\'respNome\',this.value.trim())"></div>'+
@@ -12991,7 +13001,7 @@ function mostrarAlertaTV(avancar){
   if(document.getElementById('tv') && document.getElementById('tv').classList.contains('on')) TV_AL_T = setTimeout(()=>mostrarAlertaTV(true), 7000);
 }
 /* nome sem o número do Pipefy; endereço de rua vira só a cidade */
-function nomeTV(n){ return String(n||'').replace(/\s*[-–]?\s*\(\s*\d{5,}\s*\)\s*/g, ' ').replace(/\s{2,}/g,' ').trim(); }
+function nomeTV(n){ if(nomePareceDescricao(n)) n = String(n).split(/ - |\(/)[0].slice(0, 45).trim() + '…'; return String(n||'').replace(/\s*[-–]?\s*\(\s*\d{5,}\s*\)\s*/g, ' ').replace(/\s{2,}/g,' ').trim(); }
 function localCurtoTV(ev){
   const loc = String(ev.local||'').trim(), cid = String(ev.cidade||'').trim();
   const temL = loc && loc !== '—' && !/^(rua|r\.|av\.?|avenida|estrada|estr\.|rod\.?|rodovia|travessa|tv\.|alameda|al\.|praça|pça|largo)\b/i.test(loc) && loc.length <= 34;
