@@ -795,7 +795,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><b>🔄 Pipefy automático</b>
-          <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
+          <label style="display:flex;gap:5px;align-items:center;font-size:12.5px"><input type="checkbox" id="cfg-pf-supa" onchange="CONFIG.pipefyViaSupa=this.checked;salvar();renderCadastros()"> via Supabase (token guardado lá)</label>
+          <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy (só se NÃO for via Supabase)" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
           <input id="cfg-pf-pipe" placeholder="Nº do pipe (ou vários, separados por vírgula)" style="width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar()">
           <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button></div>
         <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central busca no Pipefy os cards novos e alterados e atualiza o quadro, com o mesmo aviso de data mudada da importação. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
@@ -869,18 +870,25 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
     </div>
     <div class="panel">
       <h2>Pipefy</h2>
-      <p class="sub">Preparado para receber os cards do pipe de eventos. Falta apenas ligar o token e mapear os campos.</p>
-      <div class="alert amber">O navegador não conversa direto com a API do Pipefy por causa do CORS. Na hora de ligar, a chamada precisa passar por uma função no Netlify ou por uma Edge Function do Supabase, que guarda o token fora do HTML.</div>
-      <div class="fgrid">
-        <label class="f"><i>Token da API</i><input id="pf-token" type="password" placeholder="Bearer ..."></label>
-        <label class="f"><i>ID do pipe</i><input id="pf-pipe" placeholder="3021xxxx"></label>
-        <label class="f"><i>Endpoint do proxy</i><input id="pf-proxy" placeholder="/.netlify/functions/pipefy"></label>
-        <label class="f"><i>Sincronização</i><select id="pf-sync"><option>Manual</option><option>A cada 15 minutos</option><option>Webhook do Pipefy</option></select></label>
+      <p class="sub">Automático pelo Supabase: a Central chama uma função do Supabase, e só ela fala com o Pipefy. O token fica guardado no Supabase, fora do HTML. A cada 15 minutos, com a Central ou a TV aberta, os cards novos e alterados entram sozinhos.</p>
+      <div class="alert" style="background:#eef6ff;border:1px solid #bcd6f5;color:#1d3f6b;line-height:1.6;font-size:13px">
+        <b>LIGAR UMA VEZ SÓ (5 minutos):</b><br>
+        <b>1.</b> No Supabase → <b>Edge Functions</b> → <b>Deploy a new function</b> → <b>Via Editor</b>.<br>
+        <b>2.</b> Nome da função: <code>pipefy</code> (exatamente assim). Apague o código que vem e cole o do botão <b>📋 Copiar código da função</b>. Clique em <b>Deploy</b>.<br>
+        <b>3.</b> Edge Functions → <b>Secrets</b> → <b>Add new secret</b>: nome <code>PIPEFY_TOKEN</code>, valor = seu token do Pipefy (Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal). Salve.<br>
+        <b>4.</b> Aqui embaixo: coloque o número do pipe e clique em <b>Testar conexão</b>. Deu certo → <b>Puxar agora</b>. Daí pra frente é sozinho.
       </div>
+      <div class="fgrid">
+        <label class="f"><i>Nº do pipe (ou vários, separados por vírgula)</i><input id="pf-pipe" placeholder="302123456" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar();renderCadastros()"></label>
+        <label class="f"><i>Endereço da função</i><code id="pf-func-url" style="font-size:11.5px;padding:9px 0;display:block;word-break:break-all"></code></label>
+      </div>
+      <div id="pf-ultimo" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
       <h4 style="margin:26px 0 12px;font-size:12px;letter-spacing:.7px;color:#8b95a7">DE / PARA DOS CAMPOS</h4>
       <table><thead><tr><th>Campo no Pipefy</th><th>Campo aqui</th></tr></thead><tbody id="tb-pipefy"></tbody></table>
       <div style="margin-top:18px;display:flex;gap:12px;flex-wrap:wrap">
+        <button class="mini" onclick="copiarFuncPipefy()">📋 Copiar código da função</button>
         <button class="mini" onclick="testarPipefy()">Testar conexão</button>
+        <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
         <button class="mini" onclick="verPayload()">Ver consulta GraphQL</button>
       </div>
       <pre id="pf-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:16px;line-height:1.55"></pre>
@@ -4907,9 +4915,15 @@ function htmlRestricoes(){
 
 /* ================= PIPEFY AUTOMÁTICO ================= */
 let pipefyRodando = false;
+const pipefyViaSupa = () => CONFIG.pipefyViaSupa !== false;
+const URL_FUNC_PIPEFY = () => NUVEM.url + '/functions/v1/pipefy';
 async function pipefyGQL(query, variables){
-  const r = await fetch('https://api.pipefy.com/graphql', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + CONFIG.pipefyToken}, body: JSON.stringify({query, variables})});
-  if(r.status === 401 || r.status === 403) throw new Error('token inválido ou sem acesso ao pipe');
+  const supa = pipefyViaSupa();
+  const r = supa
+    ? await fetch(URL_FUNC_PIPEFY(), {method:'POST', headers:{'Content-Type':'application/json', 'apikey': NUVEM.key, 'Authorization':'Bearer ' + NUVEM.key}, body: JSON.stringify({query, variables})})
+    : await fetch('https://api.pipefy.com/graphql', {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + CONFIG.pipefyToken}, body: JSON.stringify({query, variables})});
+  if(supa && r.status === 404) throw new Error('a função "pipefy" ainda não foi criada no Supabase (Edge Functions)');
+  if(r.status === 401 || r.status === 403) throw new Error(supa ? 'o token do Pipefy guardado no Supabase (PIPEFY_TOKEN) está errado ou sem acesso ao pipe' : 'token inválido ou sem acesso ao pipe');
   if(!r.ok) throw new Error('Pipefy respondeu ' + r.status);
   const j = await r.json();
   if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
@@ -4947,7 +4961,7 @@ function cardParaLote(card, pendentes){
 }
 async function puxarPipefy(manual){
   const st = document.getElementById('pf-status');
-  if(!CONFIG.pipefyToken || !CONFIG.pipefyPipe){ if(manual && st) st.innerHTML = '<b style="color:#b0483c">Coloque o token e o número do pipe.</b>'; return; }
+  if((!pipefyViaSupa() && !CONFIG.pipefyToken) || !CONFIG.pipefyPipe){ if(manual && st) st.innerHTML = '<b style="color:#b0483c">' + (pipefyViaSupa() ? 'Coloque o número do pipe.' : 'Coloque o token e o número do pipe.') + '</b>'; return; }
   if(pipefyRodando) return; pipefyRodando = true;
   try{
     if(st) st.textContent = 'buscando cards no Pipefy...';
@@ -4978,7 +4992,7 @@ async function puxarPipefy(manual){
     if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(manual || alvo.length) toast(msg);
   }catch(e){
-    const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? 'o navegador bloqueou a chamada ao Pipefy (sem internet ou bloqueio do Pipefy)' : e.message;
+    const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? (pipefyViaSupa() ? 'não consegui chegar na função "pipefy" do Supabase (confira se ela foi publicada com esse nome)' : 'o navegador bloqueou a chamada direta ao Pipefy (CORS) — marque "via Supabase"') : e.message;
     if(st) st.innerHTML = '<b style="color:#b0483c">Não consegui falar com o Pipefy:</b> ' + m + '.';
     if(manual) toast('Pipefy: ' + m);
   }finally{ pipefyRodando = false; }
@@ -6736,11 +6750,16 @@ function noPeriodo(ev){
      Basta esse intervalo encostar na janela: assim o que está em andamento
      — montou ontem, desmonta daqui a 20 dias — continua no quadro, contando
      nos indicadores e mostrando conflitos. */
-  const ini = dia(ev.mont);
-  const fim = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.evtFim) || dia(ev.evt) || dia(fimMont(ev)) || ini;
-  const lim = new Date(HOJE+'T00:00'); lim.setDate(lim.getDate()+periodo);
-  const limISO = lim.toISOString().slice(0,10);
-  return ini <= limISO && fim >= HOJE;    /* intervalos se cruzam */
+  /* quadro principal: só o que tem operação de HOJE para frente.
+     Entra se algum dia de montagem/desmontagem/serviço cai entre hoje e o fim da janela,
+     ou se o evento está acontecendo hoje (montou, desmonta depois). O que já passou fica no filtro de datas. */
+  const limISO = somaDiaISO(HOJE, periodo);
+  const dias = diasEquipe(ev);
+  if(dias.some(d=>d >= HOJE && d <= limISO)) return true;
+  const fimOp = dias.length ? dias[dias.length-1] : dia(ev.mont);
+  const iniOp = dias.length ? dias[0] : dia(ev.mont);
+  /* em andamento: já montou e a desmontagem ainda vem (até 60 dias de evento — evitando datas tortas de 1 ano) */
+  return !!(iniOp && fimOp && iniOp <= HOJE && fimOp >= HOJE && difDias(iniOp, fimOp) <= 60);
 }
 
 function filtrados(){
@@ -10704,7 +10723,11 @@ function renderCadastros(){
   { const pb = document.getElementById('cfg-pracas'); if(pb) pb.innerHTML = htmlPracas(); }
   { const rb = document.getElementById('cfg-restr'); if(rb) rb.innerHTML = htmlRestricoes(); }
   { const db = document.getElementById('cfg-datas'); if(db) db.innerHTML = htmlDatasEspeciais(); }
-  { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || ''; }
+  { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || '';
+    const sp = document.getElementById('cfg-pf-supa'); if(sp) sp.checked = pipefyViaSupa(); if(t1) t1.style.display = pipefyViaSupa() ? 'none' : '';
+    const p2 = document.getElementById('pf-pipe'); if(p2 && document.activeElement !== p2) p2.value = CONFIG.pipefyPipe || '';
+    const fu = document.getElementById('pf-func-url'); if(fu) fu.textContent = URL_FUNC_PIPEFY();
+    const ul = document.getElementById('pf-ultimo'); if(ul) ul.textContent = CONFIG.pipefyQuando ? 'Última busca: ' + new Date(CONFIG.pipefyQuando).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Ainda não buscou nenhuma vez.'; }
   { const t2 = document.getElementById('cfg-pf-pipe'); if(t2 && document.activeElement !== t2) t2.value = CONFIG.pipefyPipe || ''; }
   { const m1 = document.getElementById('cfg-mage'); if(m1) m1.checked = CONFIG.viaMage !== false;
     const m2 = document.getElementById('cfg-mage-cid'); if(m2 && document.activeElement !== m2) m2.value = CONFIG.mageCidades == null ? MAGE_PADRAO : CONFIG.mageCidades; }
@@ -10933,17 +10956,61 @@ function addMaterialCatalogo(){
   catalogo.push({nome:n, cat:'Outros', un:'un', peso:p, vol:v, jailson:false}); salvar(); renderCadastros();
 }
 
-function testarPipefy(){
+const CODIGO_FUNC_PIPEFY = `// Supabase Edge Function "pipefy" — ponte entre a Central e o Pipefy (somente leitura)
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const json = (obj: unknown, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { ...CORS, "Content-Type": "application/json" } });
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  try {
+    const token = Deno.env.get("PIPEFY_TOKEN");
+    if (!token) return json({ errors: [{ message: "falta o secret PIPEFY_TOKEN no Supabase" }] }, 500);
+    const { query, variables } = await req.json();
+    if (!query || /^\\s*mutation/i.test(query)) return json({ errors: [{ message: "somente leitura" }] }, 400);
+    const r = await fetch("https://api.pipefy.com/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ query, variables }),
+    });
+    return new Response(await r.text(), { status: r.status, headers: { ...CORS, "Content-Type": "application/json" } });
+  } catch (e) {
+    return json({ errors: [{ message: String(e) }] }, 500);
+  }
+});
+`;
+function copiarFuncPipefy(){
+  const o = document.getElementById('pf-out'); if(o){ o.classList.remove('hide'); o.textContent = CODIGO_FUNC_PIPEFY; }
+  try{ navigator.clipboard.writeText(CODIGO_FUNC_PIPEFY).then(()=>toast('Código copiado — cola no editor da função "pipefy" no Supabase'), ()=>toast('Selecione o código abaixo e copie (Ctrl+C)')); }
+  catch(e){ toast('Selecione o código abaixo e copie (Ctrl+C)'); }
+}
+async function testarPipefy(){
   const o = document.getElementById('pf-out'); o.classList.remove('hide');
-  const proxy = document.getElementById('pf-proxy').value.trim();
-  o.textContent = proxy
-    ? 'Chamando ' + proxy + ' ...\n\nRetorno: sem função publicada ainda.\nQuando a função existir, ela recebe { pipeId, token } e devolve os cards já no formato de evento.'
-    : 'Informe o endpoint do proxy. A chamada direta a api.pipefy.com pelo navegador é bloqueada por CORS e ainda exporia o token no HTML.';
+  const pipe = String(CONFIG.pipefyPipe||'').split(/[,;\s]+/).filter(Boolean)[0];
+  o.textContent = 'Testando ' + (pipefyViaSupa() ? URL_FUNC_PIPEFY() : 'api.pipefy.com (direto)') + ' ...';
+  try{
+    const me = await pipefyGQL('query{ me{ name email } }', {});
+    let txt = '✅ Conectado ao Pipefy como ' + ((me&&me.me&&me.me.name)||'?') + '.';
+    if(pipe){
+      const d = await pipefyGQL('query($p: ID!){ pipe(id: $p){ name cards_count phases{ name } } }', {p: pipe});
+      const p = d && d.pipe;
+      txt += p ? '\n✅ Pipe "' + p.name + '" — ' + (p.cards_count||0) + ' card(s).\nFases: ' + (p.phases||[]).map(f=>f.name).join(' · ') + '\n\nTudo certo. Clique em "Puxar agora" — depois disso ele busca sozinho a cada 15 minutos.'
+               : '\n⚠ Não achei o pipe ' + pipe + '. Confira o número (app.pipefy.com/pipes/NÚMERO).';
+    } else txt += '\n⚠ Falta o número do pipe.';
+    o.textContent = txt;
+  }catch(e){
+    const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? (pipefyViaSupa() ? 'não achei a função "pipefy" no Supabase — confira o passo 1 e 2 (nome exatamente pipefy)' : 'o navegador bloqueia a chamada direta ao Pipefy (CORS) — use "via Supabase"') : e.message;
+    o.textContent = '❌ ' + m;
+  }
 }
 function verPayload(){
   const o = document.getElementById('pf-out'); o.classList.remove('hide');
   o.textContent =
-'query {\n  cards(pipe_id: ' + (document.getElementById('pf-pipe').value.trim() || 'PIPE_ID') + ', first: 50) {\n' +
+'query {\n  cards(pipe_id: ' + (String(CONFIG.pipefyPipe||'').trim() || 'PIPE_ID') + ', first: 50) {\n' +
 '    edges { node {\n      id\n      title\n      current_phase { name }\n      fields { name value }\n' +
 '    } }\n  }\n}\n\n' +
 'Cada card vira um evento: title → nome, fields → OS, produtor, datas e materiais,\ncurrent_phase → situação no quadro.';
