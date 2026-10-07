@@ -904,10 +904,10 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <div style="font-size:12.5px;color:var(--muted);margin-top:8px">O SQL baixado você cola no SQL Editor do Supabase <b>novo</b> (depois de criar as tabelas) e clica em Run.</div>
       <h4 style="margin:20px 0 8px;font-size:12px;letter-spacing:.7px;color:#8b95a7">OU COPIAR DIRETO PARA O NOVO</h4>
       <div class="fgrid">
-        <label class="f"><i>Endereço do Supabase novo</i><input id="mg-url" placeholder="https://xxxx.supabase.co"></label>
-        <label class="f"><i>Chave anon do novo</i><input id="mg-key" type="password" placeholder="eyJ... ou sb_publishable_..."></label>
+        <label class="f"><i>Endereço do Supabase novo</i><input id="mg-url" placeholder="https://xxxx.supabase.co" value="https://isnczssssikqjukpecsf.supabase.co"></label>
+        <label class="f"><i>Chave anon do novo</i><input id="mg-key" type="password" placeholder="eyJ... ou sb_publishable_..." value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbmN6c3Nzc2lrcWp1a3BlY3NmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzQ0NDYsImV4cCI6MjEwNjk1MDQ0Nn0.k4VNcRSlP6rrhw22zgDnWbZkZw-eaTjt2iZccsC703E"></label>
       </div>
-      <div style="margin-top:10px"><button class="mini" onclick="copiarParaNovoSupabase()">☁ Copiar tudo para o Supabase novo</button></div>
+      <div style="margin-top:10px"><button class="mini" onclick="copiarParaNovoSupabase()">☁ Copiar de novo do antigo para o novo</button> <small style="color:var(--muted)">(a Central já faz isso sozinha na primeira vez que abre com o Supabase novo vazio — repetir não duplica nada)</small></div>
       <pre id="mg-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:14px;line-height:1.55;white-space:pre-wrap"></pre>
     </div>
   </section>
@@ -1533,6 +1533,11 @@ const Store = (() => {
 /* link do motorista: a mesma Central abre só a tela de compartilhar a localização */
 if(typeof location !== 'undefined' && /^#motorista=/.test(location.hash || '')) window.__modoMotorista = true;
 const NUVEM = {
+  url: 'https://isnczssssikqjukpecsf.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbmN6c3Nzc2lrcWp1a3BlY3NmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzQ0NDYsImV4cCI6MjEwNjk1MDQ0Nn0.k4VNcRSlP6rrhw22zgDnWbZkZw-eaTjt2iZccsC703E'
+};
+/* Supabase antigo: continua sendo onde mora a Escala de Montadores, e de onde a Central copia os dados na mudança */
+const NUVEM_ANTIGO = {
   url: 'https://vybxkraqydsjrdvyxknp.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5YnhrcmFxeWRzanJkdnl4a25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjM0MzgsImV4cCI6MjEwNDQzOTQzOH0.QszdsS6tiYcqssMxKwQjfzlIDhqc5emzXKmw8vyZCxw'
 };
@@ -1616,6 +1621,29 @@ function marcarSync(ok, texto){
     el2.textContent = texto || (ok ? '☁ compartilhado' : '⚠ só neste aparelho');
     el2.className = 'syncpill ' + (ok ? 'on' : 'off');
   }
+}
+/* mudança de Supabase: na primeira vez, com o novo vazio, puxa tudo do antigo sozinho */
+async function migrarDoAntigoSeVazio(){
+  if(typeof window !== 'undefined' && window.__modoMotorista) return;
+  if(!NUVEM_ANTIGO || NUVEM_ANTIGO.url === NUVEM.url) return;
+  try{
+    const ja = await sb.from('plan_config').select('chave').eq('chave','migrado:antigo').limit(1);
+    if(ja.error || (ja.data||[]).length) return;
+    const tem = await sb.from('plan_eventos').select('id').limit(1);
+    if(tem.error) return;
+    let total = 0;
+    for(const [tab, pk] of TABELAS_MIGRA){
+      const linhas = await lerTabelaAntiga(tab, pk);
+      if(!linhas || !linhas.length) continue;
+      for(let i=0; i<linhas.length; i+=500){
+        const r = await sb.from(tab).upsert(linhas.slice(i, i+500), {onConflict: pk, ignoreDuplicates: true});
+        if(r.error) throw r.error;
+      }
+      total += linhas.length;
+    }
+    await sb.from('plan_config').upsert({chave:'migrado:antigo', dados:{de: NUVEM_ANTIGO.url, quando: new Date().toISOString(), linhas: total}, atualizado_em: new Date().toISOString()});
+    if(total) setTimeout(()=>toast('☁ Supabase novo: ' + total + ' registro(s) copiados do antigo (eventos, cadastros, recados).'), 1500);
+  }catch(e){ try{ console.warn('migração automática', e); }catch(_){} }
 }
 async function nuvemCarregar(){
   if(!sb) return false;
@@ -11034,7 +11062,7 @@ function cabSupa(key){ const h = {'apikey': key, 'Content-Type':'application/jso
 async function lerTabelaAntiga(tab, pk){
   const todas = []; let de = 0; const passo = 1000;
   for(let volta=0; volta<500; volta++){
-    const r = await fetch(NUVEM.url + '/rest/v1/' + tab + '?select=*&order=' + pk + '.asc&limit=' + passo + '&offset=' + de, {headers: cabSupa(NUVEM.key)});
+    const r = await fetch(NUVEM_ANTIGO.url + '/rest/v1/' + tab + '?select=*&order=' + pk + '.asc&limit=' + passo + '&offset=' + de, {headers: cabSupa(NUVEM_ANTIGO.key)});
     if(r.status === 404) return null;           /* tabela não existe no antigo */
     if(!r.ok) throw new Error(tab + ' respondeu ' + r.status);
     const j = await r.json(); todas.push(...j);
@@ -11073,7 +11101,7 @@ function sqlDosDados(dados){
   return s;
 }
 async function baixarSQLMigracao(){
-  mgLog('Lendo o Supabase atual (' + NUVEM.url + ')', true);
+  mgLog('Lendo o Supabase antigo (' + NUVEM_ANTIGO.url + ')', true);
   try{
     const dados = await lerTudoAntigo();
     baixarArquivo('dados-supabase-antigo.sql', sqlDosDados(dados), 'application/sql');
@@ -11081,7 +11109,7 @@ async function baixarSQLMigracao(){
   }catch(e){ mgLog('❌ ' + e.message); }
 }
 async function baixarBackupJSON(){
-  mgLog('Lendo o Supabase atual (' + NUVEM.url + ')', true);
+  mgLog('Lendo o Supabase antigo (' + NUVEM_ANTIGO.url + ')', true);
   try{ const dados = await lerTudoAntigo(); baixarArquivo('backup-supabase-' + HOJE + '.json', JSON.stringify(dados), 'application/json'); mgLog('\n✅ Backup baixado.'); }
   catch(e){ mgLog('❌ ' + e.message); }
 }
@@ -11089,7 +11117,7 @@ async function copiarParaNovoSupabase(){
   const url = String(document.getElementById('mg-url').value||'').trim().replace(/\/+$/,'').replace(/\/rest\/v1$/,'');
   const key = String(document.getElementById('mg-key').value||'').trim();
   if(!/^https:\/\/.+\.supabase\.co$/.test(url) || !key){ mgLog('Coloque o endereço (https://xxxx.supabase.co) e a chave anon do Supabase novo.', true); return; }
-  if(url === NUVEM.url){ mgLog('Esse é o mesmo Supabase que a Central já usa.', true); return; }
+  if(url === NUVEM_ANTIGO.url){ mgLog('Esse é o Supabase antigo — coloque o novo.', true); return; }
   mgLog('Lendo o Supabase atual...', true);
   try{
     const dados = await lerTudoAntigo();
@@ -11307,7 +11335,7 @@ async function enviarAgendaDaSemana(){
    Se ela continuar no projeto antigo, troque as duas linhas abaixo pelos
    dados daquele projeto — é o único lugar que precisa mudar. */
 /* A Escala vive no mesmo projeto do quadro. Um lugar só, sem configuração. */
-const ESCALA = { url: NUVEM.url, key: NUVEM.key };
+const ESCALA = { url: NUVEM_ANTIGO.url, key: NUVEM_ANTIGO.key };   /* a Escala de Montadores ficou no Supabase antigo */
 async function testarEscala(){
   const el2 = document.getElementById('esc-teste');
   el2.textContent = 'testando...';
@@ -13211,6 +13239,7 @@ async function salvar(){
       sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
       const locais = eventos.slice(), cadLocal = JSON.parse(JSON.stringify(cadastrosAtuais()));
       const temBase = Object.keys(SYNC_BASE.ev).length > 0;
+      await migrarDoAntigoSeVazio();
       await nuvemCarregar();
       if(window.__modoMotorista){ marcarSync(true); paginaMotorista(); return; }
       /* primeira vez com a nuvem vazia: sobe o que já existe neste aparelho */
