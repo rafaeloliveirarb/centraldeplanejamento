@@ -693,6 +693,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <tbody id="tb-equipes"></tbody></table>
     </div>
     <div class="panel">
+      <h2>Eventos de cada equipe <small style="font-weight:600;color:var(--muted);font-size:12px">— de hoje em diante</small></h2>
+      <p class="sub">Troque a equipe de um evento direto aqui, ou coloque a equipe em outro evento pelo "➕ Colocar em".</p>
+      <div id="ev-por-equipe"></div>
+    </div>
+    <div class="panel">
       <h2>Motoristas</h2>
       <p class="sub">Agregado anda sempre com o próprio caminhão e é priorizado nos eventos mais distantes. Carreta só sai com Jesse ou Geovane.</p>
       <table><thead><tr><th>Motorista</th><th>Vínculo</th><th>Veículos que dirige</th><th>Situação</th><th></th></tr></thead>
@@ -709,6 +714,11 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       <table><thead><tr><th>Produtor</th><th>Telefone</th><th>Eventos no período</th><th></th></tr></thead>
       <tbody id="tb-produtores"></tbody></table>
       <div style="margin-top:16px"><button class="mini" onclick="addProdutor()">+ Adicionar produtor</button></div>
+    </div>
+    <div class="panel">
+      <h2>Eventos de cada produtor <small style="font-weight:600;color:var(--muted);font-size:12px">— de hoje em diante</small></h2>
+      <p class="sub">Troque o produtor de um evento direto aqui, ou coloque o produtor em outro evento pelo "➕ Colocar em".</p>
+      <div id="ev-por-produtor"></div>
     </div>
   </section>
 
@@ -893,6 +903,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="testarPipefy()">Testar conexão</button>
         <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
         <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button>
+        <button class="mini" onclick="ligarTodosPipefy(true).then(()=>sincronizarFasesPipefy())">🔗 Ligar eventos ao Pipefy</button>
         <button class="mini" onclick="verPayload()">Ver consulta GraphQL</button>
       </div>
       <pre id="pf-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:16px;line-height:1.55"></pre>
@@ -5037,10 +5048,82 @@ function repararNomesDescricao(cardsPorId){
 }
 /* o card já existe na Central? pelo card, pela OS, ou pelo mesmo nome com a mesma data de montagem */
 function jaNoPrograma(e){
-  if(e.pipefyId && eventos.some(x=>String(x.pipefyId||'')===String(e.pipefyId) || x.id === 'pf' + e.pipefyId)) return true;
-  if(eventoExistente(e)) return true;
+  if(e.pipefyId){ const p = eventos.find(x=>String(x.pipefyId||'')===String(e.pipefyId) || x.id === 'pf' + e.pipefyId); if(p) return p; }
+  const ex = eventoExistente(e); if(ex) return ex;
   const nb = nomeBase(e.nome), dm = dia(e.mont), dd = dia(e.desm);
-  return !!(nb && eventos.some(x => nomeBase(x.nome) === nb && ((dm && dia(x.mont) === dm) || (dd && dia(x.desm) === dd))));
+  return (nb && eventos.find(x => nomeBase(x.nome) === nb && ((dm && dia(x.mont) === dm) || (dd && dia(x.desm) === dd)))) || null;
+}
+/* ===== FASE DO PIPEFY → CENTRAL =====
+   todo evento ligado a um card (pipefyId) acompanha a fase do card: mudou lá, muda aqui */
+let fasesSyncRodando = false;
+/* liga ao card os eventos da Central que ainda não têm card (vieram da planilha):
+   passa por TODAS as fases do pipe uma vez; depois só confere o BACKLOG */
+function ligarCardsAEventos(cards){
+  let n = 0; const pend = new Set();
+  const usados = new Set(eventos.map(x=>String(x.pipefyId||'')).filter(Boolean));
+  cards.forEach(c => {
+    if(usados.has(String(c.id))) return;
+    let e; try{ e = cardParaLote(c, pend); }catch(err){ return; }
+    const ja = jaNoPrograma(e);
+    if(ja && !ja.pipefyId){ ja.pipefyId = String(c.id); usados.add(String(c.id)); n++; }
+  });
+  return n;
+}
+async function ligarTodosPipefy(manual){
+  const st = document.getElementById('pf-status');
+  if(!CONFIG.pipefyPipe) return 0;
+  const pipes = String(CONFIG.pipefyPipe).split(/[,;\s]+/).filter(Boolean);
+  let n = 0, lidos = 0;
+  for(const pipe of pipes){
+    const dp = await pipefyGQL('query($p: ID!){ pipe(id: $p){ phases{ id name } } }', {p: pipe});
+    for(const fase of ((dp && dp.pipe && dp.pipe.phases) || [])){
+      let after = null, voltas = 0;
+      do{
+        const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } } }', {f: fase.id, a: after});
+        const ac = d && d.phase && d.phase.cards; if(!ac) break;
+        const cs = (ac.edges||[]).map(e=>e.node); lidos += cs.length;
+        n += ligarCardsAEventos(cs);
+        if(manual && st) st.textContent = 'ligando eventos aos cards do Pipefy... ' + lidos + ' card(s) lidos, ' + n + ' evento(s) ligados';
+        after = ac.pageInfo && ac.pageInfo.hasNextPage ? ac.pageInfo.endCursor : null;
+      } while(after && ++voltas < 200);
+    }
+  }
+  CONFIG.pipefyLigouTudo = new Date().toISOString();
+  salvar();
+  if(manual) toast('🔗 ' + n + ' evento(s) da Central ligados aos cards do Pipefy (' + lidos + ' cards conferidos). A fase deles agora acompanha o Pipefy.');
+  return n;
+}
+async function sincronizarFasesPipefy(){
+  if(fasesSyncRodando) return [];
+  const alvo = eventos.filter(e => e.pipefyId && e.esp !== 'cancelado' && (!dia(fimDesm(e)) || dia(fimDesm(e)) >= somaDiaISO(HOJE, -30)));
+  if(!alvo.length) return [];
+  fasesSyncRodando = true;
+  const mudou = [];
+  try{
+    for(let i=0; i<alvo.length; i+=30){
+      const lote2 = alvo.slice(i, i+30);
+      const q = 'query{ ' + lote2.map((e,k)=>'c' + k + ': card(id: ' + JSON.stringify(String(e.pipefyId)) + '){ id current_phase{ name } }').join(' ') + ' }';
+      let d = null;
+      try{ d = await pipefyGQL(q, {}); }catch(err){ if(!/not found|não encontrad|Permission|permiss/i.test(err.message)) throw err; }
+      lote2.forEach((ev,k)=>{
+        const c = d && d['c' + k]; if(!c || !c.current_phase) return;
+        const nova = normalizaFase(c.current_phase.name); if(!nova) return;
+        const antes = ev.fase || null;
+        if(antes === nova) return;
+        ev.fase = nova;
+        const est = faseParaEstado(nova); if(est) ev.estado = est;
+        if(faseTerceirizada(nova) && ev.esp !== 'terceirizado'){ ev.esp = 'terceirizado'; ev.equipe = EQUIPE_TERC; ev.montOp = null; }
+        if(/cancelad/.test(semAcentoSimples(nova)) && !ev.esp){ ev.esp = 'cancelado'; }
+        ev.faseMudouPipefy = {quando: new Date().toISOString(), de: antes, para: nova};
+        mudou.push({ev, antes, nova});
+      });
+    }
+  } finally { fasesSyncRodando = false; }
+  if(mudou.length){
+    salvar(); renderQuadro(); try{ renderPorFase(); }catch(e){}
+    toast('🗂 Pipefy: ' + mudou.length + ' evento(s) mudaram de fase — ' + mudou.slice(0,3).map(m=>m.ev.nome + ': ' + (m.antes||'sem fase') + ' → ' + m.nova).join(' | ') + (mudou.length>3 ? ' …' : ''));
+  }
+  return mudou;
 }
 /* duplicados: mesma OS, ou mesmo nome com a mesma montagem. Fica o mais antigo; só sai cópia criada hoje. */
 function gruposDuplicados(){
@@ -5140,6 +5223,7 @@ async function puxarPipefy(manual){
       cards.forEach(c => vistos.add(String(c.id)));
       CONFIG.pipefyVistos = [...vistos]; CONFIG.pipefyBase = new Date().toISOString(); CONFIG.pipefyQuando = CONFIG.pipefyBase;
       salvar();
+      try{ await sincronizarFasesPipefy(); }catch(e){}
       const mb = '🔄 Pipefy ligado: os ' + cards.length + ' card(s) que já estavam em ' + usadas.join(', ') + ' ficaram de fora. A partir de agora, todo card que entrar lá vem para a Central.';
       if(st) st.innerHTML = '<b style="color:#0f8a4d">' + mb + '</b>';
       toast(mb);
@@ -5148,10 +5232,13 @@ async function puxarPipefy(manual){
     const pendentes = new Set();
     const novos = cards.filter(c => !vistos.has(String(c.id)));
     const alvo = [];
-    const nomesNoLote = new Set();
+    const nomesNoLote = new Set(); let ligados = ligarCardsAEventos(cards);
+    if(!CONFIG.pipefyLigouTudo){ try{ ligados += await ligarTodosPipefy(false); }catch(e){ console.warn('ligar pipefy', e); } }
     novos.forEach(c => {
       const e = cardParaLote(c, pendentes);
-      if(jaNoPrograma(e) || foiExcluido(e)){ vistos.add(String(c.id)); return; }   /* já está no programa (ou foi excluído): não mexe */
+      const ja = jaNoPrograma(e);
+      if(ja && !ja.pipefyId && !eventos.some(x=>String(x.pipefyId||'')===String(c.id))){ ja.pipefyId = String(c.id); ligados++; }   /* liga o evento ao card: a fase passa a acompanhar */
+      if(ja || foiExcluido(e)){ vistos.add(String(c.id)); return; }   /* já está no programa (ou foi excluído): não mexe */
       if(!(e.mont || e.desm)) return;                                                  /* sem data ainda: tenta de novo na próxima busca */
       if((dia(fimDesmLote(e)) || dia(e.mont) || '9999') < somaDiaISO(HOJE, -3)){ vistos.add(String(c.id)); return; }
       const kl = nomeBase(e.nome) + '|' + (dia(e.mont) || dia(e.desm) || '');
@@ -5163,8 +5250,10 @@ async function puxarPipefy(manual){
     CONFIG.pipefyVistos = [...vistos]; CONFIG.pipefyQuando = new Date().toISOString();
     if(alvo.length){ lote = alvo; gravarLote(true); }
     else salvar();
+    let mudFase = [];
+    try{ mudFase = await sincronizarFasesPipefy(); }catch(e){ console.warn('fases pipefy', e); }
     const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' evento(s) novo(s) do BACKLOG acrescentado(s) na Central: ' + alvo.map(e=>e.nome).join(', ') : 'Pipefy conferido — nenhum card novo no BACKLOG.';
-    if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos em ' + usadas.join(', ') + ' · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos em ' + usadas.join(', ') + (mudFase.length ? ' · ' + mudFase.length + ' evento(s) mudaram de fase' : '') + ' · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(manual || alvo.length) toast(msg);
   }catch(e){
     const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? (pipefyViaSupa() ? 'não consegui chegar na função "pipefy" do Supabase (confira se ela foi publicada com esse nome)' : 'o navegador bloqueou a chamada direta ao Pipefy (CORS) — marque "via Supabase"') : e.message;
@@ -10808,7 +10897,78 @@ dropX.addEventListener('drop', e => { if(e.dataTransfer.files.length) lerLote([.
 /* =========================================================
    CADASTROS
    ========================================================= */
+/* ===== EVENTOS POR EQUIPE / POR PRODUTOR (cadastros) ===== */
+const _escH = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function evsDaquiPraFrente(){
+  return eventos.filter(e => !evEncerrado(e) && (e.mont || e.desm) && ((dia(fimDesm(e)) || dia(fimMont(e)) || dia(e.mont) || '') >= HOJE))
+    .sort((a,b)=>String(a.mont||a.desm).localeCompare(String(b.mont||b.desm)));
+}
+function datasCurtas(ev){
+  const p = [];
+  if(ev.mont) p.push('🔨 ' + (dia(fimMont(ev))!==dia(ev.mont) ? fmtD(ev.mont).slice(0,5)+'–'+fmtD(fimMont(ev)).slice(0,5) : fmtD(ev.mont).slice(0,5)));
+  if(ev.desm) p.push('📤 ' + (dia(fimDesm(ev))!==dia(ev.desm) ? fmtD(ev.desm).slice(0,5)+'–'+fmtD(fimDesm(ev)).slice(0,5) : fmtD(ev.desm).slice(0,5)));
+  return p.join(' · ');
+}
+function choqueEquipe(ev, eq, lista){
+  const dias = new Set(diasEquipe(ev));
+  const outro = lista.find(o => o.id !== ev.id && (o.equipe || plano(o).equipe) === eq && diasEquipe(o).some(d=>dias.has(d)));
+  return outro ? outro.nome : null;
+}
+function cadTrocarEquipe(id, v){ quickEquipe(id, v); renderEvPorEquipe(); }
+function cadTrocarProdutor(id, v){ setProdutor(id, v); renderEvPorProdutor(); }
+function renderEvPorEquipe(){
+  const box = document.getElementById('ev-por-equipe'); if(!box) return;
+  const lista = evsDaquiPraFrente();
+  const nomes = equipes.filter(e=>e.nome !== EQUIPE_TERC).map(e=>e.nome).concat([EQUIPE_TERC]);
+  const opcoes = (atual, sug) => (atual ? '' : '<option value="" selected>IA: '+_escH(sug===EQUIPE_TERC?'terceirizada':(sug||'a definir'))+'</option>') +
+    nomes.map(n=>'<option value="'+_escH(n)+'" '+(n===atual?'selected':'')+'>'+(n===EQUIPE_TERC?'🤝 Terceirizada':'🏠 '+_escH(n))+'</option>').join('') +
+    (atual ? '<option value="">↺ voltar à sugestão da IA</option>' : '');
+  box.innerHTML = nomes.map(eq => {
+    const meus = lista.filter(ev => (ev.equipe || plano(ev).equipe) === eq);
+    const outros = lista.filter(ev => (ev.equipe || plano(ev).equipe) !== eq);
+    return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px">'+
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><span class="dot" style="background:'+(eq===EQUIPE_TERC?'#8b95a7':corEquipe(eq))+'"></span>'+
+      '<b style="font-size:14px">'+(eq===EQUIPE_TERC?'🤝 Terceirizada':_escH(eq))+'</b><small style="color:var(--muted)">'+meus.length+' evento(s)</small><span style="flex:1"></span>'+
+      '<select style="max-width:320px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px" onchange="if(this.value){cadTrocarEquipe(this.value,\''+_escH(eq).replace(/'/g,"\\'")+'\')}">'+
+        '<option value="">➕ Colocar em…</option>'+outros.map(o=>'<option value="'+o.id+'">'+_escH(o.nome)+' · '+datasCurtas(o)+' (hoje: '+_escH(o.equipe || ('IA ' + (plano(o).equipe||'—')))+')</option>').join('')+'</select></div>'+
+      (meus.length ? '<table style="width:100%"><tbody>'+meus.map(ev=>{
+        const ch = choqueEquipe(ev, eq, lista);
+        return '<tr><td style="padding:6px 4px"><a href="#" onclick="verEvento(\''+ev.id+'\');return false" style="font-weight:700;color:inherit">'+_escH(ev.nome)+'</a>'+
+          (ev.equipe ? '' : ' <small style="color:#a86412">(sugestão da IA)</small>')+
+          (ch && eq !== EQUIPE_TERC ? '<div style="font-size:11.5px;color:#b0483c;font-weight:700">⚠ mesmos dias que '+_escH(ch)+'</div>' : '')+
+          '<div style="font-size:11.5px;color:var(--muted)">'+datasCurtas(ev)+(ev.cidade && ev.cidade!=='—' ? ' · '+_escH(ev.cidade) : '')+'</div></td>'+
+          '<td style="padding:6px 4px;width:230px"><select style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px" onchange="cadTrocarEquipe(\''+ev.id+'\',this.value)">'+opcoes(ev.equipe, plano(ev).equipe)+'</select></td></tr>';
+      }).join('')+'</tbody></table>' : '<div style="font-size:12.5px;color:var(--muted)">Sem evento daqui pra frente.</div>')+
+    '</div>';
+  }).join('');
+}
+function renderEvPorProdutor(){
+  const box = document.getElementById('ev-por-produtor'); if(!box) return;
+  const lista = evsDaquiPraFrente();
+  const nomes = produtores.map(p=>p.nome);
+  const opcoes = (ev) => (ev.produtor ? '' : '<option value="" selected>IA: '+_escH(plano(ev).produtor||'a definir')+'</option>') +
+    nomes.map(n=>'<option value="'+_escH(n)+'" '+(n===ev.produtor?'selected':'')+'>'+_escH(n)+'</option>').join('') +
+    '<option value="'+_escH(SEM_PRODUTOR)+'" '+(ev.produtor===SEM_PRODUTOR?'selected':'')+'>'+_escH(SEM_PRODUTOR)+'</option>'+
+    (ev.produtor ? '<option value="">↺ voltar à sugestão da IA</option>' : '');
+  box.innerHTML = nomes.map(pn => {
+    const meus = lista.filter(ev => produtorDo(ev) === pn);
+    const outros = lista.filter(ev => produtorDo(ev) !== pn);
+    return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px">'+
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:14px">🎬 '+_escH(pn)+'</b><small style="color:var(--muted)">'+meus.length+' evento(s)</small><span style="flex:1"></span>'+
+      '<select style="max-width:320px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px" onchange="if(this.value){cadTrocarProdutor(this.value,\''+_escH(pn).replace(/'/g,"\\'")+'\')}">'+
+        '<option value="">➕ Colocar em…</option>'+outros.map(o=>'<option value="'+o.id+'">'+_escH(o.nome)+' · '+datasCurtas(o)+' (hoje: '+_escH(produtorDo(o)||'—')+')</option>').join('')+'</select></div>'+
+      (meus.length ? '<table style="width:100%"><tbody>'+meus.map(ev=>
+        '<tr><td style="padding:6px 4px"><a href="#" onclick="verEvento(\''+ev.id+'\');return false" style="font-weight:700;color:inherit">'+_escH(ev.nome)+'</a>'+
+          (ev.produtor ? '' : ' <small style="color:#a86412">(sugestão da IA)</small>')+
+          '<div style="font-size:11.5px;color:var(--muted)">'+datasCurtas(ev)+(ev.cidade && ev.cidade!=='—' ? ' · '+_escH(ev.cidade) : '')+'</div></td>'+
+          '<td style="padding:6px 4px;width:230px"><select style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;font-size:12.5px" onchange="cadTrocarProdutor(\''+ev.id+'\',this.value)">'+opcoes(ev)+'</select></td></tr>').join('')+'</tbody></table>'
+        : '<div style="font-size:12.5px;color:var(--muted)">Sem evento daqui pra frente.</div>')+
+    '</div>';
+  }).join('');
+}
 function renderCadastros(){
+  try{ renderEvPorEquipe(); }catch(e){ console.warn('ev por equipe', e); }
+  try{ renderEvPorProdutor(); }catch(e){ console.warn('ev por produtor', e); }
   document.getElementById('tb-equipes').innerHTML = equipes.map((e,i)=>
     '<tr><td style="white-space:nowrap"><span class="dot" style="background:'+corEquipe(e.nome)+'"></span>'+
       '<input class="cad" style="font-weight:700;max-width:150px" value="'+String(e.nome).replace(/"/g,'&quot;')+'" onchange="renomearEquipe('+i+',this.value)">'+
