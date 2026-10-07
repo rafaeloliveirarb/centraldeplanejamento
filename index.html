@@ -799,7 +799,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
           <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy (só se NÃO for via Supabase)" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
           <input id="cfg-pf-pipe" placeholder="Nº do pipe (ou vários, separados por vírgula)" style="width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar()">
           <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button></div>
-        <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central busca no Pipefy os cards novos e alterados e atualiza o quadro, com o mesmo aviso de data mudada da importação. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
+        <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central confere a fase BACKLOG do Pipefy e acrescenta os cards que entraram lá. Não mexe nem apaga nada que já esteja no programa. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <b>📲 Link do motorista</b>
@@ -880,6 +880,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
       </div>
       <div class="fgrid">
         <label class="f"><i>Nº do pipe (ou vários, separados por vírgula)</i><input id="pf-pipe" placeholder="302123456" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar();renderCadastros()"></label>
+        <label class="f"><i>Fases que entram (separe por vírgula)</i><input id="pf-fases" placeholder="BACKLOG" onchange="CONFIG.pipefyFases=this.value.trim()||'BACKLOG';CONFIG.pipefyBase='';CONFIG.pipefyVistos=[];salvar();renderCadastros()"></label>
         <label class="f"><i>Endereço da função (cole o que aparece no Supabase)</i><input id="pf-func-in" placeholder="https://….supabase.co/functions/v1/pipefy" onchange="CONFIG.pipefyFuncUrl=this.value.trim();salvar();renderCadastros()"><small id="pf-func-url" style="font-size:11px;color:var(--muted);word-break:break-all"></small></label>
       </div>
       <div style="font-size:12px;margin-top:8px;color:#8a5a00">Se a função foi criada num projeto do Supabase diferente do da Central, cole o endereço dela acima e, no Supabase, abra a função <b>pipefy</b> → <b>Details</b> → desligue <b>Verify JWT</b> → Save.</div>
@@ -4976,6 +4977,10 @@ async function pipefyGQL(query, variables){
   if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
   return j.data;
 }
+/* fases do Pipefy que entram na Central (padrão: só BACKLOG) */
+const semEmoji = s => semAcentoSimples(String(s||'')).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+function fasesPipefyFiltro(){ const v = CONFIG.pipefyFases == null ? 'BACKLOG' : String(CONFIG.pipefyFases); return v.split(/[,;]+/).map(semEmoji).filter(Boolean); }
+function faseCasaFiltro(nome, filtro){ const n = semEmoji(nome); return !filtro.length || filtro.some(f => n === f || n.includes(f)); }
 /* card do Pipefy vira a mesma "linha" da planilha: os nomes dos campos passam pelos mesmos sinônimos */
 function cardParaLote(card, pendentes){
   const o = {'Título do card': card.title, 'Fase atual': card.current_phase && card.current_phase.name};
@@ -5014,29 +5019,52 @@ async function puxarPipefy(manual){
     if(st) st.textContent = 'buscando cards no Pipefy...';
     const pipes = String(CONFIG.pipefyPipe).split(/[,;\s]+/).filter(Boolean);
     const cards = [];
+    const filtroFases = fasesPipefyFiltro();
+    const usadas = [];
     for(const pipe of pipes){
-      let after = null, voltas = 0;
-      do{
-        const d = await pipefyGQL('query($p: ID!, $a: String){ allCards(pipeId: $p, first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } }', {p: pipe, a: after});
-        const ac = d && d.allCards; if(!ac) break;
-        (ac.edges||[]).forEach(e=>cards.push(e.node));
-        after = ac.pageInfo && ac.pageInfo.hasNextPage ? ac.pageInfo.endCursor : null;
-      } while(after && ++voltas < 20);
+      /* só as fases escolhidas (padrão: BACKLOG) — lê fase por fase, sem varrer o pipe inteiro */
+      const dp = await pipefyGQL('query($p: ID!){ pipe(id: $p){ phases{ id name } } }', {p: pipe});
+      const fases = ((dp && dp.pipe && dp.pipe.phases) || []).filter(f => faseCasaFiltro(f.name, filtroFases));
+      fases.forEach(f => usadas.push(f.name));
+      for(const fase of fases){
+        let after = null, voltas = 0;
+        do{
+          const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } } }', {f: fase.id, a: after});
+          const ac = d && d.phase && d.phase.cards; if(!ac) break;
+          (ac.edges||[]).forEach(e=>cards.push(e.node));
+          after = ac.pageInfo && ac.pageInfo.hasNextPage ? ac.pageInfo.endCursor : null;
+        } while(after && ++voltas < 200);
+      }
     }
-    const ultimo = CONFIG.pipefyUltimo || '';
+    if(!usadas.length) throw new Error('nenhuma fase do pipe bate com "' + filtroFases.join(', ') + '" — confira o nome em "Fases que entram"');
+    /* SÓ ACRESCENTA: o que já estava no BACKLOG quando ligou fica de fora, e evento que já
+       existe na Central nunca é mexido nem apagado pelo Pipefy. Entra só card novo na fase. */
+    const vistos = new Set((CONFIG.pipefyVistos || []).map(String));
+    if(!CONFIG.pipefyBase){
+      cards.forEach(c => vistos.add(String(c.id)));
+      CONFIG.pipefyVistos = [...vistos]; CONFIG.pipefyBase = new Date().toISOString(); CONFIG.pipefyQuando = CONFIG.pipefyBase;
+      salvar();
+      const mb = '🔄 Pipefy ligado: os ' + cards.length + ' card(s) que já estavam em ' + usadas.join(', ') + ' ficaram de fora. A partir de agora, todo card que entrar lá vem para a Central.';
+      if(st) st.innerHTML = '<b style="color:#0f8a4d">' + mb + '</b>';
+      toast(mb);
+      return;
+    }
     const pendentes = new Set();
-    /* só o que mudou desde a última vez (na primeira vez, o que ainda vai acontecer) */
-    const alvo = cards.filter(c=>!ultimo || String(c.updated_at||'') > ultimo).map(c=>cardParaLote(c, pendentes))
-      .filter(e=>e.mont || e.desm)
-      .filter(e=>eventoExistente(e) || (dia(fimDesmLote(e)) || dia(e.mont) || '9999') >= somaDiaISO(HOJE, -3))
-      .filter(e=>eventoExistente(e) || !foiExcluido(e));   /* excluído da Central não volta pelo pipe */
-    pendentes.forEach(n => { if(!catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
-    const maxUp = cards.reduce((m,c)=>String(c.updated_at||'') > m ? String(c.updated_at) : m, ultimo);
-    CONFIG.pipefyUltimo = maxUp; CONFIG.pipefyQuando = new Date().toISOString();
+    const novos = cards.filter(c => !vistos.has(String(c.id)));
+    const alvo = [];
+    novos.forEach(c => {
+      const e = cardParaLote(c, pendentes);
+      if(eventoExistente(e) || foiExcluido(e)){ vistos.add(String(c.id)); return; }   /* já está no programa (ou foi excluído): não mexe */
+      if(!(e.mont || e.desm)) return;                                                  /* sem data ainda: tenta de novo na próxima busca */
+      if((dia(fimDesmLote(e)) || dia(e.mont) || '9999') < somaDiaISO(HOJE, -3)){ vistos.add(String(c.id)); return; }
+      vistos.add(String(c.id)); alvo.push(e);
+    });
+    pendentes.forEach(n => { if(alvo.some(e=>(e.itens||[]).some(x=>x.nome===n)) && !catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
+    CONFIG.pipefyVistos = [...vistos]; CONFIG.pipefyQuando = new Date().toISOString();
     if(alvo.length){ lote = alvo; gravarLote(true); }
     else salvar();
-    const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' card(s) novos ou alterados trazidos para a Central.' : 'Pipefy conferido — nada mudou.';
-    if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const msg = alvo.length ? '🔄 Pipefy: ' + alvo.length + ' evento(s) novo(s) do BACKLOG acrescentado(s) na Central: ' + alvo.map(e=>e.nome).join(', ') : 'Pipefy conferido — nenhum card novo no BACKLOG.';
+    if(st) st.innerHTML = '<b style="color:#0f8a4d">' + msg + '</b> ' + cards.length + ' card(s) lidos em ' + usadas.join(', ') + ' · ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(manual || alvo.length) toast(msg);
   }catch(e){
     const m = /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? (pipefyViaSupa() ? 'não consegui chegar na função "pipefy" do Supabase (confira se ela foi publicada com esse nome)' : 'o navegador bloqueou a chamada direta ao Pipefy (CORS) — marque "via Supabase"') : e.message;
@@ -10773,6 +10801,7 @@ function renderCadastros(){
   { const t1 = document.getElementById('cfg-pf-token'); if(t1 && document.activeElement !== t1) t1.value = CONFIG.pipefyToken || '';
     const sp = document.getElementById('cfg-pf-supa'); if(sp) sp.checked = pipefyViaSupa(); if(t1) t1.style.display = pipefyViaSupa() ? 'none' : '';
     const p2 = document.getElementById('pf-pipe'); if(p2 && document.activeElement !== p2) p2.value = CONFIG.pipefyPipe || '';
+    const pfF = document.getElementById('pf-fases'); if(pfF && document.activeElement !== pfF) pfF.value = CONFIG.pipefyFases == null ? 'BACKLOG' : CONFIG.pipefyFases;
     const fi = document.getElementById('pf-func-in'); if(fi && document.activeElement !== fi) fi.value = CONFIG.pipefyFuncUrl || '';
     const fu = document.getElementById('pf-func-url'); if(fu) fu.innerHTML = 'usando: ' + URL_FUNC_PIPEFY() + (funcPipefyOutroProjeto() ? ' <b style="color:#b07a10">· outro projeto — desligue o "Verify JWT" da função</b>' : '');
     const ul = document.getElementById('pf-ultimo'); if(ul) ul.textContent = CONFIG.pipefyQuando ? 'Última busca: ' + new Date(CONFIG.pipefyQuando).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : 'Ainda não buscou nenhuma vez.'; }
@@ -11046,7 +11075,8 @@ async function testarPipefy(){
     if(pipe){
       const d = await pipefyGQL('query($p: ID!){ pipe(id: $p){ name cards_count phases{ name } } }', {p: pipe});
       const p = d && d.pipe;
-      txt += p ? '\n✅ Pipe "' + p.name + '" — ' + (p.cards_count||0) + ' card(s).\nFases: ' + (p.phases||[]).map(f=>f.name).join(' · ') + '\n\nTudo certo. Clique em "Puxar agora" — depois disso ele busca sozinho a cada 15 minutos.'
+      const fx = fasesPipefyFiltro(), entram = (p && p.phases || []).filter(f=>faseCasaFiltro(f.name, fx)).map(f=>f.name);
+      txt += p ? '\n✅ Pipe "' + p.name + '" — ' + (p.cards_count||0) + ' card(s).\n' + (entram.length ? '✅ Entram na Central só os cards de: ' + entram.join(' · ') : '⚠ Nenhuma fase bate com "' + fx.join(', ') + '"') + '\n\nTudo certo. Só ACRESCENTA: o que já está no programa não é mexido nem apagado. Na primeira busca ele marca o que já está no BACKLOG hoje e deixa de fora; daí pra frente, a cada 15 minutos, todo card que entrar no BACKLOG vira evento na Central.'
                : '\n⚠ Não achei o pipe ' + pipe + '. Confira o número (app.pipefy.com/pipes/NÚMERO).';
     } else txt += '\n⚠ Falta o número do pipe.';
     o.textContent = txt;
