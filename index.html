@@ -4977,7 +4977,53 @@ let pipefyRodando = false;
 const pipefyViaSupa = () => CONFIG.pipefyViaSupa !== false;
 const URL_FUNC_PIPEFY = () => (String(CONFIG.pipefyFuncUrl||'').trim() || (NUVEM.url + '/functions/v1/pipefy'));
 const funcPipefyOutroProjeto = () => { try{ return new URL(URL_FUNC_PIPEFY()).host !== new URL(NUVEM.url).host; }catch(e){ return false; } };
+/* campos do card + o registro ligado (database "Evento / Obra": endereço, cidade...) */
+let PF_SEM_CONEXAO = false;
+const CAMPOS_PF = () => PF_SEM_CONEXAO ? 'fields{ name value }' : 'fields{ name value connectedRepoItems{ ... on TableRecord { id title record_fields{ name value } } } }';
 async function pipefyGQL(query, variables, parcial){
+  try{ return await pipefyGQL0(query, variables, parcial); }
+  catch(e){
+    /* se a API não aceitar o registro ligado, tira e tenta de novo (nunca para a busca por isso) */
+    if(!PF_SEM_CONEXAO && /connectedRepoItems|TableRecord|record_fields/.test(query) && /connectedRepoItems|TableRecord|record_fields|Field|field/i.test(e.message)){
+      PF_SEM_CONEXAO = true;
+      return await pipefyGQL0(query.split('fields{ name value connectedRepoItems{ ... on TableRecord { id title record_fields{ name value } } } }').join('fields{ name value }'), variables, parcial);
+    }
+    throw e;
+  }
+}
+/* endereço que vem do registro "Evento / Obra" ligado ao card */
+function enderecoDoCard(card){
+  const regs = [];
+  (card && card.fields || []).forEach(f => (f && f.connectedRepoItems || []).forEach(r => { if(r && r.record_fields) regs.push(r); }));
+  for(const r of regs){
+    const o = {}; (r.record_fields||[]).forEach(f=>{ if(f && f.name && f.value != null && String(f.value).trim()) o[semAcento(f.name)] = String(f.value).trim(); });
+    const pega = (...ps) => { const k = Object.keys(o).find(k2 => ps.every(p => k2.includes(p))); return k ? o[k].replace(/^\[|\]$/g,'').replace(/^"|"$/g,'') : ''; };
+    const qualif = pega('endereco','qualificado');
+    const lograd = pega('logradouro'), numero = pega('numero'), bairro = pega('bairro'), compl = pega('complemento');
+    let cidade = pega('cidade') || pega('municipio');
+    const uf = pega('estado') || pega('uf');
+    const cep = pega('cep');
+    let local = qualif || [lograd + (numero ? ', ' + numero : ''), compl, bairro].filter(Boolean).join(' - ');
+    if(!cidade) for(const fonte of [lograd, qualif]){
+      if(cidade || !fonte) continue;
+      const partes = fonte.split(/\s+-\s*|\s*-\s+/).map(s=>s.trim()).filter(Boolean);
+      const ult = partes.length > 1 ? partes[partes.length-1].replace(/[-\s]*\b(RJ|SP|MG|ES)\b\s*$/i,'').trim() : '';
+      if(ult && !/\d/.test(ult)) cidade = ult;
+      else if(partes.length > 2) cidade = partes[partes.length-2];
+    }
+    /* sem traço nenhum: procura uma cidade conhecida dentro do texto */
+    if(!cidade){
+      const t = semAcentoSimples(qualif || lograd);
+      const conhecidas = ['Duque de Caxias','Rio de Janeiro','Niterói','São Gonçalo','Nova Iguaçu','Belford Roxo','São João de Meriti','Nilópolis','Mesquita','Queimados','Japeri','Magé','Itaboraí','Maricá','Petrópolis','Teresópolis','Nova Friburgo','Rio Bonito','Cabo Frio','Búzios','Armação dos Búzios','Macaé','Angra dos Reis','Paraty','Volta Redonda','Barra Mansa','Resende','Itaguaí','Seropédica','Saquarema','Araruama','Guapimirim','Tanguá','Cachoeiras de Macacu','Silva Jardim','Casimiro de Abreu','Rio das Ostras','Campos dos Goytacazes','Três Rios','Vassouras','Miguel Pereira','Paty do Alferes','Paracambi','Mangaratiba','Itaipava'];
+      const ach = conhecidas.filter(c => t.includes(semAcentoSimples(c))).sort((a,b)=>b.length-a.length)[0];
+      if(ach) cidade = ach;
+    }
+    if(local && cep && !local.includes(cep)) local += ' - CEP ' + cep;
+    if(local || cidade) return {local, cidade: cidade ? cidade.replace(/\s*-\s*$/,'').trim() : '', uf, registro: r.title || ''};
+  }
+  return null;
+}
+async function pipefyGQL0(query, variables, parcial){
   const supa = pipefyViaSupa();
   const r = supa
     ? await fetch(URL_FUNC_PIPEFY(), {method:'POST', headers: funcPipefyOutroProjeto() ? {'Content-Type':'application/json'} : {'Content-Type':'application/json', 'apikey': NUVEM.key, 'Authorization':'Bearer ' + NUVEM.key}, body: JSON.stringify({query, variables})})
@@ -5065,7 +5111,7 @@ async function consertarPeloCardPipefy(){
   for(let i=0; i<alvo.length; i+=25){
     const lt = alvo.slice(i, i+25);
     const ids = lt.map(e => String(e.pipefyId || (pareceIdCard(e.os) ? String(e.os).trim() : '') || ((String(e.nome||'').match(/OS (\d{9,})/)||[])[1] || '')));
-    const q = 'query{ ' + lt.map((e,k)=> ids[k] ? 'c' + k + ': card(id: ' + JSON.stringify(ids[k]) + '){ id title current_phase{ name } fields{ name value } }' : '').filter(Boolean).join(' ') + ' }';
+    const q = 'query{ ' + lt.map((e,k)=> ids[k] ? 'c' + k + ': card(id: ' + JSON.stringify(ids[k]) + '){ id title current_phase{ name } ' + CAMPOS_PF() + ' }' : '').filter(Boolean).join(' ') + ' }';
     if(q === 'query{  }') continue;
     let d = null;
     try{ d = await pipefyGQL(q, {}, true); }catch(err){ console.warn('consertar pelo card', err); continue; }
@@ -5124,7 +5170,7 @@ async function ligarTodosPipefy(manual){
     for(const fase of ((dp && dp.pipe && dp.pipe.phases) || [])){
       let after = null, voltas = 0;
       do{
-        const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } } }', {f: fase.id, a: after});
+        const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } ' + CAMPOS_PF() + ' } } } } }', {f: fase.id, a: after});
         const ac = d && d.phase && d.phase.cards; if(!ac) break;
         const cs = (ac.edges||[]).map(e=>e.node); lidos += cs.length;
         n += ligarCardsAEventos(cs);
@@ -5143,15 +5189,24 @@ async function sincronizarFasesPipefy(){
   const alvo = eventos.filter(e => e.pipefyId && e.esp !== 'cancelado' && (!dia(fimDesm(e)) || dia(fimDesm(e)) >= somaDiaISO(HOJE, -30)));
   if(!alvo.length) return [];
   fasesSyncRodando = true;
-  const mudou = [];
+  const mudou = []; let enderecosPf = 0;
   try{
     for(let i=0; i<alvo.length; i+=30){
       const lote2 = alvo.slice(i, i+30);
-      const q = 'query{ ' + lote2.map((e,k)=>'c' + k + ': card(id: ' + JSON.stringify(String(e.pipefyId)) + '){ id current_phase{ name } }').join(' ') + ' }';
+      const q = 'query{ ' + lote2.map((e,k)=>'c' + k + ': card(id: ' + JSON.stringify(String(e.pipefyId)) + '){ id current_phase{ name } ' + CAMPOS_PF() + ' }').join(' ') + ' }';
       let d = null;
       try{ d = await pipefyGQL(q, {}, true); }catch(err){ if(!/not found|não encontrad|Permission|permiss/i.test(err.message)) throw err; }
       lote2.forEach((ev,k)=>{
         const c = d && d['c' + k]; if(!c || !c.current_phase) return;
+        try{
+          const en = enderecoDoCard(c);
+          const vazio = v => !v || String(v).trim() === '' || String(v).trim() === '—';
+          if(en && ((en.local && vazio(ev.local)) || (en.cidade && vazio(ev.cidade)))){
+            if(en.local && vazio(ev.local)){ ev.local = en.local; ev.km = 0; }
+            if(en.cidade && vazio(ev.cidade)) ev.cidade = en.cidade;
+            enderecosPf++;
+          }
+        }catch(e){}
         const nova = normalizaFase(c.current_phase.name); if(!nova) return;
         const antes = ev.fase || null;
         if(antes === nova) return;
@@ -5164,6 +5219,11 @@ async function sincronizarFasesPipefy(){
       });
     }
   } finally { fasesSyncRodando = false; }
+  if(enderecosPf){
+    salvar(); renderQuadro();
+    toast('📍 Pipefy: endereço de ' + enderecosPf + ' evento(s) preenchido pelo "Evento / Obra".');
+    if(CONFIG.galpao) setTimeout(()=>{ try{ calcularKmEmLote(false); }catch(e){} }, 1500);
+  }
   if(mudou.length){
     salvar(); renderQuadro(); try{ renderPorFase(); }catch(e){}
     toast('🗂 Pipefy: ' + mudou.length + ' evento(s) mudaram de fase — ' + mudou.slice(0,3).map(m=>m.ev.nome + ': ' + (m.antes||'sem fase') + ' → ' + m.nova).join(' | ') + (mudou.length>3 ? ' …' : ''));
@@ -5223,11 +5283,12 @@ function cardParaLote(card, pendentes){
     else { pendentes.add(mm.nome); itens.push({nome:mm.nome, qtd:mm.qtd, peso:0, vol:0, un:'un', pendente:true}); }
   });
   const prod = limpa(acha(o,'produtor'));
+  const endReg = enderecoDoCard(card);
   return {marcado:true, arquivo:'Pipefy', pipefyId: card.id,
     nome: o.__nomePf,
     os: (function(){ const o1 = String(acha(o,'os')||'').trim(); const m1 = o1.match(/\d{5,}/); return m1 && m1[0] !== String(card.id) && m1[0].length <= 8 ? o1 : ''; })(),   /* OS só do campo OS; número do card nunca */
     produtor: produtores.find(p => semAcento(p.nome) === semAcento(prod)) ? String(prod).trim() : null,
-    cidade: String(limpa(acha(o,'cidade')) || '—').trim(), local: String(limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
+    cidade: String(limpa(acha(o,'cidade')) || (endReg && endReg.cidade) || '—').trim(), local: String((endReg && endReg.local) || limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
     mont: comHora(mont,'08:00'), montFim: (montFim||'').slice(0,10) || null,
     evt: (evt||mont||'').slice(0,10), evtFim: (evtFim||'').slice(0,10) || null,
     desm: comHora(desm,'08:00'), desmFim: (desmFim||'').slice(0,10) || null,
@@ -5252,7 +5313,7 @@ async function puxarPipefy(manual){
       for(const fase of fases){
         let after = null, voltas = 0;
         do{
-          const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } fields{ name value } } } } } }', {f: fase.id, a: after});
+          const d = await pipefyGQL('query($f: ID!, $a: String){ phase(id: $f){ cards(first: 50, after: $a){ pageInfo{ hasNextPage endCursor } edges{ node{ id title updated_at current_phase{ name } ' + CAMPOS_PF() + ' } } } } }', {f: fase.id, a: after});
           const ac = d && d.phase && d.phase.cards; if(!ac) break;
           (ac.edges||[]).forEach(e=>cards.push(e.node));
           after = ac.pageInfo && ac.pageInfo.hasNextPage ? ac.pageInfo.endCursor : null;
