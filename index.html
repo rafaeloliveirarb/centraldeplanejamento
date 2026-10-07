@@ -798,7 +798,8 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
           <label style="display:flex;gap:5px;align-items:center;font-size:12.5px"><input type="checkbox" id="cfg-pf-supa" onchange="CONFIG.pipefyViaSupa=this.checked;salvar();renderCadastros()"> via Supabase (token guardado lá)</label>
           <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy (só se NÃO for via Supabase)" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
           <input id="cfg-pf-pipe" placeholder="Nº do pipe (ou vários, separados por vírgula)" style="width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar()">
-          <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button></div>
+          <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
+          <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button></div>
         <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central confere a fase BACKLOG do Pipefy e acrescenta os cards que entraram lá. Não mexe nem apaga nada que já esteja no programa. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -891,6 +892,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
         <button class="mini" onclick="copiarFuncPipefy()">📋 Copiar código da função</button>
         <button class="mini" onclick="testarPipefy()">Testar conexão</button>
         <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
+        <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button>
         <button class="mini" onclick="verPayload()">Ver consulta GraphQL</button>
       </div>
       <pre id="pf-out" class="hide" style="background:#f6f8fc;border:1px solid var(--line);border-radius:10px;padding:16px;font-size:12px;overflow:auto;margin-top:16px;line-height:1.55"></pre>
@@ -4977,6 +4979,43 @@ async function pipefyGQL(query, variables){
   if(j.errors && j.errors.length) throw new Error(j.errors[0].message);
   return j.data;
 }
+/* o card já existe na Central? pelo card, pela OS, ou pelo mesmo nome com a mesma data de montagem */
+function jaNoPrograma(e){
+  if(e.pipefyId && eventos.some(x=>String(x.pipefyId||'')===String(e.pipefyId) || x.id === 'pf' + e.pipefyId)) return true;
+  if(eventoExistente(e)) return true;
+  const nb = nomeBase(e.nome), dm = dia(e.mont), dd = dia(e.desm);
+  return !!(nb && eventos.some(x => nomeBase(x.nome) === nb && ((dm && dia(x.mont) === dm) || (dd && dia(x.desm) === dd))));
+}
+/* duplicados: mesma OS, ou mesmo nome com a mesma montagem. Fica o mais antigo; só sai cópia criada hoje. */
+function gruposDuplicados(){
+  const nasc = x => { const m = String(x.id||'').match(/^e(\d{13})/); return m ? +m[1] : (/^pf/.test(x.id) ? Date.now() : 0); };
+  const pais = {}; const raiz = i => { while(pais[i] !== i) i = pais[i] = pais[pais[i]]; return i; };
+  eventos.forEach((x,i)=>pais[i]=i);
+  const junta = (a,b) => { a = raiz(a); b = raiz(b); if(a!==b) pais[b] = a; };
+  const porOS = {}, porNome = {};
+  eventos.forEach((x,i)=>{
+    const od = osDigitos(x); if(od){ if(porOS[od] != null) junta(porOS[od], i); else porOS[od] = i; }
+    const k = nomeBase(x.nome) + '|' + (dia(x.mont) || ''); if(nomeBase(x.nome) && dia(x.mont)){ if(porNome[k] != null) junta(porNome[k], i); else porNome[k] = i; }
+  });
+  const g = {}; eventos.forEach((x,i)=>{ const r = raiz(i); (g[r] = g[r] || []).push(x); });
+  const iniHoje = new Date(HOJE + 'T00:00').getTime();
+  return Object.values(g).filter(l=>l.length > 1).map(l=>{
+    l.sort((a,b)=>nasc(a)-nasc(b));
+    const fica = l[0];
+    const saem = l.slice(1).filter(x=>nasc(x) >= iniHoje && !x.aprovado);
+    return {fica, saem};
+  }).filter(x=>x.saem.length);
+}
+function limparDuplicados(){
+  const gs = gruposDuplicados();
+  if(!gs.length){ toast('Nenhum evento duplicado encontrado.'); return; }
+  const n = gs.reduce((s,g)=>s+g.saem.length, 0);
+  if(!confirm('Achei ' + n + ' cópia(s) repetida(s) criadas hoje:\n\n' + gs.slice(0,15).map(g=>'• ' + g.fica.nome + ' (' + (g.saem.length+1) + 'x)').join('\n') + (gs.length>15?'\n…':'') + '\n\nFica o evento que já estava no programa; saem só as cópias de hoje. Continuar?')) return;
+  const sair = new Set(); gs.forEach(g=>g.saem.forEach(x=>{ sair.add(x.id); if(x.pipefyId && !g.fica.pipefyId) g.fica.pipefyId = x.pipefyId; }));
+  eventos = eventos.filter(x=>!sair.has(x.id));
+  salvar(); renderQuadro(); renderCadastros();
+  toast('🧹 ' + n + ' cópia(s) repetida(s) removida(s).');
+}
 /* fases do Pipefy que entram na Central (padrão: só BACKLOG) */
 const semEmoji = s => semAcentoSimples(String(s||'')).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
 function fasesPipefyFiltro(){ const v = CONFIG.pipefyFases == null ? 'BACKLOG' : String(CONFIG.pipefyFases); return v.split(/[,;]+/).map(semEmoji).filter(Boolean); }
@@ -5002,7 +5041,7 @@ function cardParaLote(card, pendentes){
   const prod = limpa(acha(o,'produtor'));
   return {marcado:true, arquivo:'Pipefy', pipefyId: card.id,
     nome: String(acha(o,'nome') || card.title || 'Evento sem nome').trim(),
-    os: (function(){ const o1 = String(acha(o,'os')||'').trim(); if(/\d{5,}/.test(o1)) return o1; const m = String(card.title||'').match(/\d{5,}/); return m ? m[0] : (o1 || String(card.id)); })(),
+    os: (function(){ const o1 = String(acha(o,'os')||'').trim(); if(/\d{5,}/.test(o1)) return o1; const m = String(card.title||'').match(/\d{5,}/); return m ? m[0] : o1; })(),
     produtor: produtores.find(p => semAcento(p.nome) === semAcento(prod)) ? String(prod).trim() : null,
     cidade: String(limpa(acha(o,'cidade')) || '—').trim(), local: String(limpa(acha(o,'local')) || '—').trim(), km: achaKm(o),
     mont: comHora(mont,'08:00'), montFim: (montFim||'').slice(0,10) || null,
@@ -5052,12 +5091,16 @@ async function puxarPipefy(manual){
     const pendentes = new Set();
     const novos = cards.filter(c => !vistos.has(String(c.id)));
     const alvo = [];
+    const nomesNoLote = new Set();
     novos.forEach(c => {
       const e = cardParaLote(c, pendentes);
-      if(eventoExistente(e) || foiExcluido(e)){ vistos.add(String(c.id)); return; }   /* já está no programa (ou foi excluído): não mexe */
+      if(jaNoPrograma(e) || foiExcluido(e)){ vistos.add(String(c.id)); return; }   /* já está no programa (ou foi excluído): não mexe */
       if(!(e.mont || e.desm)) return;                                                  /* sem data ainda: tenta de novo na próxima busca */
       if((dia(fimDesmLote(e)) || dia(e.mont) || '9999') < somaDiaISO(HOJE, -3)){ vistos.add(String(c.id)); return; }
-      vistos.add(String(c.id)); alvo.push(e);
+      const kl = nomeBase(e.nome) + '|' + (dia(e.mont) || dia(e.desm) || '');
+      vistos.add(String(c.id));
+      if(nomesNoLote.has(kl)) return;          /* dois cards do mesmo evento no BACKLOG: entra um só */
+      nomesNoLote.add(kl); alvo.push(e);
     });
     pendentes.forEach(n => { if(alvo.some(e=>(e.itens||[]).some(x=>x.nome===n)) && !catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
     CONFIG.pipefyVistos = [...vistos]; CONFIG.pipefyQuando = new Date().toISOString();
@@ -10592,8 +10635,10 @@ function gravarLote(auto){
       return;
     }
     tirarExcluido(e);   /* marcou de propósito: sai da lista de excluídos e volta a valer */
+
+    if(e.pipefyId && eventos.some(x=>String(x.pipefyId||'')===String(e.pipefyId))) return;   /* mesmo card do Pipefy nunca entra duas vezes */
     eventos.push({
-      id:'e'+Date.now()+'_'+(n++), nome:e.nome, os: osDigitos(e) || e.os, produtor:e.produtor || null, cidade:e.cidade,
+      id: e.pipefyId ? 'pf' + e.pipefyId : 'e'+Date.now()+'_'+(n++), pipefyId: e.pipefyId || null, nome:e.nome, os: osDigitos(e) || e.os, produtor:e.produtor || null, cidade:e.cidade,
       local:e.local, km:e.km,
       mont:e.mont, montFim:e.montFim || null,
       evt:e.evt || dia(e.mont), evtFim:e.evtFim || null,
