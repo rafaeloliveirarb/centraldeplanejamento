@@ -4999,11 +4999,27 @@ function repararNomesDescricao(cardsPorId){
   let n = 0;
   eventos.forEach(ev => {
     if(!nomePareceDescricao(ev.nome)) return;
-    const fim = ' → ' + ev.nome;
-    const h = (ev.hist || []).find(x => (x.o || []).some(t => typeof t === 'string' && t.startsWith('Nome: ') && t.endsWith(fim)));
+    /* procura no histórico a última troca "Nome: <nome bom> → <descrição>" (pode ter trocado várias vezes) */
     let antigo = null;
-    if(h){ const t = h.o.find(t => t.startsWith('Nome: ') && t.endsWith(fim)); antigo = t.slice(6, t.length - fim.length).trim(); }
-    if((!antigo || nomePareceDescricao(antigo)) && cardsPorId && ev.pipefyId && cardsPorId[ev.pipefyId]) antigo = nomeDoCard(cardsPorId[ev.pipefyId], {});
+    for(const x of (ev.hist || [])){
+      for(const t of (x.o || [])){
+        if(typeof t !== 'string' || !t.startsWith('Nome: ')) continue;
+        const corpo = t.slice(6), i = corpo.indexOf(' → ');
+        if(i < 0) continue;
+        const a = corpo.slice(0, i).trim(), b = corpo.slice(i + 3).trim();
+        if(a && !nomePareceDescricao(a) && nomePareceDescricao(b)){ antigo = a; break; }
+      }
+      if(antigo) break;
+    }
+    /* nome que este aparelho viu antes da troca (é o que faz aparecer o "MUDOU") */
+    if(!antigo || nomePareceDescricao(antigo)){ try{ vistoInit(); const v = VISTO && VISTO[ev.id]; if(v && v.nome && !nomePareceDescricao(v.nome)) antigo = v.nome; }catch(e){} }
+    /* nome que a Central guardou ao gravar a última versão boa (SYNC_BASE/FOTO) */
+    if(!antigo || nomePareceDescricao(antigo)){ try{ const f = FOTO && FOTO[ev.id]; if(f && f.nome && !nomePareceDescricao(f.nome)) antigo = f.nome; }catch(e){} }
+    if((!antigo || nomePareceDescricao(antigo)) && cardsPorId){
+      let card = ev.pipefyId && cardsPorId[ev.pipefyId];
+      if(!card) card = Object.values(cardsPorId).find(c => String(c.title||'').trim() === ev.nome || (c.fields||[]).some(f => f && String(f.value||'').trim() === ev.nome));
+      if(card){ antigo = nomeDoCard(card, Object.fromEntries((card.fields||[]).filter(f=>f&&f.name).map(f=>[f.name, f.value]))); if(!ev.pipefyId) ev.pipefyId = card.id; }
+    }
     if(antigo && antigo !== ev.nome && !nomePareceDescricao(antigo)){
       ev.descricaoPipefy = ev.descricaoPipefy || ev.nome;   /* a descrição não se perde: fica guardada no evento */
       ev.nome = antigo; n++;
@@ -13370,7 +13386,9 @@ async function salvar(){
       marcarSync(true);
       nuvemEscutar(); escutando = true;
       carregarRecados();
-      setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} try{ const r = repararNomesDescricao(null); if(r){ m += r; toast('✏️ ' + r + ' evento(s) estavam com a descrição do Pipefy no lugar do nome — o nome voltou.'); } }catch(e){} if(arredondarHorarios() + m){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
+      setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} try{ const r = repararNomesDescricao(null); if(r){ m += r; toast('✏️ ' + r + ' evento(s) estavam com a descrição do Pipefy no lugar do nome — o nome voltou.'); }
+        const ruins = eventos.filter(e=>nomePareceDescricao(e.nome) && !evEncerrado(e));
+        if(ruins.length && !window.__modoTV) setTimeout(()=>toast('⚠ ' + ruins.length + ' evento(s) ainda com a descrição no lugar do nome (não achei o nome antigo): ' + ruins.slice(0,3).map(e=>(e.os ? 'OS ' + e.os : '') + (e.local && e.local!=='—' ? ' · ' + e.local : '') + ' · montagem ' + fmtD(e.mont||'').slice(0,5)).join(' | ') + '. Clique para corrigir.', 'Corrigir', ()=>verEvento(ruins[0].id)), 4000); }catch(e){} if(arredondarHorarios() + m){ salvar(); renderQuadro(); } }catch(e){} }, 6000);
       setTimeout(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 5000);
       setTimeout(()=>{ try{ if(CONFIG.galpao) calcularKmEmLote(false); }catch(e){} }, 30000);   /* refaz o km de quem passou a ir por Magé */
       setInterval(()=>{ try{ carregarFolgasEsc(); }catch(e){} }, 600000);
