@@ -3190,19 +3190,39 @@ function operacoesDeHoje(){
     desm: eventos.filter(e=>operacaoHoje(e)==='desmontagem')
   };
 }
+/* notas fiscais a emitir: remessa (montagem) e retorno (desmontagem), até 2 dias antes */
+function notasPendentes(){
+  const L = [];
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    [['nfM', dia(ev.mont), 'REMESSA', 'montagem'], ['nfD', dia(ev.desm), 'RETORNO', 'desmontagem']].forEach(([k, d, rot, fase])=>{
+      if(!d || ev[k] || d < HOJE) return;
+      const falta = difDias(HOJE, d);
+      if(falta > 2) return;
+      L.push({ev, k, d, falta, rot, fase});
+    });
+  });
+  return L.sort((a,b)=>a.falta-b.falta || a.d.localeCompare(b.d));
+}
+function marcarNotaHoje(id, k){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  ev[k] = true; salvar(); renderQuadro(); renderAlertaHoje(); abrirHoje();
+  toast('🧾 Nota de ' + (k==='nfM'?'remessa':'retorno') + ' de ' + ev.nome + ' marcada como emitida.', 'Desfazer', ()=>{ ev[k] = false; salvar(); renderQuadro(); renderAlertaHoje(); abrirHoje(); });
+}
 function renderAlertaHoje(){
   if(!lembreteSemana()) lembreteAmanha();
   const sino = document.getElementById('sino-hoje');
   if(!sino) return;
   const {mont, desm} = operacoesDeHoje();
-  const total = mont.length + desm.length;
+  const nfs = notasPendentes().length;
+  const total = mont.length + desm.length + nfs;
   sino.classList.toggle('hide', total === 0);
   sino.classList.toggle('balanca', total > 0);
   document.getElementById('sino-n').textContent = total;
   try{
     if(total && localStorage.getItem('cpl:avisoDia') !== HOJE){
       localStorage.setItem('cpl:avisoDia', HOJE);
-      toast('🔔 Hoje tem operação na rua: '+mont.length+' montagem(ns) e '+desm.length+' desmontagem(ns). Toque no sino para ver.');
+      toast('🔔 Hoje: '+mont.length+' montagem(ns) e '+desm.length+' desmontagem(ns)'+(nfs ? ' · 🧾 '+nfs+' nota(s) fiscal(is) a emitir' : '')+'. Toque no sino para ver.');
     }
   }catch(e){}
 }
@@ -3471,7 +3491,7 @@ function whatsDoDia(){
 }
 function abrirHoje(){
   const {mont, desm} = operacoesDeHoje();
-  document.getElementById('hoje-sub').textContent = fmtD(HOJE) + ' · ' + mont.length + ' montagem(ns) e ' + desm.length + ' desmontagem(ns)';
+  document.getElementById('hoje-sub').textContent = fmtD(HOJE) + ' · ' + mont.length + ' montagem(ns) e ' + desm.length + ' desmontagem(ns)' + (notasPendentes().length ? ' · ' + notasPendentes().length + ' nota(s) fiscal(is) a emitir' : '');
   const linha = (e, tipo) => {
     const eq = e.equipe || plano(e).equipe;
     const hora = (tipo==='m' ? String(e.mont||'') : String(e.desm||'')).slice(11,16);
@@ -3491,11 +3511,24 @@ function abrirHoje(){
   const blocoD = desm.length
     ? '<div class="hoje-bloco d"><div class="hoje-sec">📤 Desmontagens<span class="cont">'+desm.length+'</span></div>'+desm.map(e=>linha(e,'d')).join('')+'</div>'
     : '';
+  const nfs = notasPendentes();
+  const blocoNF = nfs.length
+    ? '<div class="hoje-bloco" style="background:#fff7e8;border-color:#f3cf8a;margin-bottom:12px"><div class="hoje-sec" style="color:#a86412">🧾 Notas fiscais a emitir<span class="cont">'+nfs.length+'</span></div>'+
+      nfs.map(x=>'<div class="hoje-linha" style="cursor:default">'+
+        '<div class="ic" style="background:'+(x.falta<=1?'#fde3df':'#fff1d6')+'">🧾</div>'+
+        '<div class="tx" style="cursor:pointer" onclick="fechar(\'ov-hoje\');verEvento(\''+x.ev.id+'\')"><b>NOTA DE '+x.rot+' — '+x.ev.nome+'</b>'+
+          '<small><span style="color:'+(x.falta<=1?'#c0392b':'#a86412')+';font-weight:800">'+(x.falta===0?x.fase.toUpperCase()+' É HOJE':x.falta===1?x.fase+' é AMANHÃ':'faltam '+x.falta+' dias para a '+x.fase)+'</span> · '+fmtD(x.d).slice(0,5)+
+          (x.ev.cidade && x.ev.cidade!=='—' ? ' · '+x.ev.cidade : '')+'</small></div>'+
+        '<button class="mini" style="white-space:nowrap;font-weight:700" onclick="event.stopPropagation();marcarNotaHoje(\''+x.ev.id+'\',\''+x.k+'\')">✓ Emitida</button>'+
+      '</div>').join('')+'</div>'
+    : '';
   document.getElementById('hoje-corpo').innerHTML =
+    blocoNF +
     blocoM +
     (mont.length && desm.length ? '<div class="hoje-divisor">DESMONTAGENS</div>' : '') +
     blocoD +
     (!mont.length && !desm.length ? '<div style="color:var(--muted)">Nenhuma operação hoje.</div>' : '');
+
   document.getElementById('ov-hoje').classList.add('on');
 }
 
