@@ -1188,7 +1188,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 
 <div class="overlay" id="ov-risco" onclick="if(event.target===this)fechar('ov-risco')">
   <div class="modal" style="max-width:860px">
-    <header><div><h2>⚠️ Eventos em risco</h2><div class="os">o que tem seção no vermelho, do mais perto para o mais longe</div></div><button class="x" onclick="fechar('ov-risco')">✕</button></header>
+    <header><div><h2>⚠️ Eventos em risco</h2><div class="os">o que tem seção no vermelho, do mais perto para o mais longe — só montagens de hoje pra frente</div></div><button class="x" onclick="fechar('ov-risco')">✕</button></header>
     <div class="mbody">
       <label style="font-size:13px;display:flex;gap:8px;align-items:center;margin-bottom:12px"><input type="checkbox" id="rk-amar" onchange="renderRisco()"> mostrar também os amarelos (atenção)</label>
       <div id="rk-res"></div>
@@ -9238,8 +9238,7 @@ if(typeof document !== 'undefined' && document.addEventListener) document.addEve
 function eventosEmRisco(comAmar){
   return eventos.filter(ev=>{
     if(ev.esp==='cancelado' || ev.esp==='finalizado') return false;
-    const fim = dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.mont) || '9999';
-    if(fim < HOJE) return false;
+    if((dia(ev.mont) || '9999') < HOJE) return false;   /* só montagens de hoje pra frente */
     const st = secoesStatus(ev);
     return SECOES.some(([k])=>st[k].cor==='verm' || (comAmar && st[k].cor==='amar'));
   }).sort((a,b)=>(dia(a.mont)||'9999').localeCompare(dia(b.mont)||'9999'));
