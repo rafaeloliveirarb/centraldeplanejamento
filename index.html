@@ -8032,7 +8032,7 @@ function pendentesDoSetor(setor){
   const out = [];
   eventos.forEach(ev=>{
     if(ev.esp==='cancelado' || ev.esp==='finalizado' || !ev.mont) return;
-    if((dia(fimDesm(ev)) || dia(ev.desm) || dia(ev.mont)) < HOJE) return;
+    if(dia(ev.mont) < HOJE) return;   /* por setor: só cards com montagem de hoje pra frente */
     const st = secoesStatus(ev);
     const probs = ks.filter(k=>st[k].cor !== 'verde').map(k=>({k, s:st[k]}));
     if(probs.length) out.push({ev, probs, verm: probs.some(p=>p.s.cor==='verm')});
@@ -8046,12 +8046,12 @@ function renderSetor(){
     return '<button class="mini" style="font-weight:700;'+(s===SETOR_ATUAL?'background:#1c4fa0;border-color:#1c4fa0;color:#fff':'')+'" onclick="escolherSetor(\''+esc(s).replace(/'/g,"\\'")+'\')">'+esc(s)+(p.length?' <span class="qtd" style="display:inline-block;min-width:18px;padding:0 6px;border-radius:9px;background:'+(v?'#c0392b':'#e0a21b')+';color:#fff;font-size:11px">'+p.length+'</span>':' ✓')+'</button>'; }).join('');
   const nomesSec = SECOES.filter(([k])=>donoSec(k)===SETOR_ATUAL).map(([,n])=>n);
   const L = pendentesDoSetor(SETOR_ATUAL);
-  box.innerHTML = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px"><b style="color:var(--ink)">'+esc(SETOR_ATUAL)+'</b> cuida de: '+nomesSec.join(', ')+'</div>'+
+  box.innerHTML = '<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px"><b style="color:var(--ink)">'+esc(SETOR_ATUAL)+'</b> cuida de: '+nomesSec.join(', ')+' · <span>montagens de '+fmtD(HOJE).slice(0,5)+' pra frente</span></div>'+
     (L.length ? L.map(x=>{ const dd = difDias(HOJE, dia(x.ev.mont));
       return '<div class="row" style="align-items:flex-start;gap:12px"><span style="min-width:90px"><b style="color:'+(dd<=3?'#c0392b':'var(--ink)')+'">'+fmtD(x.ev.mont).slice(0,5)+'</b><br><small style="color:var(--muted)">'+(dd<0?'em andamento':dd===0?'HOJE':dd===1?'amanhã':'em '+dd+' dias')+'</small></span>'+
         '<span style="flex:1;min-width:0"><b style="cursor:pointer" onclick="fechar(\'ov-setor\');verEvento(\''+x.ev.id+'\')">'+esc(x.ev.nome)+'</b> <small style="color:var(--muted)">'+(x.ev.cidade&&x.ev.cidade!=='—'?esc(x.ev.cidade):'')+'</small><br>'+
         x.probs.map(p=>'<span onclick="fechar(\'ov-setor\');abrirNaSecao(\''+x.ev.id+'\',\''+p.k+'\')" style="display:inline-flex;align-items:center;gap:5px;margin:4px 6px 0 0;font-size:12px;border:1px solid var(--line);border-radius:14px;padding:2px 9px;cursor:pointer"><span class="sdot '+p.s.cor+'"></span><b>'+(SECOES.find(s=>s[0]===p.k)||[,''])[1]+'</b> '+esc(p.s.txt)+'</span>').join('')+'</span></div>'; }).join('')
-      : '<div class="alert green" style="margin:0">Nada pendente para '+esc(SETOR_ATUAL)+' daqui pra frente. 👍</div>');
+      : '<div class="alert green" style="margin:0">Nada pendente para '+esc(SETOR_ATUAL)+' de '+fmtD(HOJE).slice(0,5)+' pra frente. 👍</div>');
 }
 function renderCfgSetor(){
   const box = document.getElementById('st-cfg'); if(!box) return;
