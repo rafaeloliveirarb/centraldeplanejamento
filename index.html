@@ -1921,6 +1921,9 @@ function setMarcaDia(ev, campo, nome, iso, liga){
 function faltouDia(ev, nome, iso){ return marcaDia(ev, 'faltas', nome, iso); }
 function manutDia(ev, nome, iso){ return marcaDia(ev, 'manuts', nome, iso); }
 /* um clique no dia alterna: TRABALHA → FALTOU → MANUTENÇÃO → folga → TRABALHA */
+/* pincel: escolhido, o clique no dia já marca direto (sem precisar alternar) */
+let PINCEL_DIA = null;
+function escolherPincelDia(id, p){ PINCEL_DIA = (PINCEL_DIA === p) ? null : p; verEvento(id); }
 function toggleDiaPessoa(id, nome, iso){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const alvo = alvoDias(ev, nome);
@@ -1928,7 +1931,7 @@ function toggleDiaPessoa(id, nome, iso){
   const trab = diasDe(ev, nome).includes(iso);
   const fa = faltouDia(ev, nome, iso);
   const mt = manutDia(ev, nome, iso);
-  const acao = !trab ? 'trabalha' : (!fa && !mt) ? 'faltou' : fa ? 'manutencao' : 'folga';
+  const acao = PINCEL_DIA || (!trab ? 'trabalha' : (!fa && !mt) ? 'faltou' : fa ? 'manutencao' : 'folga');
   ev.diasPessoa = Object.assign({}, ev.diasPessoa || {});
   alvo.forEach(n=>{
     const atuais = new Set(diasDe(ev, n));
@@ -1989,6 +1992,7 @@ function agendarEscalaEv(id){
 let pessoaDias = null;
 function abreDiasPessoa(id, nome){
   pessoaDias = (pessoaDias===nome) ? null : nome;
+  PINCEL_DIA = null;
   verEvento(id);
 }
 /* painel que abre no 📅 do chip: período de trabalho da pessoa no evento */
@@ -2037,6 +2041,11 @@ function editorDiasPessoa(ev, eq){
     '<button class="mini" onclick="pessoaDias=null;verEvento(\''+ev.id+'\')">Fechar</button>'+
     '</div>'+
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:9px">'+
+        [['trabalha','TRABALHOU','#0f8a4d'],['manutencao','MANUTENÇÃO','#1c5fb8'],['folga','FOLGA','#5b6577'],['faltou','FALTOU','#e07b2c']].map(([k,t,c])=>
+          '<button onclick="escolherPincelDia(\''+ev.id+'\',\''+k+'\')" title="'+(PINCEL_DIA===k?'Clique de novo para voltar ao clique que alterna':'Escolha e clique nos dias para marcar '+t)+'" style="border:none;border-radius:999px;padding:8px 18px;font:inherit;font-size:12.5px;font-weight:800;letter-spacing:.3px;cursor:pointer;color:#fff;background:'+c+';'+(PINCEL_DIA===k?'box-shadow:0 0 0 3px #fff,0 0 0 5px '+c+';':(PINCEL_DIA?'opacity:.45;':''))+'">'+t+'</button>').join('')+
+        '<small style="color:var(--muted)">'+(PINCEL_DIA ? 'Clique nos dias para marcar como <b>'+({trabalha:'TRABALHOU',manutencao:'MANUTENÇÃO',folga:'FOLGA',faltou:'FALTOU'})[PINCEL_DIA]+'</b>. Clique no botão de novo para desligar.' : 'Escolha um botão e clique nos dias — ou clique direto nos dias para alternar.')+'</small>'+
+      '</div>'+
       '<div style="font-size:12px;color:var(--muted);margin-bottom:7px">O clique alterna: <b style="color:#0f8a4d">verde = trabalha</b> → <b style="color:#e07b2c">laranja = FALTOU</b> → <b style="color:#1c5fb8">azul = MANUTENÇÃO</b> → branco = folga.</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:5px">'+grade+'</div>'+
       '<div style="font-size:12.5px;color:var(--ink2);margin-top:9px">'+
