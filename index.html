@@ -3255,8 +3255,7 @@ function renderAlertaHoje(){
   if(!sino) return;
   const {mont, desm} = operacoesDeHoje();
   const nfs = notasPendentes().length;
-  let retAtr = 0; try{ retAtr = retornosCaminhoes().filter(r=>r.estado==='atrasado').length; }catch(e){}
-  const total = mont.length + desm.length + nfs + retAtr;
+  const total = mont.length + desm.length + nfs;
   sino.classList.toggle('hide', total === 0);
   sino.classList.toggle('balanca', total > 0);
   document.getElementById('sino-n').textContent = total;
@@ -3563,8 +3562,8 @@ function abrirHoje(){
         '<button class="mini" style="white-space:nowrap;font-weight:700" onclick="event.stopPropagation();marcarNotaHoje(\''+x.ev.id+'\',\''+x.k+'\')">✓ Emitida</button>'+
       '</div>').join('')+'</div>'
     : '';
-  let rets = []; try{ rets = retornosCaminhoes().filter(r=>r.estado !== 'ok' || r.D === HOJE); }catch(e){}
-  const blocoRet = rets.length ? '<div class="hoje-bloco" style="background:#f3f6fb;border-color:#cbd6ea;margin-bottom:12px"><div class="hoje-sec" style="color:#1c2b4a">🏠 Retorno dos caminhões<span class="cont">'+rets.filter(r=>r.estado!=='ok').length+'</span></div><div style="padding:0 4px 6px">'+htmlRetornos(rets)+'</div></div>' : '';
+  let rets = []; try{ rets = retornosCaminhoes(); }catch(e){}
+  const blocoRet = rets.length ? '<div class="hoje-bloco" style="background:#f3f6fb;border-color:#cbd6ea;margin-bottom:12px"><div class="hoje-sec" style="color:#1c2b4a">🚚 Caminhões que saem hoje<span class="cont">'+rets.length+'</span></div><div style="font-size:11.5px;color:var(--muted);padding:0 4px">Todos voltam no fim do dia. Se algum ficou no local, marque aqui.</div><div style="padding:0 4px 6px">'+htmlRetornos(rets)+'</div></div>' : '';
   document.getElementById('hoje-corpo').innerHTML =
     blocoNF + blocoRet +
     blocoM +
@@ -7615,32 +7614,48 @@ function economiaJunto(s){
 function lgJuntar(D, a, b, f){ juntarViagem(D, a, b, f); renderLogistica(); }
 /* ---- retorno do caminhão ao galpão ---- */
 function retornosCaminhoes(){
-  const out = [], vistos = new Set();
-  const ag = new Date(), minAg = ag.getHours()*60 + ag.getMinutes();
-  [somaDiaISO(HOJE,-1), HOJE].forEach(D=>{
-    const off = D === HOJE ? 0 : -1440;
-    opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{
-      if(x.jaLocal) return;
-      if(o.fase === 'mont' && (o.ev.permanece || xFica(o.ev, x.v.id, 'mont').length)) return;   /* fica no local: não volta hoje */
-      const grupo = x.junto ? membrosJunto(o.ev.id, x.junto).slice().sort().join('+') : o.ev.id;
-      const k0 = D + '|' + x.v.id + '|' + grupo; if(vistos.has(k0)) return; vistos.add(k0);
-      let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
-      const ch = hs ? minDe(hs.chegada) : null, vi = minViagem(o.ev);
-      if(ch == null || vi == null) return;
-      const desc = o.fase === 'desm' ? Math.max(cfgSaida().descarga, 240) : cfgSaida().descarga;
-      const saiu = minDe(hs.saida) - (hs.vespera ? 1440 : 0) + off;
-      const volta = ch + desc + vi + off;
-      if(minAg < saiu) return;   /* ainda não saiu */
-      const key = [o.ev.id, o.fase, D, x.i].join('|');
-      const loc = LOCS[key];
-      const ok = !!(((o.ev.voltou||{})[key]) || (loc && loc.status === 'galpao'));
-      if(ok && D !== HOJE) return;
-      const atraso = minAg - volta;
-      out.push({o, x, D, key, volta: hm(volta) + (volta < 0 ? ' (ontem)' : volta >= 1440 ? ' (amanhã)' : ''), ok, quando: ok ? ((o.ev.voltou||{})[key] || (loc && loc.voltou) || '') : '',
-        atraso, estado: ok ? 'ok' : atraso > 60 ? 'atrasado' : atraso > 0 ? 'voltando' : 'rua', loc: loc && Date.now() - (loc.t||0) < 8*3600*1000 ? loc : null});
-    }));
+  /* caminhões que saem hoje: a Central entende que voltam no fim do dia;
+     só é preciso marcar quando algum FICOU NO LOCAL */
+  const out = [], vistos = new Set(), D = HOJE;
+  opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{
+    if(x.jaLocal) return;
+    if(o.fase === 'mont' && (o.ev.permanece || xFica(o.ev, x.v.id, 'mont').length)) return;
+    if(o.fase === 'desm' && temFrotaDesm(o.ev) && ficaAteD(o.ev, x.v.id)) return;
+    const grupo = x.junto ? membrosJunto(o.ev.id, x.junto).slice().sort().join('+') : o.ev.id;
+    const k0 = x.v.id + '|' + grupo; if(vistos.has(k0)) return; vistos.add(k0);
+    let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
+    let volta = '';
+    if(hs){ const ch = minDe(hs.chegada), vi = minViagem(o.ev); if(ch != null && vi != null) volta = hm(ch + (o.fase === 'desm' ? Math.max(cfgSaida().descarga, 240) : cfgSaida().descarga) + vi); }
+    out.push({o, x, D, key: [o.ev.id, o.fase, D, x.i].join('|'), saida: hs ? (x.hSai || hs.saida) : '', volta});
+  }));
+  return out.sort((a,b)=>String(a.saida).localeCompare(String(b.saida)));
+}
+/* marcar que o caminhão FICOU no local até uma data (ou até a desmontagem) */
+function ficouNoLocal(evId, fase, vid, val){
+  const ev = eventos.find(e=>e.id===evId); if(!ev || !val) return;
+  if(val === 'outra'){
+    const r = prompt('Até que dia o caminhão fica no local? (dd/mm)', fmtD(somaDiaISO(HOJE, 2)).slice(0,5)); if(!r) return;
+    const m = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(r.trim()); if(!m) return toast('Data não entendida — use dd/mm.');
+    const ano = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : HOJE.slice(0,4);
+    val = ano + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+    if(val < HOJE) val = (+ano + 1) + val.slice(4);
+  }
+  const v = veiculos.find(x=>x.id===vid);
+  if(fase === 'desm'){
+    lgCongelarDesm(ev);
+    ev.ficaD = Object.assign({}, ev.ficaD || {}); ev.ficaD[vid] = val === 'desm' ? 'fim' : val;
+  } else {
+    ev.fica = Object.assign({}, ev.fica || {}); ev.fica[vid] = val;
+  }
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  try{ renderLogistica(); }catch(e){} try{ renderAlertaHoje(); }catch(e){}
+  try{ if(document.getElementById('ov-hoje').classList.contains('on')) abrirHoje(); }catch(e){}
+  const ate = fase === 'desm' ? ficaAteD(ev, vid) : ficaAte(ev, vid);
+  toast('🅿 ' + (v ? v.tipo + ' ' + v.placa : 'Caminhão') + ' ficou no local de ' + ev.nome + (ate ? ' até ' + fmtD(ate).slice(0,5) : '') + ' — fica preso para outras viagens nesses dias.', 'Desfazer', ()=>{
+    if(fase === 'desm'){ if(ev.ficaD){ delete ev.ficaD[vid]; if(!Object.keys(ev.ficaD).length) delete ev.ficaD; } }
+    else if(ev.fica){ delete ev.fica[vid]; if(!Object.keys(ev.fica).length) delete ev.fica; }
+    marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); try{ renderLogistica(); }catch(e){} try{ if(document.getElementById('ov-hoje').classList.contains('on')) abrirHoje(); }catch(e){}
   });
-  return out.sort((a,b)=>({atrasado:0, voltando:1, rua:2, ok:3}[a.estado] - {atrasado:0, voltando:1, rua:2, ok:3}[b.estado]));
 }
 function marcarVoltou(key, desfazer){
   const ev = eventos.find(e=>e.id===String(key).split('|')[0]); if(!ev) return;
@@ -7650,23 +7665,26 @@ function marcarVoltou(key, desfazer){
   try{ if(document.getElementById('ov-hoje').classList.contains('on')) abrirHoje(); }catch(e){}
   if(!desfazer) toast('🏠 Caminhão marcado como de volta ao galpão.', 'Desfazer', ()=>marcarVoltou(key, true));
 }
-function htmlRetornos(lista, compacto){
+function htmlRetornos(lista){
   if(!lista.length) return '';
-  const cor = {atrasado:'#c0392b', voltando:'#e08a1e', rua:'#1c5fb8', ok:'#0f8a4d'};
-  const txt = r => r.estado === 'ok' ? '✅ voltou' + (r.quando ? ' às ' + r.quando : '')
-    : r.estado === 'atrasado' ? '🔴 ATRASADO — devia ter voltado ≈' + r.volta + ' (' + durTxt(r.atraso) + ')'
-    : r.estado === 'voltando' ? '🟡 voltando — previsto ≈' + r.volta
-    : '🚚 na rua — volta ≈' + r.volta;
-  return lista.map(r=>'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">'+
-    '<b style="min-width:150px">🚚 '+_lgEsc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
-    '<span style="flex:1;min-width:160px">'+(r.x.motorista ? _lgEsc(r.x.motorista)+' · ' : '')+(r.o.fase==='desm'?'📤 ':'🔨 ')+'<a href="#" onclick="verEvento(\''+r.o.ev.id+'\');return false" style="color:inherit">'+_lgEsc(r.o.ev.nome)+'</a>'+(r.D!==HOJE?' <small>(ontem)</small>':'')+
-      (r.loc && r.loc.status !== 'galpao' ? ' <small style="color:#1c5fb8">📡 GPS '+new Date(r.loc.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</small>' : '')+'</span>'+
-    '<b style="color:'+cor[r.estado]+'">'+txt(r)+'</b>'+
-    (r.estado === 'ok' ? '' : '<button class="mini" onclick="event.stopPropagation();marcarVoltou(\''+r.key+'\')">🏠 Voltou</button>')+
-  '</div>').join('');
+  return lista.map(r=>{
+    const ev = r.o.ev, f = r.o.fase;
+    const opts = (f === 'mont' && ev.desm ? '<option value="desm">até a desmontagem ('+fmtD(ev.desm).slice(0,5)+')</option>' : '')+
+      '<option value="'+somaDiaISO(HOJE,1)+'">até amanhã ('+fmtD(somaDiaISO(HOJE,1)).slice(0,5)+')</option>'+
+      '<option value="'+somaDiaISO(HOJE,2)+'">até '+fmtD(somaDiaISO(HOJE,2)).slice(0,5)+'</option>'+
+      '<option value="outra">outra data…</option>';
+    return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">'+
+      '<b style="min-width:140px">🚚 '+_lgEsc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
+      '<span style="flex:1;min-width:160px">'+(r.x.motorista ? _lgEsc(r.x.motorista)+' · ' : '')+(f==='desm'?'📤 ':'🔨 ')+'<a href="#" onclick="verEvento(\''+ev.id+'\');return false" style="color:inherit">'+_lgEsc(ev.nome)+'</a>'+
+        ' <small style="color:var(--muted)">'+(r.saida?'sai '+r.saida:'')+(r.volta?' · volta ≈'+r.volta:'')+'</small></span>'+
+      '<select class="mini" style="border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px;cursor:pointer" onclick="event.stopPropagation()" onchange="if(this.value){ficouNoLocal(\''+ev.id+'\',\''+f+'\',\''+r.x.v.id+'\',this.value)}">'+
+        '<option value="">🅿 Ficou no local…</option>'+opts+'</select>'+
+    '</div>';
+  }).join('');
 }
 let RET_AVISADOS = {};
 function checarRetornos(){
+  return;   /* o caminhão volta por padrão: sem alerta de atraso */
   try{
     retornosCaminhoes().filter(r=>r.estado==='atrasado').forEach(r=>{
       if(RET_AVISADOS[r.key]) return; RET_AVISADOS[r.key] = 1;
@@ -7763,9 +7781,8 @@ function renderLogistica(){
         '<span class="lgeco">economia ≈ '+ec.km+' km · '+ec.litros+' L de diesel · R$ '+num(ec.reais)+(s.livre ? ' · libera o '+_lgEsc(s.livre.tipo+' '+s.livre.placa) : '')+'</span>'+
         ' <button class="mini" onclick="lgJuntar(\''+s.D+'\',\''+s.idsA.join('+')+'\',\''+s.idsB.join('+')+'\',\''+s.fase+'\')">🔗 Juntar</button></div>'; }).join('')+'</div>' : '';
   const ret = retornosCaminhoes();
-  const blocoRet = '<div class="lgbox"><h3>🏠 Retorno dos caminhões ao galpão <small>(hoje e ontem)</small></h3>'+
-    (ret.length ? htmlRetornos(ret) : '<div style="font-size:12.5px;color:var(--muted)">Nenhum caminhão na rua agora.</div>')+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Previsão = chegada no local + descarga + viagem de volta (desmontagem: pelo menos 4 h no local). O motorista também pode avisar pelo link: botão 🏠 VOLTEI PARA O GALPÃO.</div></div>';
+  const blocoRet = '<div class="lgbox"><h3>🚚 Caminhões que saem hoje <small>(a Central entende que todos voltam no fim do dia — marque só o que ficou no local)</small></h3>'+
+    (ret.length ? htmlRetornos(ret) : '<div style="font-size:12.5px;color:var(--muted)">Nenhum caminhão sai hoje.</div>')+'</div>';
   box.innerHTML =
     '<div class="lgtop"><div><h2 style="margin:0">🚚 Painel de logística</h2><small style="color:var(--muted)">arraste uma viagem para outro caminhão ou motorista do mesmo dia · clique para abrir o evento</small></div><span style="flex:1"></span>'+
       '<button class="pill" style="background:#0f8a4d;color:#fff;border-color:#0f8a4d" onclick="abrirZapMotoristas(somaDiaISO(HOJE,1))">📲 Escala dos motoristas</button>'+
