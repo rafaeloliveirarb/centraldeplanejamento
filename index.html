@@ -5649,7 +5649,8 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMoto
   setTimeout(()=>{ try{ carregarQRLib(); }catch(e){} }, 7000);
   setTimeout(()=>{ try{ if(window.__abrirEvHash && eventos.some(e=>e.id===window.__abrirEvHash)){ verEvento(window.__abrirEvHash); window.__abrirEvHash = null; } }catch(e){} }, 3000);
   setTimeout(()=>{ try{ puxarPipefy(false); }catch(e){} }, 30000);
-  setInterval(()=>{ try{ checarRetornos(); renderAlertaHoje(); }catch(e){} }, 5*60*1000);
+  setInterval(()=>{ try{ renderAlertaHoje(); }catch(e){} }, 5*60*1000);
+  setTimeout(()=>{ try{ avisoPrevisao(); }catch(e){} }, 25000);
   setTimeout(()=>{ try{ checarRetornos(); }catch(e){}
     try{ const A = alertasFrota().filter(a=>a.sev===3); if(A.length && localStorage.getItem('cpl:avisoFrota') !== HOJE){ localStorage.setItem('cpl:avisoFrota', HOJE); toast('🔧 Frota: ' + A.slice(0,2).map(a=>a.txt).join(' · ') + (A.length>2 ? ' e mais ' + (A.length-2) : '') + '.', 'Ver', ()=>irPara('logistica')); } }catch(e){} }, 20000);
   setTimeout(()=>{ try{ if(CONFIG.pipefyPipe) consertarPeloCardPipefy(); }catch(e){} }, 15000);
@@ -7071,6 +7072,7 @@ function juntarViagem(D, aKey, bKey, fase){
   const s = sugestoesJuntar(D).find(x=>x.fase===fase && ((x.idsA.join('+')===ka && x.idsB.join('+')===kb) || (x.idsA.join('+')===kb && x.idsB.join('+')===ka)));
   if(!s) return toast('Essa combinação não vale mais — confira os caminhões do dia.');
   const ids = [...new Set([...s.idsA, ...s.idsB])].sort(), grupo = ids.join('+');
+  lgSnap('🔗 viagem combinada', ids);
   ids.forEach(id=>{ const ev = eventos.find(e=>e.id===id); if(ev) marcarViagemJunto(ev, D, fase, s.v, s.motorista, grupo, true); });
   salvar(); replanejar(true); renderQuadro();
   if(document.getElementById('ov-amanha').classList.contains('on')) renderAmanha();
@@ -7079,6 +7081,7 @@ function juntarViagem(D, aKey, bKey, fase){
 }
 function desfazerJunto(aId, junto){
   const membros = membrosJunto(aId, junto);
+  lgSnap('separar viagem combinada', membros);
   membros.forEach(id=>{
     const ev = eventos.find(e=>e.id===id); if(!ev) return;
     ['escala','escalaD'].forEach(k=>{ (ev[k]||[]).forEach(x=>{ if(x.junto && membrosJunto(id, x.junto).some(m=>m!==id && membros.includes(m))) x.junto = null; }); });
@@ -7543,6 +7546,219 @@ function renderQuadro(){
   renderLoteBar();
 }
 
+/* ===================== CENTRAL 3.0 — BLOCOS A E B ===================== */
+/* ---- B6) DESFAZER GERAL ---- */
+let LG_UNDO = [];
+function lgSnap(rotulo, ids){
+  try{
+    const evs = [...new Set(ids)].map(id=>eventos.find(e=>e.id===id)).filter(Boolean).map(e=>JSON.parse(JSON.stringify(e)));
+    if(!evs.length) return;
+    LG_UNDO.push({rotulo, t: Date.now(), evs});
+    if(LG_UNDO.length > 25) LG_UNDO.shift();
+  }catch(e){}
+}
+function lgDesfazer(){
+  const u = LG_UNDO.pop();
+  if(!u) return toast('Nada para desfazer.');
+  u.evs.forEach(cp=>{ const i = eventos.findIndex(e=>e.id===cp.id); if(i>=0) eventos[i] = cp; else eventos.push(cp); });
+  marcarPlanoSujo(); limparSecCache(); salvar(); replanejar(true); renderQuadro();
+  try{ renderLogistica(); }catch(e){}
+  toast('↩ Desfeito: ' + u.rotulo + (LG_UNDO.length ? ' (dá para desfazer mais ' + LG_UNDO.length + ')' : ''));
+}
+if(typeof document !== 'undefined' && document.addEventListener) document.addEventListener('keydown', function(e){
+  try{
+    if(!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z') return;
+    const tg = ((e.target && e.target.tagName) || '').toLowerCase();
+    if(tg === 'input' || tg === 'textarea' || tg === 'select') return;
+    const sec = document.getElementById('v-logistica');
+    if(sec && !sec.classList.contains('hide') && LG_UNDO.length){ if(e.preventDefault) e.preventDefault(); lgDesfazer(); }
+  }catch(err){}
+});
+/* ---- B5) mudar o DIA de uma viagem (arrastando para outra coluna) ---- */
+function lgMudarDia(ev, f, i, novoD){
+  const dz = f === 'desm';
+  if(dz && !temFrotaDesm(ev)) lgCongelarDesm(ev);
+  const padrao = dia(dz ? ev.desm : ev.mont);
+  const nova = escalaDo(ev, dz?'desm':'mont').map(x=>({i:x.i, v:x.v, motorista:x.motorista, hora:x.hora||null,
+    junto: x.i===+i ? null : (x.junto||null),
+    dia: x.i===+i ? (novoD === padrao ? null : novoD) : (x.dia||null)}));
+  if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
+}
+/* ---- B7) SEGUNDA VIAGEM: caminhão que volta cedo pega outro evento do dia ---- */
+function segundasViagens(){
+  const out = [];
+  for(let d=0; d<7; d++){
+    const D = somaDiaISO(HOJE, d);
+    /* sem caminhão CONFIRMADO (a sugestão da IA ainda não prende ninguém) */
+    const sem = eventos.filter(ev=>!ev.esp && !(ev.fretes||[]).length && dia(ev.mont)===D && !(ev.veiculos||[]).length);
+    if(!sem.length) continue;
+    let ops; try{ ops = opsDoDia(D).ops; }catch(e){ continue; }
+    ops.forEach(o=>o.viagens.forEach(x=>{
+      if(x.jaLocal || x.manut) return;
+      if(o.fase==='mont' && (o.ev.permanece || xFica(o.ev, x.v.id, 'mont').length)) return;
+      let hs; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){ return; }
+      if(!hs) return;
+      const ch = minDe(hs.chegada), vi = minViagem(o.ev); if(ch == null || vi == null) return;
+      const volta = ch + (o.fase==='desm' ? Math.max(cfgSaida().descarga, 240) : cfgSaida().descarga) + vi;
+      if(volta > 15*60) return;   /* volta tarde demais para uma 2ª viagem */
+      sem.forEach(ev2=>{
+        if(ev2.id === o.ev.id) return;
+        const vi2 = minViagem(ev2); if(vi2 == null) return;
+        const saida2 = volta + 45, chega2 = saida2 + vi2;
+        const h2 = minDe(String(ev2.mont||'').slice(11,16));
+        let pct = null; try{ const c = carga(ev2); if(c.volF || c.pesoF) pct = Math.round(Math.max(c.volF/(+x.v.vol||1), c.pesoF/(+x.v.peso||1))*100); }catch(e){}
+        if(pct != null && pct > 100) return;
+        out.push({D, ev1:o.ev, f1:o.fase, i:x.i, v:x.v, motorista:x.motorista, ev2, volta:hm(volta), saida2:hm(saida2), chega2M:chega2, chega2:hm(chega2), atrasa: h2 != null && chega2 > h2});
+      });
+    }));
+  }
+  const best = {}; out.forEach(s=>{ const k = s.D + '|' + s.ev2.id; if(!best[k] || s.chega2M < best[k].chega2M) best[k] = s; });
+  return Object.values(best);
+}
+function aproveitarSegunda(ev1Id, f1, D, i, ev2Id){
+  const s = segundasViagens().find(x=>x.ev1.id===ev1Id && x.f1===f1 && x.D===D && x.i===+i && x.ev2.id===ev2Id);
+  if(!s) return toast('Essa sugestão não vale mais — confira os caminhões do dia.');
+  const ev2 = eventos.find(e=>e.id===ev2Id); if(!ev2) return;
+  lgSnap('2ª viagem do ' + s.v.tipo + ' ' + s.v.placa, [ev2Id]);
+  ev2.veiculos = [s.v.id];
+  ev2.escala = [{i:0, v:s.v.id, motorista: s.v.agregado ? s.v.motoristaFixo : (s.motorista || null), hora: s.saida2, dia:null, junto:null}];
+  marcarPlanoSujo(); limparSecCache(); salvar(); replanejar(true); renderQuadro();
+  try{ renderLogistica(); }catch(e){}
+  toast('💡 ' + s.v.tipo + ' ' + s.v.placa + ' faz a 2ª viagem: volta de ' + nomeTV(s.ev1.nome) + ' ≈' + s.volta + ' e sai ' + s.saida2 + ' para ' + nomeTV(s.ev2.nome) + ' (chega ≈' + s.chega2 + ')' + (s.atrasa ? ' — ⚠ chega depois do início da montagem' : '') + '.', 'Desfazer', lgDesfazer);
+}
+/* ---- A4) BUSCA ---- */
+let LG_FOCO = null;
+const lgIdSan = s => String(s).replace(/\W+/g, '');
+function lgBusca(q){
+  const box = document.getElementById('lg-busca-res'); if(!box) return;
+  q = semAcentoSimples(String(q||'').trim());
+  if(q.length < 2){ box.innerHTML = ''; box.style.display = 'none'; return; }
+  const R = [];
+  eventos.filter(e=>!evEncerrado(e)).forEach(e=>{ if(semAcentoSimples(e.nome + ' ' + (e.os||'') + ' ' + (e.cidade||'')).includes(q)) R.push({rot:'🎪 ' + _lgEsc(nomeTV(e.nome).slice(0,36)) + (e.cidade && e.cidade!=='—' ? ' · ' + _lgEsc(e.cidade) : '') + (e.mont ? ' · 🔨 ' + fmtD(e.mont).slice(0,5) : ''), ac:"verEvento('" + e.id + "')"}); });
+  veiculos.forEach(v=>{ if(semAcentoSimples(v.tipo + ' ' + v.placa + ' ' + (v.modelo||'') + ' ' + (v.motoristaFixo||'')).includes(q)) R.push({rot:'🚚 ' + _lgEsc(v.tipo + ' ' + v.placa) + (v.agregado ? ' (agregado · ' + _lgEsc(v.motoristaFixo||'') + ')' : ''), ac:"lgFocar('v','" + v.id + "')"}); });
+  motoristas.forEach(m=>{ if(semAcentoSimples(m.nome).includes(q)) R.push({rot:'🧑‍✈️ ' + _lgEsc(m.nome), ac:"lgFocar('m','" + _lgEsc(m.nome).replace(/'/g, "\\'") + "')"}); });
+  box.style.display = '';
+  box.innerHTML = R.length ? R.slice(0,8).map(r=>'<div onclick="document.getElementById(\'lg-busca-res\').style.display=\'none\';' + r.ac.replace(/"/g,'&quot;') + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;background:#fff">' + r.rot + '</div>').join('')
+    : '<div style="padding:8px 12px;font-size:12.5px;color:var(--muted);background:#fff">Nada encontrado.</div>';
+}
+function lgFocar(tipo, chave){
+  LG_FOCO = {tipo, chave}; LG_VISTA = 'semana'; renderLogistica();
+  setTimeout(()=>{ try{ const r = document.getElementById('lgrow-' + tipo + '-' + lgIdSan(chave)); if(r && r.scrollIntoView) r.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){} }, 80);
+  setTimeout(()=>{ if(LG_FOCO && LG_FOCO.chave === chave){ LG_FOCO = null; try{ renderLogistica(); }catch(e){} } }, 7000);
+}
+/* ---- A1) COCKPIT: números do dia + pra resolver agora ---- */
+function lgResolverLista(dias, dados){
+  const itens = [];
+  dias.forEach((D,j)=>{
+    Object.keys(dados[j].vs).forEach(vid=>{ if(lgConflito(dados[j].vs[vid])){ const v = veiculos.find(x=>x.id===vid);
+      itens.push({sev: D===HOJE?3:2, D, txt:'🚚 <b>' + _lgEsc(v ? v.tipo+' '+v.placa : vid) + '</b> em DOIS LUGARES ' + rotDia(D).toLowerCase(), ac:"lgResolver('v','" + vid + "','" + D + "')", rot:'Resolver'}); }});
+    Object.keys(dados[j].ms).forEach(nm=>{ if(lgConflito(dados[j].ms[nm]))
+      itens.push({sev: D===HOJE?3:2, D, txt:'🧑‍✈️ <b>' + _lgEsc(nm) + '</b> em DOIS LUGARES ' + rotDia(D).toLowerCase(), ac:"lgResolver('m','" + _lgEsc(nm).replace(/'/g,"\\'") + "','" + D + "')", rot:'Resolver'}); });
+  });
+  try{ previsaoFrota().filter(p=>p.faltaV).forEach(p=>itens.push({sev:2, D:p.D, txt:'📉 ' + rotDia(p.D) + ' (' + fmtD(p.D).slice(0,5) + '): vão faltar <b>' + p.faltaV + ' caminhão(ões)</b>', ac: p.semCam[0] ? "verEvento('" + p.semCam[0].ev.id + "')" : '', rot:'Contratar frete'})); }catch(e){}
+  [HOJE, somaDiaISO(HOJE,1)].forEach(D=>{ try{ opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{ if(!x.motorista && !x.jaLocal && !x.manut)
+    itens.push({sev: D===HOJE?3:2, D, txt:'🚚 ' + _lgEsc(x.v.tipo + ' ' + x.v.placa) + ' <b>sem motorista</b> ' + rotDia(D).toLowerCase() + ' (' + _lgEsc(nomeTV(o.ev.nome).slice(0,24)) + ')', ac:"verEvento('" + o.ev.id + "')", rot:'Escalar'}); })); }catch(e){} });
+  try{ notasPendentes().filter(n=>n.falta<=1).forEach(n=>itens.push({sev:3, D:HOJE, txt:'🧾 NF de ' + n.rot.toLowerCase().replace('🧾 nota fiscal de ','') + ' — <b>' + _lgEsc(nomeTV(n.ev.nome).slice(0,26)) + '</b> (' + _lgEsc(n.fase) + ' ' + fmtD(n.d).slice(0,5) + ')', ac:"marcarNotaHoje('" + n.ev.id + "','" + n.k + "')", rot:'✓ Emitida'})); }catch(e){}
+  try{ segundasViagens().forEach(s=>itens.push({sev:1, D:s.D, txt:'💡 ' + _lgEsc(s.v.tipo + ' ' + s.v.placa) + ' volta ≈' + s.volta + ' ' + rotDia(s.D).toLowerCase() + ' — pode levar também <b>' + _lgEsc(nomeTV(s.ev2.nome).slice(0,24)) + '</b> (sai ' + s.saida2 + ', chega ≈' + s.chega2 + (s.atrasa ? ' ⚠' : '') + ')', ac:"aproveitarSegunda('" + s.ev1.id + "','" + s.f1 + "','" + s.D + "'," + s.i + ",'" + s.ev2.id + "')", rot:'🔁 Aproveitar'})); }catch(e){}
+  itens.sort((a,b)=>b.sev - a.sev || a.D.localeCompare(b.D));
+  return itens;
+}
+function lgCockpitHtml(dias, dados, confTot){
+  let ret = [], carga2 = 0;
+  try{ ret = retornosCaminhoes(); }catch(e){}
+  try{ carga2 = carregarNoDia(HOJE).length; }catch(e){}
+  let p0 = []; try{ p0 = previsaoFrota(); }catch(e){}
+  const h0 = p0[0] || {livresV:0, totV:0, ocupM:0, totM:0};
+  const apert = p0.filter(p=>p.nivel).length;
+  const tile = (n, rot, cor) => '<div style="flex:1;min-width:118px;border:1px solid var(--line);border-radius:12px;padding:9px 13px;background:#fff"><div style="font-size:23px;font-weight:800;line-height:1.2;color:' + (cor || 'var(--ink)') + '">' + n + '</div><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">' + rot + '</div></div>';
+  const itens = lgResolverLista(dias, dados);
+  return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+    tile(ret.length, '🚚 saídas hoje') +
+    tile(carga2, '📦 carregar hoje') +
+    tile(confTot, '⚠ conflitos na semana', confTot ? '#c0392b' : '#0f8a4d') +
+    tile(h0.livresV + '<small style="font-size:13px;color:var(--muted)">/' + h0.totV + '</small>', '🚚 caminhões livres hoje') +
+    tile(Math.max(0, h0.totM - h0.ocupM) + '<small style="font-size:13px;color:var(--muted)">/' + h0.totM + '</small>', '🧑‍✈️ motoristas livres') +
+    tile(apert, '📉 dias apertados (14d)', apert ? '#a86412' : '#0f8a4d') +
+  '</div>' +
+  (itens.length ? '<div class="lgbox" style="border-left:4px solid ' + (itens.some(i=>i.sev===3) ? '#c0392b' : '#e08a1e') + '"><h3>🎯 Pra resolver agora <small>' + itens.length + ' item(ns), do mais urgente</small></h3>' +
+      itens.slice(0,8).map(i=>'<div style="display:flex;gap:10px;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--line)"><span style="min-width:9px;height:9px;border-radius:50%;background:' + (i.sev===3 ? '#c0392b' : i.sev===2 ? '#e08a1e' : '#1c5fb8') + '"></span><span style="flex:1;min-width:200px">' + i.txt + '</span>' + (i.ac ? '<button class="mini" style="white-space:nowrap" onclick="' + i.ac.replace(/"/g,'&quot;') + '">' + i.rot + '</button>' : '') + '</div>').join('') +
+      (itens.length > 8 ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">e mais ' + (itens.length - 8) + ' item(ns) — veja a grade e a previsão abaixo</div>' : '') + '</div>'
+    : '<div class="alert green" style="margin:0 0 12px">✅ Nada urgente na logística: sem conflito, sem falta de caminhão, sem nota pendente.</div>');
+}
+/* ---- A2) RÉGUA DE HORAS DO DIA ---- */
+let LOG_DIA_H = null;
+function lgSegmentosDia(D){
+  const segsPor = {};
+  const add = (vid, s) => { if(s.fim > s.ini) (segsPor[vid] = segsPor[vid] || []).push(s); };
+  let ops = []; try{ ops = opsDoDia(D).ops; }catch(e){}
+  ops.forEach(o=>o.viagens.forEach(x=>{
+    if(x.manut) return;
+    if(x.jaLocal){ add(x.v.id, {ini:0, fim:1440, tipo:'local', ev:o.ev}); return; }
+    let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
+    if(!hs){ add(x.v.id, {ini:480, fim:720, tipo:o.fase==='desm'?'d':'m', ev:o.ev}); return; }
+    const sai = minDe(x.hora || hs.saida), ch = minDe(hs.chegada), vi = minViagem(o.ev) || 60;
+    const desc = o.fase==='desm' ? Math.max(cfgSaida().descarga, 240) : cfgSaida().descarga;
+    add(x.v.id, {ini: hs.vespera ? 0 : (sai||0), fim: ch||0, tipo: o.fase==='desm'?'d':'m', ev:o.ev, vesp: hs.vespera});
+    add(x.v.id, {ini: ch, fim: ch + desc, tipo:'desc', ev:o.ev});
+    const fica = o.fase==='mont' ? !!(o.ev.permanece || xFica(o.ev, x.v.id, 'mont').length)
+      : (temFrotaDesm(o.ev) ? !!ficaAteD(o.ev, x.v.id) : false);
+    if(fica) add(x.v.id, {ini: ch + desc, fim: 1440, tipo:'local', ev:o.ev});
+    else add(x.v.id, {ini: ch + desc, fim: ch + desc + vi, tipo:'volta', ev:o.ev});
+  }));
+  try{ agendaDoca(D).forEach(a=>add(a.x.v.id, {ini:minDe(a.ini), fim:minDe(a.fim), tipo:'carga', ev:a.o.ev})); }catch(e){}
+  return segsPor;
+}
+function htmlHoras(){
+  const D = LOG_DIA_H || HOJE;
+  const segsPor = lgSegmentosDia(D);
+  const cores = {m:'#1c5fb8', d:'#c0392b', desc:'#8e44ad', volta:'#7fa3c4', local:'#8b95a7', carga:'#b57a0a'};
+  const rots = {carga:'📦 carregando no galpão', m:'🔨 viagem (montagem)', d:'📤 viagem (desmontagem)', desc:'descarga no local', volta:'volta ao galpão', local:'🅿 parado no local'};
+  const vids = Object.keys(segsPor).sort((a,b)=>{ const ia = Math.min(...segsPor[a].map(s=>s.ini)), ib = Math.min(...segsPor[b].map(s=>s.ini)); return ia - ib; });
+  const regua = '<div style="position:relative;height:16px;margin-left:178px;margin-right:4px">' + Array.from({length:13},(_,i)=>i*2).map(hh=>'<span style="position:absolute;left:' + (hh/24*100) + '%;font-size:10px;color:var(--muted);transform:translateX(-50%)">' + String(hh).padStart(2,'0') + 'h</span>').join('') + '</div>';
+  const linhas = vids.length ? vids.map(vid=>{
+    const v = veiculos.find(x=>x.id===vid);
+    const segs = segsPor[vid].sort((a,b)=>a.ini - b.ini);
+    const evPrin = (segs.find(s=>s.tipo==='m' || s.tipo==='d') || segs[0]).ev;
+    return '<div style="display:flex;align-items:center;margin-bottom:7px"><div style="width:170px;min-width:170px;font-size:12.5px;padding-right:8px"><b>' + _lgEsc(v ? v.tipo + ' ' + v.placa : vid) + '</b><br><small style="color:var(--muted)">' + _lgEsc(nomeTV((evPrin||{}).nome||'').slice(0,24)) + '</small></div>' +
+      '<div style="flex:1;position:relative;height:32px;background:#fbfcfe;border:1px solid var(--line);border-radius:7px;overflow:hidden">' +
+        [360,720,1080].map(mm=>'<span style="position:absolute;top:0;bottom:0;left:' + (mm/1440*100) + '%;width:1px;background:#e3e8f2"></span>').join('') +
+        segs.map(s=>{ const a = Math.max(0, Math.min(1440, s.ini)), b = Math.max(a + 10, Math.min(1440, s.fim));
+          return '<div onclick="verEvento(\'' + s.ev.id + '\')" title="' + _lgEsc(rots[s.tipo].replace(/^[^ ]+ /,'') + ' — ' + nomeTV(s.ev.nome) + ' · ' + hm(a) + '–' + hm(b) + (s.vesp ? ' (saiu na véspera)' : '')) + '" style="position:absolute;top:4px;bottom:4px;left:' + (a/1440*100).toFixed(2) + '%;width:' + ((b-a)/1440*100).toFixed(2) + '%;background:' + cores[s.tipo] + ';border-radius:5px;cursor:pointer;opacity:' + (s.tipo==='volta' || s.tipo==='local' ? '.5' : '.95') + '"></div>'; }).join('') +
+      '</div></div>'; }).join('')
+    : '<div style="font-size:12.5px;color:var(--muted);margin-left:178px">Nenhum caminhão na rua ' + (D===HOJE ? 'hoje' : rotDia(D).toLowerCase()) + '.</div>';
+  return '<div class="lgbox"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><h3 style="margin:0">🕐 ' + (D===HOJE ? 'HOJE' : rotDia(D)) + ' · ' + fmtD(D).slice(0,5) + ' — hora a hora</h3><span style="flex:1"></span>' +
+      '<button class="mini" onclick="LOG_DIA_H=somaDiaISO(\'' + D + '\',-1);renderLogistica()">‹ dia</button><button class="mini" onclick="LOG_DIA_H=null;renderLogistica()">Hoje</button><button class="mini" onclick="LOG_DIA_H=somaDiaISO(\'' + D + '\',1);renderLogistica()">dia ›</button></div>' +
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:8px">' + Object.keys(rots).map(k=>'<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:' + cores[k] + ';margin-right:4px;vertical-align:-1px"></i>' + rots[k] + '</span>').join('') + '</div>' +
+    regua + linhas +
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Cada linha é um caminhão. Clique numa barra para abrir o evento. Buraco entre a volta e o fim do dia = espaço para uma 2ª viagem (o cockpit sugere em 💡).</div></div>';
+}
+/* ---- A3) MODO LISTA (celular) ---- */
+function htmlLista(){
+  const dias = Array.from({length:3}, (_,i)=>somaDiaISO(logIni(), i));
+  return '<div style="display:flex;gap:6px;margin-bottom:10px"><button class="mini" onclick="logMover(-1)">‹ dia</button><button class="mini" onclick="logMover(0)">Hoje</button><button class="mini" onclick="logMover(1)">dia ›</button></div>' +
+    dias.map(D=>{
+      let ops = []; try{ ops = opsDoDia(D).ops; }catch(e){}
+      const vs = []; ops.forEach(o=>o.viagens.forEach(x=>{ if(!x.jaLocal) vs.push({o, x}); }));
+      const dd = logItensDia(D);
+      return '<div class="lgbox"><h3>' + (D===HOJE ? '📍 HOJE' : rotDia(D).toUpperCase()) + ' · ' + fmtD(D).slice(0,5) + ' <small>' + vs.length + ' viagem(ns)</small></h3>' +
+        (vs.length ? vs.map(({o, x})=>{ const c = lgConflito(dd.vs[x.v.id]||[]);
+          let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
+          return '<div onclick="verEvento(\'' + o.ev.id + '\')" style="border:1px solid ' + (c ? '#e4483c' : 'var(--line)') + ';border-radius:10px;padding:9px 11px;margin-bottom:7px;cursor:pointer' + (c ? ';background:#fdecea' : '') + '">' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>' + (o.fase==='desm' ? '📤' : '🔨') + ' ' + _lgEsc(nomeTV(o.ev.nome).slice(0,32)) + '</b><span style="flex:1"></span>' + (hs ? '<b style="font-size:12.5px">sai ' + (x.hSai || hs.saida) + '</b>' : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-top:3px">🚚 ' + _lgEsc(x.v.tipo + ' ' + x.v.placa) + (x.motorista ? ' · 🧑‍✈️ ' + _lgEsc(x.motorista) : ' · <b style="color:#a86412">sem motorista</b>') + (o.ev.cidade && o.ev.cidade!=='—' ? ' · ' + _lgEsc(o.ev.cidade) : '') + (x.junto ? ' · 🔗' : '') + '</div>' +
+            (c ? '<button class="lgres" style="margin-top:5px" onclick="event.stopPropagation();lgResolver(\'v\',\'' + x.v.id + '\',\'' + D + '\')">⚠ em dois lugares · resolver</button>' : '') +
+          '</div>'; }).join('') : '<div style="font-size:12.5px;color:var(--muted)">Sem viagem.</div>') +
+        (D===HOJE ? (function(){ try{ const r = retornosCaminhoes(); return r.length ? '<div style="font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.5px;margin:10px 0 2px">🅿 ALGUM FICOU NO LOCAL?</div>' + htmlRetornos(r) : ''; }catch(e){ return ''; } })() : '') +
+      '</div>'; }).join('');
+}
+/* ---- vistas ---- */
+let LG_VISTA = null;
+function lgVista(){
+  if(LG_VISTA) return LG_VISTA;
+  try{ if(typeof window !== 'undefined' && window.innerWidth && window.innerWidth < 740) return 'lista'; }catch(e){}
+  return 'semana';
+}
+
 /* =====================================================================
    PAINEL DE LOGÍSTICA — caminhões e motoristas, dia a dia
    ===================================================================== */
@@ -7641,6 +7857,7 @@ function ficouNoLocal(evId, fase, vid, val){
     if(val < HOJE) val = (+ano + 1) + val.slice(4);
   }
   const v = veiculos.find(x=>x.id===vid);
+  lgSnap('🅿 ficou no local — ' + nomeTV(ev.nome), [ev.id]);
   if(fase === 'desm'){
     lgCongelarDesm(ev);
     ev.ficaD = Object.assign({}, ev.ficaD || {}); ev.ficaD[vid] = val === 'desm' ? 'fim' : val;
@@ -7708,31 +7925,44 @@ function lgCongelarDesm(ev){
 function lgDrop(e, tipo, alvo, D){
   if(e && e.preventDefault) e.preventDefault();
   const p = LG_DRAG; LG_DRAG = null; if(!p) return;
-  if(p.D !== D) return toast('Solte na coluna do mesmo dia (' + fmtD(p.D).slice(0,5) + '). Para mudar a data, use o evento.');
   const ev = eventos.find(x=>x.id===p.evId); if(!ev) return;
-  if(tipo === 'v'){
-    if(alvo === p.vid) return;
+  const mudouDia = p.D !== D;
+  let motAtual = null; try{ motAtual = (escalaDo(ev, (p.f==='desm' && temFrotaDesm(ev)) ? 'desm' : 'mont').find(x=>x.i===p.i) || {}).motorista || null; }catch(err){}
+  const trocaV = tipo === 'v' && alvo !== p.vid;
+  const trocaM = tipo === 'm' && alvo !== motAtual;
+  if(trocaV){
     const V = veiculos.find(v=>v.id===alvo); if(!V) return;
     if(V.manut) return toast('🔧 ' + V.tipo + ' ' + V.placa + ' está em manutenção.');
-    lgCongelarDesm(ev);
-    trocarVeiculoVaga(ev.id, p.i, alvo, p.f);
-    const oc = ocupCaminhao(ev, p.f);
-    const ocupado = lgConflito((logItensDia(D).vs[alvo]||[]));
-    toast('🚚 ' + ev.nome + ' (' + (p.f==='desm'?'desmontagem':'montagem') + '): agora vai no ' + V.tipo + ' ' + V.placa + (V.agregado ? ' com ' + V.motoristaFixo : '') + '.' +
-      (oc && oc.pct > 100 ? ' ⚠ A carga NÃO CABE (' + oc.pct + '%).' : '') + (ocupado ? ' ⚠ Esse caminhão já tem outra viagem nesse dia.' : ''));
-  } else {
+  }
+  if(trocaM){
     const V = veiculos.find(v=>v.id===p.vid);
     if(V && V.agregado) return toast('O ' + V.tipo + ' ' + V.placa + ' é agregado — anda sempre com ' + V.motoristaFixo + '. Troque o caminhão em vez do motorista.');
     if(V && V.tipo === 'CARRETA'){ const m = motoristas.find(x=>x.nome===alvo); if(m && !m.carreta && !confirm(alvo + ' não está marcado como motorista de carreta. Colocar mesmo assim?')) return; }
-    if(p.f === 'mont') lgCongelarDesm(ev);
-    const dz = p.f === 'desm' && temFrotaDesm(ev);
-    if(p.f === 'desm' && !dz){ lgCongelarDesm(ev); }
+  }
+  if(!mudouDia && !trocaV && !trocaM) return;
+  lgSnap((mudouDia ? 'mudança de dia' : trocaV ? 'troca de caminhão' : 'troca de motorista') + ' — ' + nomeTV(ev.nome), [ev.id]);
+  const partes = [];
+  if(mudouDia){ lgMudarDia(ev, p.f, p.i, D); partes.push('a viagem passou para ' + rotDia(D).toLowerCase() + ' (' + fmtD(D).slice(0,5) + ')'); }
+  if(trocaV){
+    lgCongelarDesm(ev);
+    trocarVeiculoVaga(ev.id, p.i, alvo, p.f);
+    const V = veiculos.find(v=>v.id===alvo);
+    partes.push('vai no ' + V.tipo + ' ' + V.placa + (V.agregado ? ' com ' + V.motoristaFixo : ''));
+  }
+  if(trocaM){
+    if(p.f === 'desm' && !temFrotaDesm(ev)) lgCongelarDesm(ev);
     const dz2 = p.f === 'desm';
     const nova = escalaDo(ev, dz2?'desm':'mont').map(x=>({i:x.i, v:x.v, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null, motorista: x.i===p.i ? alvo : x.motorista}));
     if(dz2){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
-    salvar(); replanejar(true); renderQuadro();
-    toast('🧑‍✈️ ' + alvo + ' dirige a ' + (p.f==='desm'?'desmontagem':'montagem') + ' de ' + ev.nome + ' em ' + fmtD(D).slice(0,5) + '.');
+    partes.push('motorista: ' + alvo);
   }
+  marcarPlanoSujo(); limparSecCache(); salvar(); replanejar(true); renderQuadro();
+  const vidFinal = trocaV ? alvo : p.vid;
+  const avisos = [];
+  try{ if(trocaV){ const oc = ocupCaminhao(ev, p.f==='desm'?'desm':'mont'); if(oc && oc.pct > 100) avisos.push('⚠ a carga NÃO CABE (' + oc.pct + '%)'); } }catch(err){}
+  try{ if(lgConflito((logItensDia(D).vs[vidFinal]||[]))) avisos.push('⚠ o caminhão fica em dois lugares ' + fmtD(D).slice(0,5)); }catch(err){}
+  try{ if(trocaM && lgConflito((logItensDia(D).ms[alvo]||[]))) avisos.push('⚠ ' + alvo + ' fica em dois lugares ' + fmtD(D).slice(0,5)); }catch(err){}
+  toast('🚚 ' + nomeTV(ev.nome) + ' (' + (p.f==='desm'?'desmontagem':'montagem') + '): ' + partes.join(' · ') + '.' + (avisos.length ? ' ' + avisos.join(' · ') + '.' : ''), 'Desfazer', lgDesfazer);
   renderLogistica();
 }
 function lgChip(it, rowTipo, rowKey){
@@ -7743,7 +7973,7 @@ function lgChip(it, rowTipo, rowKey){
   if(it.tipo === 'viagem'){ try{ const hs = horariosSaida(ev, it.f, D); if(hs && hs.saida) sai = (it.x.hora || hs.saida); }catch(e){} }
   const oc = it.tipo === 'viagem' && it.f === 'mont' ? ocupCaminhao(ev, 'mont') : null;
   const tit = (it.tipo==='viagem' ? (it.f==='desm'?'DESMONTAGEM':'MONTAGEM') : it.tipo==='local' ? 'caminhão parado no local' : 'fica no local') + ' — ' + ev.nome + (ev.cidade && ev.cidade!=='—' ? ' · ' + ev.cidade : '') + (+ev.km ? ' · ' + ev.km + ' km' : '') +
-    (it.x.motorista ? ' · motorista ' + it.x.motorista : '') + (sai ? ' · sai ' + sai : '') + (it.x.junto ? ' · 🔗 viagem combinada' : '') + ' — arraste para outro ' + (rowTipo==='v'?'caminhão':'motorista') + ' no mesmo dia';
+    (it.x.motorista ? ' · motorista ' + it.x.motorista : '') + (sai ? ' · sai ' + sai : '') + (it.x.junto ? ' · 🔗 viagem combinada' : '') + ' — arraste para outro ' + (rowTipo==='v'?'caminhão':'motorista') + ' ou para outro dia' + ' no mesmo dia';
   const arrasta = it.tipo === 'viagem' || it.tipo === 'local';
   return '<div class="lgchip '+(it.tipo==='viagem'?(it.f==='desm'?'d':'m'):'p')+'" '+(arrasta?'draggable="true" ondragstart="lgDrag(event,\''+ev.id+'\',\''+it.f+'\',\''+D+'\','+it.x.i+',\''+it.x.v+'\')"':'')+' onclick="verEvento(\''+ev.id+'\')" title="'+_lgEsc(tit)+'">'+
     '<span>'+ic+' '+_lgEsc(nomeTV(ev.nome).slice(0,20))+(it.x.junto?' 🔗':'')+'</span>'+
@@ -7762,11 +7992,11 @@ function renderLogistica(){
   const vsOrd = veiculos.slice().sort((a,b)=>(!!a.agregado - !!b.agregado) || String(a.tipo).localeCompare(String(b.tipo)) || String(a.placa).localeCompare(String(b.placa)));
   const mos = motoristas.filter(m=>m.situacao !== 'Indisponível');
   let confV = 0, confM = 0;
-  const linhaV = v => '<tr><th class="lgrow"><b>'+_lgEsc(v.tipo)+' '+_lgEsc(v.placa)+'</b><small>'+(v.agregado ? 'agregado · '+_lgEsc(v.motoristaFixo||'') : 'próprio')+(v.manut?' · 🔧 manutenção':'')+' · '+num(v.vol)+' m³</small></th>'+
+  const linhaV = v => '<tr id="lgrow-v-'+lgIdSan(v.id)+'"'+(LG_FOCO && LG_FOCO.tipo==='v' && LG_FOCO.chave===v.id ? ' style="outline:3px solid #f0851e"' : '')+'><th class="lgrow"><b>'+_lgEsc(v.tipo)+' '+_lgEsc(v.placa)+'</b><small>'+(v.agregado ? 'agregado · '+_lgEsc(v.motoristaFixo||'') : 'próprio')+(v.manut?' · 🔧 manutenção':'')+' · '+num(v.vol)+' m³</small></th>'+
     dias.map((D,j)=>{ const L = dados[j].vs[v.id] || []; const c = lgConflito(L); if(c) confV++;
       return '<td class="lgcel'+(c?' conf':'')+(v.manut?' manut':'')+(D===HOJE?' hoje':'')+'" ondragover="event.preventDefault()" ondrop="lgDrop(event,\'v\',\''+v.id+'\',\''+D+'\')">'+
         (L.length ? L.map(it=>lgChip(it,'v',v.id)).join('') : '<span class="lglivre">'+(v.manut?'🔧':'livre')+'</span>')+(c?'<button class="lgres" onclick="lgResolver(\'v\',\''+v.id+'\',\''+D+'\')">⚠ 2 lugares · resolver</button>':'')+'</td>'; }).join('')+'</tr>';
-  const linhaM = m => '<tr><th class="lgrow"><b>🧑‍✈️ '+_lgEsc(m.nome)+'</b><small>'+(m.agregado?'agregado':'da casa')+(m.carreta?' · carreta':'')+'</small></th>'+
+  const linhaM = m => '<tr id="lgrow-m-'+lgIdSan(m.nome)+'"'+(LG_FOCO && LG_FOCO.tipo==='m' && LG_FOCO.chave===m.nome ? ' style="outline:3px solid #f0851e"' : '')+'><th class="lgrow"><b>🧑‍✈️ '+_lgEsc(m.nome)+'</b><small>'+(m.agregado?'agregado':'da casa')+(m.carreta?' · carreta':'')+'</small></th>'+
     dias.map((D,j)=>{ const L = dados[j].ms[m.nome] || []; const c = lgConflito(L); if(c) confM++;
       return '<td class="lgcel'+(c?' conf':'')+(D===HOJE?' hoje':'')+'" ondragover="event.preventDefault()" ondrop="lgDrop(event,\'m\',\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\''+D+'\')">'+
         (L.length ? L.map(it=>lgChip(it,'m',m.nome)).join('') : '<span class="lglivre">livre</span>')+(c?'<button class="lgres" onclick="lgResolver(\'m\',\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\''+D+'\')">⚠ 2 lugares · resolver</button>':'')+'</td>'; }).join('')+'</tr>';
@@ -7783,13 +8013,23 @@ function renderLogistica(){
   const ret = retornosCaminhoes();
   const blocoRet = '<div class="lgbox"><h3>🚚 Caminhões que saem hoje <small>(a Central entende que todos voltam no fim do dia — marque só o que ficou no local)</small></h3>'+
     (ret.length ? htmlRetornos(ret) : '<div style="font-size:12.5px;color:var(--muted)">Nenhum caminhão sai hoje.</div>')+'</div>';
-  box.innerHTML =
-    '<div class="lgtop"><div><h2 style="margin:0">🚚 Painel de logística</h2><small style="color:var(--muted)">arraste uma viagem para outro caminhão ou motorista do mesmo dia · clique para abrir o evento</small></div><span style="flex:1"></span>'+
+  const cockpit = lgCockpitHtml(dias, dados, confV + confM);
+  const vista = lgVista();
+  const topo =
+    '<div class="lgtop"><div><h2 style="margin:0">🚚 Painel de logística</h2><small style="color:var(--muted)">arraste uma viagem para outro caminhão, motorista ou dia · clique para abrir o evento</small></div>'+
+      '<div style="position:relative;flex:1;min-width:170px;max-width:330px"><input id="lg-busca" placeholder="🔍 evento, placa ou motorista" oninput="lgBusca(this.value)" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;font-size:13px"><div id="lg-busca-res" style="display:none;position:absolute;top:39px;left:0;right:0;z-index:60;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(20,30,60,.18)"></div></div>'+
       '<button class="pill" style="background:#0f8a4d;color:#fff;border-color:#0f8a4d" onclick="abrirZapMotoristas(somaDiaISO(HOJE,1))">📲 Escala dos motoristas</button>'+
-      '<button class="pill" onclick="logMover(-7)">‹ semana</button><button class="pill" onclick="logMover(-1)">‹</button><button class="pill" onclick="logMover(0)">Hoje</button><button class="pill" onclick="logMover(1)">›</button><button class="pill" onclick="logMover(7)">semana ›</button></div>'+
+      (LG_UNDO.length ? '<button class="pill" title="'+_lgEsc(LG_UNDO[LG_UNDO.length-1].rotulo)+' (Ctrl+Z)" onclick="lgDesfazer()">↩ Desfazer ('+LG_UNDO.length+')</button>' : '')+
+      (vista==='semana' ? '<button class="pill" onclick="logMover(-7)">‹ semana</button><button class="pill" onclick="logMover(-1)">‹</button><button class="pill" onclick="logMover(0)">Hoje</button><button class="pill" onclick="logMover(1)">›</button><button class="pill" onclick="logMover(7)">semana ›</button>' : '')+
+    '</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+[['semana','📅 Semana'],['horas','🕐 Horas do dia'],['lista','📱 Lista']].map(x=>'<button class="pill'+(vista===x[0]?' on':'')+'" style="'+(vista===x[0]?'background:#1c4fa0;color:#fff;border-color:#1c4fa0':'')+'" onclick="LG_VISTA=\''+x[0]+'\';renderLogistica()">'+x[1]+'</button>').join('')+'</div>';
+  let corpo;
+  if(vista === 'horas') corpo = htmlHoras();
+  else if(vista === 'lista') corpo = htmlLista();
+  else corpo =
     '<div class="lgleg"><span class="lgchip m">🔨 montagem</span><span class="lgchip d">📤 desmontagem</span><span class="lgchip p">🅿 parado no local</span><span class="lgchip base">🏠 serviço na base</span><span>🔗 viagem combinada</span><span style="color:#c0392b;font-weight:700">⚠ em dois lugares</span>'+
       (confV+confM ? '<b style="color:#c0392b">· '+(confV+confM)+' conflito(s) na semana</b>' : '<b style="color:#0f8a4d">· sem conflito na semana</b>')+'</div>'+
-    blocoRet + blocoJun + htmlDoca(dias) +
+    blocoRet + htmlPrevisao() + blocoJun + htmlDoca(dias) +
     '<div class="lgwrap"><table class="lgtab"><thead><tr><th></th>'+dias.map(D=>{ const dt = new Date(D+'T12:00'); const n = new Set(Object.values(dados[dias.indexOf(D)].vs).flat().filter(it=>it.tipo==='viagem').map(it=>it.ev.id)).size;
         return '<th class="'+(D===HOJE?'hoje':'')+'">'+SEM[dt.getDay()]+' <b>'+D.slice(8)+'/'+D.slice(5,7)+'</b><small>'+(n ? n+' saída(s)' : 'sem saída')+'</small></th>'; }).join('')+'</tr></thead><tbody>'+
       '<tr class="lgsec"><td colspan="8">🚚 CAMINHÕES</td></tr>'+corpoV+
@@ -7797,6 +8037,7 @@ function renderLogistica(){
     '</tbody></table></div>'+
     (fretes.length ? '<div class="lgbox" style="margin-top:12px"><h3>🚛 Fretes contratados na semana</h3>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc(x.emp||'frete')).join(', ')+'</div>').join('')+'</div>' : '')+
     '<div style="margin-top:12px">'+htmlFrota()+htmlCusto()+'</div>';
+  box.innerHTML = topo + cockpit + corpo;
 }
 
 /* ---------- janela genérica do painel de logística ---------- */
@@ -8073,6 +8314,106 @@ function htmlCusto(){
     (rows ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="text-align:left;color:var(--muted);font-size:11px"><th>Caminhão</th><th>Viagens</th><th>Km</th><th>Diesel</th><th>R$ diesel</th><th>Pedágio</th><th>Total</th><th>R$/km</th></tr></thead><tbody>'+rows+'</tbody></table></div>' : '<div style="font-size:12.5px;color:var(--muted)">Nenhuma viagem escalada neste mês.</div>')+
     (C.fretes.length ? '<div style="margin-top:8px;font-size:12.5px"><b>Fretes:</b> '+C.fretes.map(f=>_lgEsc(f.ev.nome)+' ('+_lgEsc(f.f.emp||'')+(+f.f.val?' · '+R(f.f.val):'')+')').join(' · ')+'</div>' : '')+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' (Integrações). Agregado: o valor pago a ele não está na Central — aqui entra só o diesel e o pedágio estimados, para comparar. Frete: o valor lançado no evento.</div></details>';
+}
+
+/* ===== 3) PREVISÃO DE FALTA DE CAMINHÃO E MOTORISTA — 14 DIAS ===== */
+function previsaoFrota(){
+  const out = [];
+  const totV = veiculos.filter(v=>!v.manut).length;
+  const totM = motoristas.filter(m=>m.situacao !== 'Indisponível').length;
+  for(let i=0; i<14; i++){
+    const D = somaDiaISO(HOJE, i);
+    const dados = logItensDia(D);
+    const ocupV = Object.keys(dados.vs).length, ocupM = Object.keys(dados.ms).length;
+    /* eventos que SAEM nesse dia ainda sem caminhão (e sem frete) */
+    const semCam = [];
+    eventos.forEach(ev=>{
+      if(ev.esp || !ev.mont) return;
+      if((ev.fretes||[]).length) return;
+      if(dia(ev.mont) === D && !(frotaDo(ev,'mont')||[]).length) semCam.push({ev, f:'mont'});
+      if(ev.desm && dia(ev.desm) === D && temFrotaDesm(ev) && !(frotaDo(ev,'desm')||[]).length) semCam.push({ev, f:'desm'});
+    });
+    /* viagens do dia sem motorista */
+    let semMot = 0;
+    try{ opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{ if(!x.motorista && !x.jaLocal && !x.manut) semMot++; })); }catch(e){}
+    const livresV = Math.max(0, totV - ocupV), livresM = Math.max(0, totM - ocupM);
+    const faltaV = Math.max(0, semCam.length - livresV);
+    const faltaM = Math.max(0, (semMot + semCam.length) - livresM);
+    out.push({D, ocupV, totV, livresV, semCam, semMot, faltaV, faltaM, ocupM, totM,
+      nivel: (faltaV || faltaM) ? 2 : ((semCam.length && semCam.length === livresV) || livresV === 0 ? 1 : 0)});
+  }
+  return out;
+}
+function htmlPrevisao(){
+  const P = previsaoFrota();
+  const ruins = P.filter(p=>p.nivel);
+  const linha = p => '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;padding:6px 0;border-bottom:1px dashed var(--line)">'+
+    '<b style="min-width:120px;color:'+(p.nivel===2?'#c0392b':'#a86412')+'">'+(p.nivel===2?'🔴 ':'🟡 ')+rotDia(p.D)+' '+fmtD(p.D).slice(0,5)+'</b>'+
+    '<span style="flex:1;min-width:200px">'+p.ocupV+'/'+p.totV+' caminhões ocupados'+(p.semCam.length ? ' · <b>'+p.semCam.length+' evento(s) sem caminhão</b>: '+p.semCam.slice(0,3).map(s=>'<a href="#" onclick="verEvento(\''+s.ev.id+'\');return false" style="color:inherit">'+_lgEsc(s.ev.nome)+'</a>').join(', ')+(p.semCam.length>3?'…':'') : '')+(p.semMot ? ' · '+p.semMot+' viagem(ns) sem motorista' : '')+'</span>'+
+    '<b style="color:'+(p.nivel===2?'#c0392b':'#a86412')+'">'+(p.faltaV ? 'FALTAM '+p.faltaV+' CAMINHÃO(ÕES) — contratar frete' : p.faltaM ? 'faltam '+p.faltaM+' motorista(s)' : 'frota no limite ('+p.livresV+' livre)')+'</b>'+
+    (p.faltaV && p.semCam[0] ? '<button class="mini" onclick="verEvento(\''+p.semCam[0].ev.id+'\');setTimeout(()=>irSecao(\'caminhoes\'),80)">🚛 Contratar frete</button>' : '')+
+  '</div>';
+  return '<details class="lgbox"'+(ruins.some(p=>p.nivel===2)?' open':'')+'><summary><h3 style="display:inline">📉 Previsão — caminhões e motoristas nos próximos 14 dias</h3>'+
+    (ruins.length ? ' <b style="color:'+(ruins.some(p=>p.nivel===2)?'#c0392b':'#a86412')+'">· '+ruins.length+' dia(s) apertado(s)</b>' : ' <b style="color:#0f8a4d">· tudo certo</b>')+'</summary>'+
+    (ruins.length ? ruins.map(linha).join('') : '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Nenhum dia com falta de caminhão ou motorista nas próximas 2 semanas.</div>')+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Conta os caminhões já escalados ou presos no local contra a frota disponível, e os eventos que saem no dia ainda sem caminhão e sem frete. 🔴 vai faltar · 🟡 no limite.</div></details>';
+}
+function avisoPrevisao(){
+  try{
+    const ruim = previsaoFrota().filter(p=>p.faltaV)[0];
+    if(ruim && localStorage.getItem('cpl:avisoPrev') !== HOJE){
+      localStorage.setItem('cpl:avisoPrev', HOJE);
+      toast('📉 ' + rotDia(ruim.D) + ' (' + fmtD(ruim.D).slice(0,5) + ') vão faltar ' + ruim.faltaV + ' caminhão(ões) — ' + ruim.semCam.length + ' evento(s) sem caminhão. Contrate frete com antecedência.', 'Ver', ()=>irPara('logistica'));
+    }
+  }catch(e){}
+}
+/* ===== 5) TELA DE LOGÍSTICA NA TV ===== */
+function tvLogDados(){
+  let saem = []; try{ saem = retornosCaminhoes(); }catch(e){}
+  const parados = [], pvistos = new Set();
+  try{ const d = logItensDia(HOJE); Object.keys(d.vs).forEach(vid=>d.vs[vid].forEach(it=>{ if(it.tipo==='fica' || it.tipo==='local'){ parados.push({vid, it}); pvistos.add(vid+'|'+it.ev.id); } })); }catch(e){}
+  /* marcado "ficou no local" hoje: aparece como parado mesmo no dia da viagem */
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    Object.keys(ev.fica||{}).forEach(vid=>{ const ate = ficaAte(ev, vid); if(ate && HOJE <= ate && dia(ev.mont) <= HOJE && !pvistos.has(vid+'|'+ev.id)){ parados.push({vid, it:{ev, f:'mont'}}); pvistos.add(vid+'|'+ev.id); } });
+    Object.keys(ev.ficaD||{}).forEach(vid=>{ const ate = ficaAteD(ev, vid); if(ate && HOJE <= ate && dia(ev.desm) <= HOJE && !pvistos.has(vid+'|'+ev.id)){ parados.push({vid, it:{ev, f:'desm'}}); pvistos.add(vid+'|'+ev.id); } });
+  });
+  let carregar = []; try{ carregar = carregarNoDia(HOJE).filter(c=>c.hs.diaSaida !== HOJE); }catch(e){}
+  return {saem, parados, carregar};
+}
+function temLogTV(){ const d = tvLogDados(); return !!(d.saem.length || d.parados.length || d.carregar.length); }
+function tvLogHtml(){
+  const esc = _lgEsc;
+  const {saem, parados, carregar} = tvLogDados();
+  const stViagem = r => {
+    const l = LOCS[r.key];
+    if(l && Date.now() - (l.t||0) < 8*3600*1000){
+      if(l.chegou) return '<b style="color:#4cd98a">✅ NO LOCAL desde '+l.chegou+'</b>';
+      return '<b style="color:#6fb3ff">📡 EM VIAGEM'+(l.vel!=null?' · '+l.vel+' km/h':'')+'</b>';
+    }
+    const ag = new Date(); const agMin = ag.getHours()*60+ag.getMinutes();
+    const sm = minDe(r.saida);
+    return sm != null && agMin >= sm ? '<b style="color:#ffb25e">🚚 deve estar na rua (sem GPS)</b>' : '<b style="color:#aab4d4">sai às '+esc(r.saida)+'</b>';
+  };
+  const cartao = (c) => '<div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px 18px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+c+'</div>';
+  const sec = (t, corpo) => corpo ? '<div style="margin-bottom:18px"><div style="font-size:15px;font-weight:800;letter-spacing:.8px;color:#9fb0dd;margin-bottom:8px">'+t+'</div>'+corpo+'</div>' : '';
+  const bSaem = saem.map(r=>cartao(
+    '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
+    '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
+    '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+(r.volta?' · volta ≈'+esc(r.volta):'')+'</span>'+
+    '<span style="font-size:17px">'+stViagem(r)+'</span>')).join('');
+  const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid); const ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
+    return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
+      '<span style="flex:1;font-size:18px">no local de '+esc(nomeTV(p.it.ev.nome))+'</span>'+
+      '<span style="font-size:17px;color:#ffb25e">'+(ate?'fica até '+fmtD(ate).slice(0,5):'parado no local')+'</span>'); }).join('');
+  const bCar = carregar.map(c=>cartao('<b style="font-size:20px;min-width:210px">📦 '+esc(c.x.v.tipo+' '+c.x.v.placa)+'</b>'+
+    '<span style="flex:1;font-size:18px">'+esc(nomeTV(c.o.ev.nome))+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+'</span>'+
+    '<span style="font-size:17px;color:#cdd8f5">carregar hoje · sai '+rotDia(c.hs.diaSaida).toLowerCase()+' às '+esc(c.hs.saida)+'</span>')).join('');
+  return '<div style="font-size:26px;font-weight:800;margin-bottom:14px">🚚 LOGÍSTICA DE HOJE <span style="font-weight:500;color:#9fb0dd;font-size:19px">· '+fmtD(HOJE)+'</span></div>'+
+    sec('SAEM HOJE — ' + saem.length, bSaem)+
+    sec('FICARAM NO LOCAL — ' + parados.length, bPar)+
+    sec('CARREGAR HOJE PARA SAIR DEPOIS — ' + carregar.length, bCar)+
+    (!saem.length && !parados.length && !carregar.length ? '<div style="font-size:20px;color:#9fb0dd">Nenhum caminhão na rua hoje.</div>' : '');
 }
 
 /* LOGÍSTICA no card: motoristas da montagem e da desmontagem + horário de saída e chegada */
@@ -13823,8 +14164,9 @@ function carregarLeaflet(){
   return leafletPromessa;
 }
 function tvMostrarCards(){
-  const c = document.getElementById('tv-cols'), m = document.getElementById('tv-mapa-box');
-  if(c) c.style.display = ''; if(m) m.style.display = 'none';
+  const c = document.getElementById('tv-cols'), m = document.getElementById('tv-mapa-box'), lg = document.getElementById('tv-log');
+  if(c) c.style.display = ''; if(m) m.style.display = 'none'; if(lg) lg.style.display = 'none';
+  TV_TELA = 'cards';
 }
 function destinosTV(){
   const out = [];
@@ -13845,19 +14187,28 @@ function toggleMapaTV(){
   if(CONFIG.tvMapa === 'nao') tvMostrarCards();
   else { clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 1000); }
 }
+let TV_TELA = 'cards';
 async function tvAlternar(){
-  const box = document.getElementById('tv-mapa-box'), cols = document.getElementById('tv-cols');
+  const box = document.getElementById('tv-mapa-box'), cols = document.getElementById('tv-cols'), lg = document.getElementById('tv-log');
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
-  /* o mapa entra na rotação, a não ser que esteja desligado no botão 🗺 */
-  if(CONFIG.tvMapa === 'nao'){ tvMostrarCards(); tvCarrossel = setTimeout(tvAlternar, 40000); return; }
-  const noMapa = box && box.style.display !== 'none';
-  if(noMapa){ tvMostrarCards(); tvCarrossel = setTimeout(tvAlternar, 40000); return; }
-  const dest = destinosTV();
-  let pronto = false;
-  try{ await carregarLeaflet(); pronto = dest.length > 0 && !!(await coordGalpao()); }catch(e){}
-  if(!pronto){ tvCarrossel = setTimeout(tvAlternar, 40000); return; }
-  cols.style.display = 'none'; box.style.display = '';
-  try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); }
+  /* rotação: quadro → logística → mapa (o que não tiver conteúdo é pulado) */
+  const telas = ['cards'];
+  try{ if(temLogTV()) telas.push('log'); }catch(e){}
+  let dest = [];
+  if(CONFIG.tvMapa !== 'nao'){
+    dest = destinosTV();
+    let pronto = false;
+    try{ await carregarLeaflet(); pronto = dest.length > 0 && !!(await coordGalpao()); }catch(e){}
+    if(pronto) telas.push('mapa');
+  }
+  const prox = telas[(telas.indexOf(TV_TELA) + 1) % telas.length];
+  if(prox === TV_TELA){ tvCarrossel = setTimeout(tvAlternar, 40000); return; }
+  TV_TELA = prox;
+  cols.style.display = prox === 'cards' ? '' : 'none';
+  if(lg) lg.style.display = prox === 'log' ? '' : 'none';
+  box.style.display = prox === 'mapa' ? '' : 'none';
+  if(prox === 'log'){ try{ lg.innerHTML = tvLogHtml(); }catch(e){ tvMostrarCards(); } }
+  if(prox === 'mapa'){ try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); } }
   tvCarrossel = setTimeout(tvAlternar, 40000);
 }
 /* frentes de trabalho da operação: líderes das equipes + quantas pessoas no local */
@@ -14592,6 +14943,7 @@ async function salvar(){
   <button class="tv-x" onclick="fecharTV()" title="Sair (Esc)">✕</button>
   <div class="tv-top"><span id="tv-logo"></span><div class="tv-tit" id="tv-tit"></div><div class="tv-contagem" id="tv-contagem"></div><button id="tv-btn-mapa" onclick="toggleMapaTV()" style="border:1px solid #3a4a8a;background:#1a2550;color:#c9d2ee;border-radius:10px;padding:6px 12px;font:600 13px Segoe UI,Arial;cursor:pointer"></button><div class="tv-rel" id="tv-rel"></div></div>
   <div class="tv-cols" id="tv-cols"></div>
+  <div id="tv-log" style="flex:1;display:none;overflow:auto;min-height:0;padding:18px 30px;color:#fff"></div>
   <div id="tv-mapa-box" style="flex:1;position:relative;display:none;min-height:0">
     <div id="tv-mapa" style="position:absolute;inset:0"></div>
     <div id="tv-mapa-leg" style="position:absolute;top:14px;left:14px;z-index:500;background:rgba(15,23,51,.88);border-radius:12px;padding:12px 16px;font-size:17px;line-height:1.7"></div>
