@@ -1613,16 +1613,42 @@ function ehErroDeRede(e){
   const m = String((e && (e.message || e.msg)) || e || '');
   return (typeof navigator !== 'undefined' && navigator.onLine === false) || /Failed to fetch|NetworkError|Load failed|network|timed? ?out|ERR_|fetch failed|baixar a biblioteca/i.test(m);
 }
+function motivoCurto(E){
+  if(!E) return '';
+  const m = E.msg + ' ' + E.code + ' ' + E.det;
+  if(/42501|row-level|permission/i.test(m)) return 'sem permissão';
+  if(/42P01|does not exist|schema cache|Could not find/i.test(m)) return 'falta tabela';
+  if(/22P05|\\u0000|Unicode|surrogate/i.test(m)) return 'texto inválido';
+  if(/413|too large|payload/i.test(m)) return 'evento grande demais';
+  if(/23502|not-null|null value/i.test(m)) return 'campo vazio';
+  if(/53100|read-only|read only|disk|quota/i.test(m)) return 'banco cheio';
+  if(/57014|timeout/i.test(m)) return 'demorou demais';
+  if(/JWT|apikey|Invalid API key/i.test(m)) return 'chave recusada';
+  return E.code ? 'erro ' + E.code : 'erro';
+}
 function textoOff(){
   const n = pendentesLocais();
   if(typeof navigator !== 'undefined' && navigator.onLine === false) return '⚠ sem internet — ' + n + ' mudança(s) guardada(s) aqui';
-  if(ERRO_NUVEM && !ERRO_NUVEM.rede) return '⚠ a nuvem recusou — ' + n + ' mudança(s) aqui · toque para ver';
+  if(ERRO_NUVEM && !ERRO_NUVEM.rede) return '⚠ a nuvem recusou (' + motivoCurto(ERRO_NUVEM) + ') — ' + n + ' mudança(s) aqui · toque para ver';
   return '⚠ sem conexão com a nuvem — ' + n + ' mudança(s) aqui · toque para ver';
 }
 function falhaNuvem(e, onde){
   ERRO_NUVEM = {quando: new Date().toISOString(), onde, msg: String((e && (e.message || e.msg)) || e || 'erro desconhecido').slice(0,200), code: (e && e.code) || '', det: String((e && (e.details || e.hint)) || '').slice(0,160), rede: ehErroDeRede(e), falhas: (ERRO_NUVEM && ERRO_NUVEM.falhas) || []};
   try{ console.warn('nuvem (' + onde + ')', e); }catch(_){}
   marcarSync(false, textoOff());
+}
+const VERSAO_CENTRAL = '21/10 · nuvem 3';
+/* o Postgres recusa o evento INTEIRO se tiver \u0000 ou emoji cortado pela metade (comum em texto do Pipefy/PDF) */
+function limparTextoNuvem(s){
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+          .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, (m, a) => a || '');
+}
+function limparObjNuvem(o, prof){
+  if(prof > 40 || o == null || typeof o !== 'object') return 0;
+  let n = 0;
+  const fix = (k, v) => { if(typeof v === 'string'){ const c = limparTextoNuvem(v); if(c !== v){ o[k] = c; n++; } } else if(v && typeof v === 'object') n += limparObjNuvem(v, (prof||0) + 1); else if(typeof v === 'number' && !isFinite(v)){ o[k] = null; n++; } };
+  if(Array.isArray(o)) o.forEach((v, i) => fix(i, v)); else Object.keys(o).forEach(k => fix(k, o[k]));
+  return n;
 }
 /* o mesmo evento duas vezes na lista trava a gravação inteira ("cannot affect row a second time") */
 function dedupeEventos(){
@@ -1749,7 +1775,7 @@ async function nuvemCarregar(){
   ]);
   if(ev.error || cf.error) throw (ev.error || cf.error);
   if(ev.data) {
-    eventos = ev.data.map(r=>r.dados).filter(Boolean);
+    eventos = ev.data.map(r=>r.dados).filter(d=>d && d.id);
     idsConhecidos = new Set(eventos.map(e=>e.id));
     fotografarTudo();
   }
@@ -1777,7 +1803,10 @@ async function nuvemGravar(){
     ignorarRealtime = Date.now();
     dedupeEventos();
     const agora = new Date().toISOString();
-    const sujos = eventos.filter(evSujo);
+    let sujos = eventos.filter(evSujo);
+    sujos.forEach(ev=>{ try{ limparObjNuvem(ev, 0); }catch(_){} });
+    if(cadSujo()) try{ limparObjNuvem(cadastrosAtuais(), 0); }catch(_){}
+    sujos = eventos.filter(evSujo);
     for(let i=0; i<sujos.length; i+=25){
       const lote = sujos.slice(i, i+25), dg = lote.map(digital);
       const r = await sb.from('plan_eventos').upsert(lote.map(ev=>({id:ev.id, dados:ev, atualizado_em:agora})));
@@ -1840,6 +1869,8 @@ function explicarErroNuvem(E){
   if(E.rede) return 'A internet está ok, mas o computador não consegue falar com o Supabase. As causas mais comuns: <b>o projeto do Supabase está pausado</b> (plano grátis pausa sozinho — entre em supabase.com/dashboard, abra o projeto e clique em <b>Restore</b>) ou a rede/antivírus bloqueando <b>supabase.co</b>.';
   if(/42501|row-level security|permission denied|violates row-level/i.test(m)) return 'O Supabase está <b>sem permissão de gravar</b> nas tabelas. Copie o SQL abaixo e rode no Supabase em <b>SQL Editor → New query → Run</b>.';
   if(/42P01|does not exist|relation .* not exist|Could not find the table|schema cache/i.test(m)) return 'Faltam as tabelas da Central no Supabase. Copie o SQL abaixo e rode no <b>SQL Editor</b>.';
+  if(/22P05|\\u0000|Unicode|surrogate/i.test(m)) return 'Algum evento tinha um caractere invisível que o banco não aceita (comum em texto vindo do Pipefy ou de PDF). Agora a Central limpa isso sozinha antes de enviar — toque em <b>Enviar agora</b>.';
+  if(/53100|read-only|read only|disk|quota|exceed/i.test(m)) return 'O banco do Supabase está <b>cheio ou só leitura</b> (limite do plano grátis). Veja em supabase.com/dashboard → Settings → Usage.';
   if(/21000|cannot affect row a second time/i.test(m)) return 'Tinha evento repetido na lista — já corrigi sozinho. Toque em <b>Enviar agora</b>.';
   if(/413|too large|payload|entity/i.test(m)) return 'Um evento ficou grande demais para a nuvem (muitas fotos/anexos). Os outros sobem normalmente; abra o evento da lista e tire anexos pesados.';
   if(/57014|statement timeout|canceling statement/i.test(m)) return 'O Supabase demorou demais para responder. Agora a gravação vai em lotes menores — toque em <b>Enviar agora</b>.';
@@ -1867,7 +1898,7 @@ function abrirDiagNuvem(){
     '</div>'+
     '<div id="diag-nuvem-res" style="margin-top:10px;font-size:12.5px"></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">Nada se perde: o que você muda fica guardado neste computador e sobe sozinho quando a nuvem responder (tento de novo a cada 30 segundos).</div>';
-  lgModal('☁ Conexão com a nuvem', NUVEM.url.replace('https://',''), corpo);
+  lgModal('☁ Conexão com a nuvem', NUVEM.url.replace('https://','') + ' · versão ' + VERSAO_CENTRAL, corpo);
 }
 async function forcarEnvioNuvem(){
   const res = document.getElementById('diag-nuvem-res'); if(res) res.innerHTML = '⏳ Enviando…';
@@ -1891,7 +1922,7 @@ async function testarNuvem(){
     else ok('ler da nuvem (' + (Date.now() - t0) + ' ms)');
   }catch(e){ ruim('ler eventos: ' + e.message); falhaNuvem(e, 'teste de leitura'); put(); return; }
   put();
-  for(const [tab, linha, rot] of [['plan_eventos', {id:'__teste_conexao', dados:null, atualizado_em:new Date().toISOString()}, 'gravar eventos'], ['plan_config', {chave:'teste:conexao', dados:{quando:new Date().toISOString()}, atualizado_em:new Date().toISOString()}, 'gravar cadastros']]){
+  for(const [tab, linha, rot] of [['plan_eventos', {id:'__teste_conexao', dados:{teste:true}, atualizado_em:new Date().toISOString()}, 'gravar eventos'], ['plan_config', {chave:'teste:conexao', dados:{quando:new Date().toISOString()}, atualizado_em:new Date().toISOString()}, 'gravar cadastros']]){
     try{
       ignorarRealtime = Date.now();
       const r = await sb.from(tab).upsert(linha);
@@ -1915,7 +1946,7 @@ function nuvemEscutar(){
       if(Date.now() - ignorarRealtime < 2500) return; /* eco da própria gravação */
       if(p.eventType==='DELETE'){
         if(p.old && p.old.id){ eventos = eventos.filter(e=>e.id!==p.old.id); idsConhecidos.delete(p.old.id); }
-      } else if(p.new && p.new.dados){
+      } else if(p.new && p.new.dados && p.new.dados.id){
         const d = p.new.dados, i = eventos.findIndex(e=>e.id===d.id);
         if(i>=0 && evSujo(eventos[i])) return;   /* mudança nossa ainda não subiu: a nossa vale */
         if(i>=0) eventos[i] = d; else eventos.push(d);
