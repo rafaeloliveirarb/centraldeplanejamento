@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 :root{
   --bg:#eef1f6;
@@ -577,7 +577,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
 
 <div style="display:flex;align-items:center;gap:12px">
   <nav class="tabbar" id="tabs" style="flex:1"></nav>
-  <span class="syncpill off" id="sync-status" title="Estado do quadro compartilhado">carregando…</span>
+  <span class="syncpill off" id="sync-status" title="Estado do quadro compartilhado — toque para ver detalhes" style="cursor:pointer" onclick="abrirDiagNuvem()">carregando…</span>
 </div>
 
 <div class="wrap">
@@ -1603,7 +1603,41 @@ const NUVEM_ANTIGO = {
   url: 'https://vybxkraqydsjrdvyxknp.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5YnhrcmFxeWRzanJkdnl4a25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjM0MzgsImV4cCI6MjEwNDQzOTQzOH0.QszdsS6tiYcqssMxKwQjfzlIDhqc5emzXKmw8vyZCxw'
 };
-let sb = null, nuvemOk = false, sincronizando = false;
+let sb = null, nuvemOk = false, sincronizando = false, ERRO_NUVEM = null, GRAVAR_DE_NOVO = false;
+function carregarSupabaseLib(){
+  if(window.supabase) return Promise.resolve();
+  const urls = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js', 'https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'];
+  return urls.reduce((p, u)=>p.catch(()=>new Promise((ok, erro)=>{ if(window.supabase) return ok(); const s = document.createElement('script'); s.src = u; s.onload = ()=>window.supabase ? ok() : erro(new Error('biblioteca do Supabase não carregou')); s.onerror = ()=>erro(new Error('não consegui baixar a biblioteca do Supabase (' + u.split('/')[2] + ')')); setTimeout(()=>erro(new Error('não consegui baixar a biblioteca do Supabase (demorou demais)')), 10000); document.head.appendChild(s); })), Promise.reject());
+}
+function ehErroDeRede(e){
+  const m = String((e && (e.message || e.msg)) || e || '');
+  return (typeof navigator !== 'undefined' && navigator.onLine === false) || /Failed to fetch|NetworkError|Load failed|network|timed? ?out|ERR_|fetch failed|baixar a biblioteca/i.test(m);
+}
+function textoOff(){
+  const n = pendentesLocais();
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return '⚠ sem internet — ' + n + ' mudança(s) guardada(s) aqui';
+  if(ERRO_NUVEM && !ERRO_NUVEM.rede) return '⚠ a nuvem recusou — ' + n + ' mudança(s) aqui · toque para ver';
+  return '⚠ sem conexão com a nuvem — ' + n + ' mudança(s) aqui · toque para ver';
+}
+function falhaNuvem(e, onde){
+  ERRO_NUVEM = {quando: new Date().toISOString(), onde, msg: String((e && (e.message || e.msg)) || e || 'erro desconhecido').slice(0,200), code: (e && e.code) || '', det: String((e && (e.details || e.hint)) || '').slice(0,160), rede: ehErroDeRede(e), falhas: (ERRO_NUVEM && ERRO_NUVEM.falhas) || []};
+  try{ console.warn('nuvem (' + onde + ')', e); }catch(_){}
+  marcarSync(false, textoOff());
+}
+/* o mesmo evento duas vezes na lista trava a gravação inteira ("cannot affect row a second time") */
+function dedupeEventos(){
+  const por = new Map(); let dup = 0;
+  eventos.forEach(e=>{
+    if(!e || !e.id){ dup++; return; }
+    const j = por.get(e.id);
+    if(!j){ por.set(e.id, e); return; }
+    dup++;
+    const q = x => (x.hist && x.hist[0] && x.hist[0].q) || '';
+    if(q(e) >= q(j)) por.set(e.id, e);
+  });
+  if(dup) eventos = [...por.values()];
+  return dup;
+}
 /* ---- funcionar sem internet: o que já está na nuvem fica anotado (uma "impressão digital" por evento);
    o que mudou aqui desde então sobe quando a internet volta, sem apagar o que os outros mudaram ---- */
 function canon(o){ return JSON.stringify(o, (k,v)=> (v && typeof v === 'object' && !Array.isArray(v)) ? Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x], a), {}) : v); }
@@ -1651,7 +1685,7 @@ async function tentarReconectar(){
   reconectando = true;
   try{
     if(!window.supabase){
-      await new Promise((ok, erro)=>{ const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'; s.onload = ok; s.onerror = erro; document.head.appendChild(s); });
+      await carregarSupabaseLib();
     }
     if(!sb) sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
     const locais = eventos.slice(), cadLocal = JSON.parse(JSON.stringify(cadastrosAtuais()));
@@ -1665,23 +1699,23 @@ async function tentarReconectar(){
     try{ await enviarFilaRecados(); await carregarRecados(); }catch(e){}
     replanejar(true); renderQuadro(); try{ renderCadastros(); }catch(e){}
     if(m.subir) toast('☁ Internet de volta — ' + m.subir + ' mudança(s) feitas sem internet foram enviadas.' + (m.conflitos.length ? ' Atenção: ' + m.conflitos.join(', ') + ' também foi(ram) mudado(s) em outro aparelho — ficou a versão deste.' : ''));
-  }catch(e){ marcarSync(false, '⚠ sem internet — ' + pendentesLocais() + ' mudança(s) guardada(s) aqui'); }
+  }catch(e){ falhaNuvem(e, 'reconectar'); }
   finally{ reconectando = false; }
 }
 if(typeof window !== 'undefined' && window.addEventListener && !window.__semClimaAuto){
   window.addEventListener('online', ()=>setTimeout(tentarReconectar, 1500));
   window.addEventListener('offline', ()=>{ nuvemOk = false; marcarSync(false, '⚠ sem internet — as mudanças ficam guardadas aqui'); });
-  setInterval(()=>{ if(!nuvemOk || (sb && pendentesLocais() && !sincronizando)) { if(!nuvemOk) tentarReconectar(); } }, 30000);
+  setInterval(()=>{ if(window.__modoMotorista) return; if(!nuvemOk) tentarReconectar(); else if(sb && !sincronizando && pendentesLocais()) nuvemGravar(); }, 30000);
 }
 let idsConhecidos = new Set();   /* eventos que já existem na nuvem */
 let ignorarRealtime = 0;         /* evita eco das próprias gravações */
 
-function marcarSync(ok, texto){
+function marcarSync(ok, texto, aviso){
   nuvemOk = ok;
   const el2 = document.getElementById('sync-status');
   if(el2){
     el2.textContent = texto || (ok ? '☁ compartilhado' : '⚠ só neste aparelho');
-    el2.className = 'syncpill ' + (ok ? 'on' : 'off');
+    el2.className = 'syncpill ' + (ok && !aviso ? 'on' : 'off');
   }
 }
 /* mudança de Supabase: na primeira vez, com o novo vazio, puxa tudo do antigo sozinho */
@@ -1736,36 +1770,143 @@ async function nuvemCarregar(){
 }
 async function nuvemGravar(){
   if(!sb || !nuvemOk) return;
+  if(sincronizando){ GRAVAR_DE_NOVO = true; return; }
   sincronizando = true;
+  const falhas = [];
   try{
     ignorarRealtime = Date.now();
+    dedupeEventos();
     const agora = new Date().toISOString();
-    const linhas = eventos.filter(evSujo).map(e=>({id:e.id, dados:e, atualizado_em:agora}));
-    const idsAgora = new Set(eventos.map(e=>e.id));
+    const sujos = eventos.filter(evSujo);
+    for(let i=0; i<sujos.length; i+=25){
+      const lote = sujos.slice(i, i+25), dg = lote.map(digital);
+      const r = await sb.from('plan_eventos').upsert(lote.map(ev=>({id:ev.id, dados:ev, atualizado_em:agora})));
+      if(!r.error){ lote.forEach((ev,k)=>{ SYNC_BASE.ev[ev.id] = dg[k]; idsConhecidos.add(ev.id); }); continue; }
+      if(ehErroDeRede(r.error)) throw r.error;
+      /* um evento ruim não pode travar os outros: sobe um por um */
+      for(let k=0; k<lote.length; k++){
+        const ev = lote[k];
+        const r1 = await sb.from('plan_eventos').upsert({id:ev.id, dados:ev, atualizado_em:agora});
+        if(r1.error){ if(ehErroDeRede(r1.error)) throw r1.error; falhas.push({id:ev.id, nome:ev.nome, msg:r1.error.message, code:r1.error.code || ''}); }
+        else { SYNC_BASE.ev[ev.id] = dg[k]; idsConhecidos.add(ev.id); }
+      }
+    }
+    const idsAgora = new Set(eventos.map(x=>x.id));
     const sumiram = [...idsConhecidos].filter(id=>!idsAgora.has(id));
-    if(linhas.length){
-      const r = await sb.from('plan_eventos').upsert(linhas);
-      if(r.error) throw r.error;
-    }
-    if(sumiram.length){
-      const r2 = await sb.from('plan_eventos').delete().in('id', sumiram);
+    for(let i=0; i<sumiram.length; i+=50){
+      const ch = sumiram.slice(i, i+50);
+      const r2 = await sb.from('plan_eventos').delete().in('id', ch);
       if(r2.error) throw r2.error;
+      ch.forEach(id=>{ idsConhecidos.delete(id); delete SYNC_BASE.ev[id]; });
     }
-    idsConhecidos = idsAgora;
     if(cadSujo()){
-      const r3 = await sb.from('plan_config').upsert({
-        chave:'cadastros',
-        dados:{produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA},
-        atualizado_em: agora
-      });
+      const dgc = digital(cadastrosAtuais());
+      const r3 = await sb.from('plan_config').upsert({chave:'cadastros', dados:{produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA}, atualizado_em: agora});
       if(r3.error) throw r3.error;
+      SYNC_BASE.cad = dgc;
     }
-    marcarBase();
-    marcarSync(true);
+    try{ Store.set('cpl:base', SYNC_BASE); }catch(_){}
+    if(falhas.length){
+      ERRO_NUVEM = {quando: agora, onde:'gravar eventos', msg: falhas[0].msg, code: falhas[0].code, det:'', rede:false, falhas};
+      marcarSync(true, '⚠ ' + falhas.length + ' evento(s) não subiram · toque para ver', true);
+    } else { ERRO_NUVEM = null; marcarSync(true); }
   }catch(e){
-    nuvemOk = false;
-    marcarSync(false, '⚠ sem internet — ' + pendentesLocais() + ' mudança(s) guardada(s) aqui');
-  }finally{ sincronizando = false; }
+    falhaNuvem(e, 'gravar');
+  }finally{
+    sincronizando = false;
+    if(GRAVAR_DE_NOVO){ GRAVAR_DE_NOVO = false; setTimeout(nuvemGravar, 800); }
+  }
+}
+/* ---- diagnóstico da nuvem: toque no aviso amarelo ---- */
+const SQL_PERMISSOES = `-- Central de Planejamento: tabelas e permissões (pode rodar mais de uma vez)
+create table if not exists public.plan_eventos (id text primary key, dados jsonb, atualizado_em timestamptz default now());
+create table if not exists public.plan_config (chave text primary key, dados jsonb, atualizado_em timestamptz default now());
+alter table public.plan_eventos enable row level security;
+alter table public.plan_config enable row level security;
+drop policy if exists "central_eventos_tudo" on public.plan_eventos;
+create policy "central_eventos_tudo" on public.plan_eventos for all to anon, authenticated using (true) with check (true);
+drop policy if exists "central_config_tudo" on public.plan_config;
+create policy "central_config_tudo" on public.plan_config for all to anon, authenticated using (true) with check (true);
+grant select, insert, update, delete on public.plan_eventos, public.plan_config to anon, authenticated;
+do $$ begin
+  begin alter publication supabase_realtime add table public.plan_eventos; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.plan_config; exception when others then null; end;
+end $$;`;
+function explicarErroNuvem(E){
+  if(!E) return '';
+  const m = (E.msg + ' ' + E.code + ' ' + E.det);
+  if(typeof navigator !== 'undefined' && navigator.onLine === false) return 'O computador está sem internet. Assim que voltar, as mudanças sobem sozinhas.';
+  if(/biblioteca/i.test(m)) return 'O navegador não conseguiu baixar a biblioteca do Supabase (rede da empresa ou antivírus bloqueando o jsdelivr/unpkg). Tente em outra rede ou libere esses sites.';
+  if(E.rede) return 'A internet está ok, mas o computador não consegue falar com o Supabase. As causas mais comuns: <b>o projeto do Supabase está pausado</b> (plano grátis pausa sozinho — entre em supabase.com/dashboard, abra o projeto e clique em <b>Restore</b>) ou a rede/antivírus bloqueando <b>supabase.co</b>.';
+  if(/42501|row-level security|permission denied|violates row-level/i.test(m)) return 'O Supabase está <b>sem permissão de gravar</b> nas tabelas. Copie o SQL abaixo e rode no Supabase em <b>SQL Editor → New query → Run</b>.';
+  if(/42P01|does not exist|relation .* not exist|Could not find the table|schema cache/i.test(m)) return 'Faltam as tabelas da Central no Supabase. Copie o SQL abaixo e rode no <b>SQL Editor</b>.';
+  if(/21000|cannot affect row a second time/i.test(m)) return 'Tinha evento repetido na lista — já corrigi sozinho. Toque em <b>Enviar agora</b>.';
+  if(/413|too large|payload|entity/i.test(m)) return 'Um evento ficou grande demais para a nuvem (muitas fotos/anexos). Os outros sobem normalmente; abra o evento da lista e tire anexos pesados.';
+  if(/57014|statement timeout|canceling statement/i.test(m)) return 'O Supabase demorou demais para responder. Agora a gravação vai em lotes menores — toque em <b>Enviar agora</b>.';
+  if(/JWT|apikey|Invalid API key|401|403/i.test(m)) return 'A chave do Supabase foi recusada. Confira a URL e a chave anon do projeto novo.';
+  if(/53100|disk|read-only|read only|quota|exceed/i.test(m)) return 'O banco do Supabase está <b>cheio ou só leitura</b> (limite do plano grátis). Veja em supabase.com/dashboard → Settings → Usage.';
+  return 'O Supabase devolveu um erro. Use <b>Testar conexão</b> e me mande um print desta tela se não resolver.';
+}
+function abrirDiagNuvem(){
+  const E = ERRO_NUVEM, n = pendentesLocais();
+  const pend = eventos.filter(evSujo).slice(0, 12).map(e=>_lgEsc(nomeTV(e.nome).slice(0,40))).join(' · ');
+  const corpo =
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<div style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><div style="font-size:20px;font-weight:800;color:'+(nuvemOk && !E ? '#0f8a4d' : '#c0392b')+'">'+(nuvemOk && !E ? '☁ conectado' : nuvemOk ? '☁ conectado, com falha' : '⚠ desconectado')+'</div><div style="font-size:11px;color:var(--muted);font-weight:700">NUVEM</div></div>'+
+      '<div style="flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><div style="font-size:20px;font-weight:800">'+n+'</div><div style="font-size:11px;color:var(--muted);font-weight:700">MUDANÇAS SÓ NESTE APARELHO</div></div>'+
+    '</div>'+
+    (E ? '<div class="alert" style="margin:0 0 10px;border-left:4px solid #c0392b"><b>O que está acontecendo:</b> '+explicarErroNuvem(E)+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:6px;word-break:break-word">Erro técnico ('+_lgEsc(E.onde||'')+', '+new Date(E.quando).toLocaleTimeString('pt-BR')+'): '+_lgEsc(E.msg)+(E.code ? ' · código '+_lgEsc(E.code) : '')+(E.det ? ' · '+_lgEsc(String(E.det).slice(0,160)) : '')+'</div>'+
+      ((E.falhas||[]).length ? '<div style="font-size:12px;margin-top:6px"><b>Eventos que não subiram:</b> '+E.falhas.slice(0,8).map(f=>'<a href="#" onclick="event.preventDefault();fechar(\'ov-lg\');verEvento(\''+f.id+'\')">'+_lgEsc(nomeTV(f.nome||f.id).slice(0,30))+'</a>').join(' · ')+'</div>' : '')+'</div>'
+      : (n ? '' : '<div class="alert green" style="margin:0 0 10px">✅ Tudo enviado para a nuvem.</div>'))+
+    (pend ? '<div style="font-size:12px;color:var(--muted);margin-bottom:10px"><b>Esperando para subir:</b> '+pend+(eventos.filter(evSujo).length > 12 ? ' …' : '')+(cadSujo() ? ' · cadastros (equipes, caminhões, motoristas)' : '')+'</div>' : '')+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="mini" style="font-weight:800;background:#1c4fa0;color:#fff;border-color:#1c4fa0" onclick="forcarEnvioNuvem()">🔄 Enviar agora</button>'+
+      '<button class="mini" style="font-weight:800" onclick="testarNuvem()">🧪 Testar conexão</button>'+
+      '<button class="mini" onclick="copiarZap(encodeURIComponent(SQL_PERMISSOES),\'SQL\')">📋 Copiar SQL de permissões</button>'+
+    '</div>'+
+    '<div id="diag-nuvem-res" style="margin-top:10px;font-size:12.5px"></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">Nada se perde: o que você muda fica guardado neste computador e sobe sozinho quando a nuvem responder (tento de novo a cada 30 segundos).</div>';
+  lgModal('☁ Conexão com a nuvem', NUVEM.url.replace('https://',''), corpo);
+}
+async function forcarEnvioNuvem(){
+  const res = document.getElementById('diag-nuvem-res'); if(res) res.innerHTML = '⏳ Enviando…';
+  if(!nuvemOk) await tentarReconectar(); else await nuvemGravar();
+  abrirDiagNuvem();
+  const n = pendentesLocais();
+  toast(n ? '⚠ Ainda ' + n + ' mudança(s) sem subir — veja o motivo na tela.' : '☁ Tudo enviado para a nuvem.');
+}
+async function testarNuvem(){
+  const res = document.getElementById('diag-nuvem-res');
+  const L = [], put = () => { if(res) res.innerHTML = L.join('<br>'); };
+  const ok = t => L.push('✅ ' + t), ruim = t => L.push('<b style="color:#c0392b">❌ ' + t + '</b>');
+  L.push('⏳ testando…'); put(); L.length = 0;
+  L.push(typeof navigator !== 'undefined' && navigator.onLine === false ? '<b style="color:#c0392b">❌ navegador diz que está sem internet</b>' : '✅ internet do computador'); put();
+  try{ await carregarSupabaseLib(); ok('biblioteca do Supabase carregada'); }catch(e){ ruim(e.message); put(); return; }
+  try{ if(!sb) sb = window.supabase.createClient(NUVEM.url, NUVEM.key); }catch(e){ ruim('não criei o cliente: ' + e.message); put(); return; }
+  const t0 = Date.now();
+  try{
+    const r = await sb.from('plan_eventos').select('id').limit(1);
+    if(r.error){ ruim('ler eventos: ' + r.error.message + (r.error.code ? ' (' + r.error.code + ')' : '')); falhaNuvem(r.error, 'teste de leitura'); }
+    else ok('ler da nuvem (' + (Date.now() - t0) + ' ms)');
+  }catch(e){ ruim('ler eventos: ' + e.message); falhaNuvem(e, 'teste de leitura'); put(); return; }
+  put();
+  for(const [tab, linha, rot] of [['plan_eventos', {id:'__teste_conexao', dados:null, atualizado_em:new Date().toISOString()}, 'gravar eventos'], ['plan_config', {chave:'teste:conexao', dados:{quando:new Date().toISOString()}, atualizado_em:new Date().toISOString()}, 'gravar cadastros']]){
+    try{
+      ignorarRealtime = Date.now();
+      const r = await sb.from(tab).upsert(linha);
+      if(r.error){ ruim(rot + ': ' + r.error.message + (r.error.code ? ' (' + r.error.code + ')' : '')); falhaNuvem(r.error, 'teste — ' + rot); }
+      else { ok(rot + ' na nuvem'); if(tab === 'plan_eventos') try{ await sb.from(tab).delete().eq('id', '__teste_conexao'); }catch(_){} }
+    }catch(e){ ruim(rot + ': ' + e.message); falhaNuvem(e, 'teste — ' + rot); }
+    put();
+  }
+  try{
+    const tam = JSON.stringify({produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA}).length;
+    const maior = eventos.map(e=>({e, t: JSON.stringify(e).length})).sort((a,b)=>b.t-a.t)[0];
+    L.push('📦 cadastros: ' + Math.round(tam/1024) + ' KB' + (maior ? ' · maior evento: ' + _lgEsc(nomeTV(maior.e.nome).slice(0,30)) + ' (' + Math.round(maior.t/1024) + ' KB)' : ''));
+  }catch(_){}
+  put();
+  if(L.every(x=>!/❌/.test(x))){ L.push('➡ Conexão ok. Toque em <b>Enviar agora</b>.'); put(); }
 }
 function nuvemEscutar(){
   if(!sb) return;
@@ -5540,8 +5681,9 @@ function limparDuplicados(){
   if(!gs.length){ toast('Nenhum evento duplicado encontrado.'); return; }
   const n = gs.reduce((s,g)=>s+g.saem.length, 0);
   if(!confirm('Achei ' + n + ' cópia(s) repetida(s) criadas hoje:\n\n' + gs.slice(0,15).map(g=>'• ' + g.fica.nome + ' (' + (g.saem.length+1) + 'x)').join('\n') + (gs.length>15?'\n…':'') + '\n\nFica o evento que já estava no programa; saem só as cópias de hoje. Continuar?')) return;
-  const sair = new Set(); gs.forEach(g=>g.saem.forEach(x=>{ sair.add(x.id); if(x.pipefyId && !g.fica.pipefyId) g.fica.pipefyId = x.pipefyId; }));
-  eventos = eventos.filter(x=>!sair.has(x.id));
+  const sair = new Set(); gs.forEach(g=>g.saem.forEach(x=>{ if(x !== g.fica) sair.add(x); if(x.pipefyId && !g.fica.pipefyId) g.fica.pipefyId = x.pipefyId; }));
+  eventos = eventos.filter(x=>!sair.has(x));   /* tira a cópia (o objeto), nunca o evento que fica — mesmo se tiverem o mesmo id */
+  dedupeEventos();
   salvar(); renderQuadro(); renderCadastros();
   toast('🧹 ' + n + ' cópia(s) repetida(s) removida(s).');
 }
@@ -15143,7 +15285,7 @@ async function salvar(){
     agendarSync();                            /* e mantém a agenda em dia sozinha */
     agendarSync();                           /* e mantém a agenda em dia sozinha */
   } else if(typeof window !== 'undefined' && !window.__semClimaAuto){
-    marcarSync(false, '⚠ sem internet — ' + pendentesLocais() + ' mudança(s) guardada(s) aqui');
+    marcarSync(false, textoOff());
   }
 }
 
@@ -15155,6 +15297,7 @@ async function salvar(){
   if(d && d.eventos && d.CONFIG){ eventos=d.eventos; fotografarTudo(); produtores=d.produtores; equipes=d.equipes; motoristas=d.motoristas; veiculos=d.veiculos; catalogo=d.catalogo; CONFIG=d.CONFIG; if(d.APRENDA) APRENDA=d.APRENDA; }
   /* 2) nuvem manda: quadro compartilhado entre todos */
   try{
+    if(!window.supabase){ try{ await carregarSupabaseLib(); }catch(e){} }
     if(window.supabase && NUVEM.url){
       sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
       const locais = eventos.slice(), cadLocal = JSON.parse(JSON.stringify(cadastrosAtuais()));
@@ -15162,6 +15305,7 @@ async function salvar(){
       await migrarDoAntigoSeVazio();
       await nuvemCarregar();
       if(window.__modoMotorista){ marcarSync(true); paginaMotorista(); return; }
+      dedupeEventos();
       /* primeira vez com a nuvem vazia: sobe o que já existe neste aparelho */
       if(!eventos.length && locais.length){
         eventos = locais;
@@ -15179,7 +15323,7 @@ async function salvar(){
           setTimeout(()=>toast('☁ ' + m.subir + ' mudança(s) feitas sem internet foram enviadas para a nuvem.' + (m.conflitos.length ? ' ' + m.conflitos.join(', ') + ' também mudou em outro aparelho — ficou a versão deste.' : '')), 900); }
         else marcarBase();
       } else marcarBase();
-      marcarSync(true);
+      if(!ERRO_NUVEM) marcarSync(true);
       nuvemEscutar(); escutando = true;
       carregarRecados();
       setTimeout(()=>{ try{ let m = 0; try{ m = corrigirAnosErrados(); }catch(e){} try{ const r = repararNomesDescricao(null); if(r){ m += r; toast('✏️ ' + r + ' evento(s) estavam com a descrição do Pipefy no lugar do nome — o nome voltou.'); }
@@ -15200,10 +15344,9 @@ async function salvar(){
       sincronizarAgenda();
       setInterval(sincronizarAgenda, 300000);
       await Store.set('cpl:dados', {eventos, produtores, equipes, motoristas, veiculos, catalogo, CONFIG, APRENDA});
-    } else { marcarSync(false, '⚠ sem internet — usando a cópia deste aparelho'); }
+    } else { falhaNuvem(new Error('não consegui baixar a biblioteca do Supabase'), 'abrir'); setTimeout(tentarReconectar, 3000); }
   }catch(e){
-    nuvemOk = false;
-    marcarSync(false, '⚠ sem internet — usando a cópia deste aparelho; as mudanças sobem quando voltar');
+    falhaNuvem(e, 'abrir');
   }
   equipes.forEach(e=>{ if(!e.membros) e.membros = MEMBROS_PADRAO[e.nome] ? [...MEMBROS_PADRAO[e.nome]] : []; if(e.membros.length) e.montadores = e.membros.length; if(e.carro===undefined) e.carro = CARROS_PADRAO[e.nome] || ''; });
   /* dado antigo: o "contato do cliente" podia ser o nome OU o telefone */
@@ -15227,6 +15370,8 @@ async function salvar(){
   if(CONFIG.escalaUrl || CONFIG.escalaKey){ CONFIG.escalaUrl = ''; CONFIG.escalaKey = ''; }
   /* repetidos que já entraram (mesmo evento com e sem número): fica o que tem número */
   (function(){
+    dedupeEventos();   /* mesmo id duas vezes: fica uma cópia (antes as duas sumiam) */
+    if(!nuvemOk && ERRO_NUVEM) marcarSync(false, textoOff());
     const porBase = {};
     eventos.forEach(e=>{ const nb = nomeBase(e.nome); if(nb) (porBase[nb]=porBase[nb]||[]).push(e); });
     const remover = new Set();
@@ -15241,7 +15386,7 @@ async function salvar(){
         ['equipe','produtor','respNome','respTel','fase','km'].forEach(c=>{ if(!fica[c] && dup[c]) fica[c] = dup[c]; });
         if((!fica.itens || !fica.itens.length) && dup.itens && dup.itens.length) fica.itens = dup.itens;
         if(!fica.mont && dup.mont){ fica.mont = dup.mont; fica.montFim = dup.montFim; fica.evt = dup.evt; fica.evtFim = dup.evtFim; fica.desm = dup.desm; fica.desmFim = dup.desmFim; }
-        remover.add(dup.id);
+        if(dup.id !== fica.id) remover.add(dup.id);
       });
     });
     if(remover.size){
