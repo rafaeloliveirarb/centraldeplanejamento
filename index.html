@@ -749,7 +749,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
       <p class="sub">Agregado anda sempre com o próprio caminhão e é priorizado nos eventos mais distantes. Carreta só sai com Jesse ou Geovane.</p>
       <table><thead><tr><th>Motorista</th><th>Vínculo</th><th>Veículos que dirige</th><th>Situação</th><th></th></tr></thead>
       <tbody id="tb-motoristas"></tbody></table>
-      <div style="margin-top:16px"><button class="mini" onclick="addMotorista()">+ Adicionar motorista</button></div>
+      <div style="margin-top:16px"><button class="mini" style="font-weight:800" onclick="abrirCadMotorista()">➕ Cadastrar motorista</button></div>
     </div>
   </section>
 
@@ -8362,6 +8362,7 @@ function htmlFrota(){
       '<td><button class="mini" style="'+(v.manut?'background:#c0392b;color:#fff;border-color:#c0392b':'')+'" onclick="toggleManutVeic(\''+v.id+'\')">'+(v.manut?'🔧 em manutenção':'colocar em manutenção')+'</button></td></tr>'; }).join('');
   const mrows = motoristas.map(m=>'<span style="display:inline-flex;gap:6px;align-items:center;margin:4px 14px 4px 0;font-size:12.5px">🧑‍✈️ <b>'+_lgEsc(m.nome)+'</b> CNH vence <input type="date" value="'+(m.cnhVenc||'')+'" style="'+inp+corD(m.cnhVenc)+'" onchange="setMotCad(\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\'cnhVenc\',this.value)"></span>').join('');
   return '<details class="lgbox"><summary><h3 style="display:inline">🔧 Frota — manutenção e documentos</h3>'+(A.length ? ' <b style="color:'+(A.some(a=>a.sev===3)?'#c0392b':'#e08a1e')+'">· '+A.length+' alerta(s)</b>' : '')+'</summary>'+
+    '<div style="display:flex;gap:8px;margin:8px 0"><button class="mini" style="font-weight:800" onclick="abrirCadVeiculo()">➕ Cadastrar caminhão</button><button class="mini" style="font-weight:800" onclick="abrirCadMotorista()">➕ Cadastrar motorista</button></div>'+
     (A.length ? '<div style="margin:8px 0;font-size:12.5px;line-height:1.7">'+A.map(a=>'<div style="color:'+(a.sev===3?'#c0392b':'#a86412')+';font-weight:700">'+(a.sev===3?'🔴 ':'🟡 ')+_lgEsc(a.txt)+'</div>').join('')+'</div>' : '')+
     '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="text-align:left;color:var(--muted);font-size:11px"><th>Caminhão</th><th>Km no painel (hoje)</th><th>Km agora (estimado)</th><th>Próxima troca de óleo</th><th>Próxima revisão</th><th>Licenciamento</th><th>Seguro</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div style="margin-top:10px">'+mrows+'</div>'+
@@ -12554,7 +12555,7 @@ function renderCadastros(){
       '<button class="mini" style="'+(v.manut?'border-color:var(--green);color:var(--green)':'border-color:#b47f08;color:#b47f08')+'" onclick="toggleManutencao(\''+v.id+'\')">'+(v.manut?'✔ Voltar à frota':'🔧 Manutenção')+'</button> '+
       '<button class="mini danger" onclick="removerVeiculoFrota(\''+v.id+'\')">Excluir</button></td></tr>';
   }).join('')+
-  '<tr><td colspan="8"><button class="mini" onclick="addVeiculoFrota()">+ Adicionar veículo</button></td></tr>';
+  '<tr><td colspan="8"><button class="mini" style="font-weight:800" onclick="abrirCadVeiculo()">➕ Cadastrar caminhão</button></td></tr>';
 
   document.getElementById('tb-materiais').innerHTML = catalogo.map((c,i)=>
     '<tr'+(c.pendente||(!c.peso&&!c.vol)?' style="background:#fdf7ee"':'')+'><td><b>'+c.nome+'</b>'+((c.pendente||(!c.peso&&!c.vol))?' <span class="tag" style="color:#b47f08">preencher peso e volume</span>':(c.estimado?' <span class="tag" style="color:#5d7bab">estimado pela área, confira</span>':''))+'</td><td><span class="tag">'+c.cat+'</span></td><td>'+c.un+'</td>'+
@@ -12703,6 +12704,105 @@ function toggleManutencao(id){
     ? '🔧 ' + v.tipo + ' ' + v.placa + ' em manutenção: sai das sugestões, e os eventos que contavam com ele vão acusar pendência.'
     : v.tipo + ' ' + v.placa + ' voltou à frota.');
 }
+/* ===== CADASTRO FÁCIL DE CAMINHÃO E MOTORISTA (formulário em vez de prompt) ===== */
+const CAD_VEIC_PADRAO = {
+  'TOCO':   {c:6.70, l:2.50, a:2.55, vol:42.7, peso:9760},
+  'TRUCK':  {c:8.50, l:2.50, a:2.50, vol:53.0, peso:12000},
+  'CARRETA':{c:13.90,l:2.44, a:2.80, vol:95,   peso:27000},
+  'BAÚ':    {c:6.90, l:2.45, a:2.30, vol:39.0, peso:7680},
+  'F-4000': {c:4.20, l:2.15, a:2.00, vol:18.0, peso:4000}
+};
+function cadVeicPadrao(){
+  const t = document.getElementById('cv-tipo').value, p = CAD_VEIC_PADRAO[t];
+  if(!p) return;
+  [['cv-c',p.c],['cv-l',p.l],['cv-a',p.a],['cv-vol',p.vol],['cv-peso',p.peso]].forEach(([id,v])=>{ const e = document.getElementById(id); if(e) e.value = v; });
+}
+function abrirCadVeiculo(){
+  const fi = 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%';
+  const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
+  const corpo =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Tipo</label><select id="cv-tipo" style="'+fi+'" onchange="cadVeicPadrao()">'+TIPOS_VEICULO.map(t=>'<option>'+t+'</option>').join('')+'</select></div>'+
+      '<div><label style="'+lb+'">Placa</label><input id="cv-placa" style="'+fi+';text-transform:uppercase" placeholder="AAA 0A00"></div>'+
+      '<div><label style="'+lb+'">Modelo (opcional)</label><input id="cv-modelo" style="'+fi+'" placeholder="VW 15-180"></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Compr. (m)</label><input id="cv-c" type="number" step="0.05" style="'+fi+'" value="6.70"></div>'+
+      '<div><label style="'+lb+'">Larg. (m)</label><input id="cv-l" type="number" step="0.05" style="'+fi+'" value="2.50"></div>'+
+      '<div><label style="'+lb+'">Alt. (m)</label><input id="cv-a" type="number" step="0.05" style="'+fi+'" value="2.55"></div>'+
+      '<div><label style="'+lb+'">Volume (m³)</label><input id="cv-vol" type="number" step="0.1" style="'+fi+'" value="42.7"></div>'+
+      '<div><label style="'+lb+'">Carga (kg)</label><input id="cv-peso" type="number" step="10" style="'+fi+'" value="9760"></div>'+
+    '</div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">As medidas já vêm preenchidas pelo tipo — ajuste se o seu for diferente. Dá pra afinar depois na tela 🚚 Caminhões.</div>'+
+    '<div><label style="'+lb+'">De quem é o caminhão?</label>'+
+      '<select id="cv-dono" style="'+fi+'"><option value="">🏠 Da empresa (motorista pela escala do dia)</option>'+
+        motoristas.map(m=>'<option value="'+_lgEsc(m.nome).replace(/"/g,'&quot;')+'">🧑‍✈️ Agregado — fixo com '+_lgEsc(m.nome)+'</option>').join('')+
+      '</select></div>'+
+    '<div id="cv-aviso" style="color:#c0392b;font-weight:700;font-size:12.5px;margin-top:8px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarCadVeiculo()">💾 Cadastrar caminhão</button></div>';
+  lgModal('🚚 Cadastrar caminhão', 'Entra na frota, nas sugestões da IA e no planejador', corpo);
+  cadVeicPadrao();
+}
+function salvarCadVeiculo(){
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const placa = g('cv-placa').trim().toUpperCase();
+  const aviso = document.getElementById('cv-aviso');
+  if(!placa){ aviso.textContent = 'Falta a placa.'; return; }
+  if(veiculos.some(v=>v.placa.replace(/\s/g,'') === placa.replace(/\s/g,''))){ aviso.textContent = 'Já existe um caminhão com a placa ' + placa + '.'; return; }
+  const v = {id:'v' + Date.now().toString(36), tipo: g('cv-tipo') || 'TRUCK', modelo: g('cv-modelo').trim() || '—', placa,
+    c:+g('cv-c')||0, l:+g('cv-l')||0, a:+g('cv-a')||0, vol:+g('cv-vol')||0, peso:+g('cv-peso')||0, status:'Estimado'};
+  veiculos.push(v);
+  const dono = g('cv-dono');
+  if(dono){ const m = motoristas.find(x=>x.nome===dono); if(m){ if(m.veiculo){ const o = veiculos.find(y=>y.id===m.veiculo); if(o){ o.agregado=false; o.motoristaFixo=null; } } m.agregado = true; m.veiculo = v.id; v.agregado = true; v.motoristaFixo = dono; } }
+  salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){} try{ renderLogistica(); }catch(e){}
+  fechar('ov-lg');
+  toast('🚚 ' + v.tipo + ' ' + v.placa + ' entrou na frota' + (dono ? ' como agregado do ' + dono : '') + '.');
+}
+function abrirCadMotorista(){
+  const fi = 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%';
+  const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
+  const corpo =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Nome</label><input id="cm-nome" style="'+fi+'" placeholder="Nome do motorista"></div>'+
+      '<div><label style="'+lb+'">WhatsApp (opcional)</label><input id="cm-tel" style="'+fi+'" placeholder="(21) 99999-0000"></div>'+
+    '</div>'+
+    '<div><label style="'+lb+'">Vínculo</label>'+
+      '<select id="cm-vinc" style="'+fi+'" onchange="document.getElementById(\'cm-l-veic\').style.display = this.value===\'ag\' ? \'\' : \'none\'; document.getElementById(\'cm-l-carreta\').style.display = this.value===\'ag\' ? \'none\' : \'\';">'+
+        '<option value="fp">🏠 Frota própria — dirige os caminhões da empresa</option>'+
+        '<option value="ag">🚚 Agregado — vem com caminhão próprio</option></select></div>'+
+    '<div id="cm-l-veic" style="display:none"><label style="'+lb+'">Caminhão dele</label>'+
+      '<select id="cm-veic" style="'+fi+'"><option value="">cadastro o caminhão depois</option>'+
+        veiculos.filter(v=>!v.agregado).map(v=>'<option value="'+v.id+'">'+_lgEsc(v.tipo+' '+v.placa)+'</option>').join('')+'</select>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">Não está na lista? Cadastre primeiro em ➕ Caminhão apontando o dono, que o vínculo já sai pronto.</div></div>'+
+    '<div id="cm-l-carreta" style="margin-top:10px"><label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="cm-carreta"> Roda <b>carreta</b> (além dos caminhões menores)</label></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">CNH vence em (opcional)</label><input id="cm-cnh" type="date" style="'+fi+'"></div>'+
+    '</div>'+
+    '<div id="cm-aviso" style="color:#c0392b;font-weight:700;font-size:12.5px;margin-top:8px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarCadMotorista()">💾 Cadastrar motorista</button></div>';
+  lgModal('🧑‍✈️ Cadastrar motorista', 'Entra na escala, nas sugestões da IA e no WhatsApp do dia', corpo);
+}
+function salvarCadMotorista(){
+  const g = id => { const e = document.getElementById(id); return e ? (e.type==='checkbox' ? e.checked : e.value) : ''; };
+  const nome = String(g('cm-nome')).trim();
+  const aviso = document.getElementById('cm-aviso');
+  if(!nome){ aviso.textContent = 'Falta o nome.'; return; }
+  if(motoristas.some(m=>m.nome.toLowerCase() === nome.toLowerCase())){ aviso.textContent = 'Já existe o motorista ' + nome + '.'; return; }
+  const ag = g('cm-vinc') === 'ag';
+  const vid = ag ? (g('cm-veic') || null) : null;
+  const m = {nome, tel: String(g('cm-tel')).trim(), agregado: ag, veiculo: vid, carreta: ag ? false : !!g('cm-carreta'), situacao:'Ativo'};
+  const cnh = g('cm-cnh'); if(cnh) m.cnhVenc = cnh;
+  motoristas.push(m);
+  if(vid){ const v = veiculos.find(x=>x.id===vid); if(v){ v.agregado = true; v.motoristaFixo = nome; } }
+  salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){} try{ renderLogistica(); }catch(e){}
+  fechar('ov-lg');
+  toast('🧑‍✈️ ' + nome + ' entrou ' + (ag ? 'como agregado' : 'na frota própria') + '. O WhatsApp dele já vale no 📲 do dia.');
+}
+
 function addVeiculoFrota(){
   const id = 'v' + Date.now();
   veiculos.push({id, tipo:'TRUCK', modelo:'—', placa:'AAA 0A00', c:8.00, l:2.50, a:2.50, vol:50, peso:12000, status:'Estimado'});
