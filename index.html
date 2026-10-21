@@ -8032,7 +8032,7 @@ function renderLogistica(){
   const topo =
     '<div class="lgtop"><div><h2 style="margin:0">🚚 Painel de logística</h2><small style="color:var(--muted)">arraste uma viagem para outro caminhão, motorista ou dia · clique para abrir o evento</small></div>'+
       '<div style="position:relative;flex:1;min-width:170px;max-width:330px"><input id="lg-busca" placeholder="🔍 evento, placa ou motorista" oninput="lgBusca(this.value)" autocomplete="off" style="width:100%;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font:inherit;font-size:13px"><div id="lg-busca-res" style="display:none;position:absolute;top:39px;left:0;right:0;z-index:60;border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 26px rgba(20,30,60,.18)"></div></div>'+
-      '<button class="pill" style="background:#0f8a4d;color:#fff;border-color:#0f8a4d" onclick="abrirZapMotoristas(somaDiaISO(HOJE,1))">📲 Escala dos motoristas</button>'+
+      '<button class="pill" style="background:#0f8a4d;color:#fff;border-color:#0f8a4d" onclick="abrirZapMotoristas(somaDiaISO(HOJE,1))">📲 WhatsApp: motoristas e equipes</button>'+
       (LG_UNDO.length ? '<button class="pill" title="'+_lgEsc(LG_UNDO[LG_UNDO.length-1].rotulo)+' (Ctrl+Z)" onclick="lgDesfazer()">↩ Desfazer ('+LG_UNDO.length+')</button>' : '')+
       (vista==='semana' ? '<button class="pill" onclick="logMover(-7)">‹ semana</button><button class="pill" onclick="logMover(-1)">‹</button><button class="pill" onclick="logMover(0)">Hoje</button><button class="pill" onclick="logMover(1)">›</button><button class="pill" onclick="logMover(7)">semana ›</button>' : '')+
     '</div>'+
@@ -8163,38 +8163,110 @@ function viagensDosMotoristas(D){
   }));
   return por;
 }
+function dataExt(D){ return D.slice(8) + '/' + D.slice(5,7) + '/' + D.slice(0,4); }
+/* bloco no formato padrão: 🛠 OPERAÇÃO / 📅 Data / 📍 Local / ⏰ Saída / 👷 Equipe / 🚚 Frota */
+function msgOperacao(o, D, extra){
+  const ev = o.ev;
+  let hs = null; try{ hs = horariosSaida(ev, o.fase, D); }catch(e){}
+  const L = [];
+  L.push('🛠 *OPERAÇÃO — ' + (o.fase==='desm' ? 'DESMONTAGEM' : 'MONTAGEM') + ' ' + nomeTV(ev.nome).toUpperCase() + '*');
+  L.push('📅 Data: ' + dataExt(D));
+  const dest = destinoTexto(ev); if(dest) L.push('📍 Local: ' + dest.toUpperCase());
+  const hSai = (extra && extra.hSai) || (hs && hs.saida) || null;
+  if(hSai) L.push('⏰ Horário de Saída: ' + hSai + (hs && hs.vespera && !(extra && extra.hSai) ? ' (véspera)' : ''));
+  const time = (o.pessoas || []).filter(pp=>!pp.prod);
+  L.push('👷 Equipe:');
+  if(time.length) time.forEach(pp=>L.push(' • ' + pp.nome.toUpperCase() + (pp.mt ? ' (MANUTENÇÃO)' : '')));
+  else L.push(' • A DECIDIR');
+  const prod = (o.pessoas || []).find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome.toUpperCase());
+  if(extra && extra.v){
+    L.push('🚚 Frota: ' + extra.v.tipo + ' ' + extra.v.placa);
+  } else {
+    const fr = (frotaDo(ev, o.fase) || []).map(id=>{ const v = veiculos.find(y=>y.id===id); return v ? v.tipo + ' ' + v.placa : null; }).filter(Boolean);
+    L.push('🚚 Frota: ' + (fr.length ? fr.join(' + ') : 'A DECIDIR'));
+  }
+  if(ev.respNome || ev.respTel) L.push('👤 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
+  return L;
+}
 function msgMotorista(nome, lista, D){
-  const L = ['*Escala de ' + rotDia(D).toLowerCase() + ' (' + fmtD(D).slice(0,5) + ') — ' + nome + '*', ''];
+  const L = [];
   lista.forEach(({o, x}, k)=>{
-    const ev = o.ev; let hs = null; try{ hs = horariosSaida(ev, o.fase, D); }catch(e){}
-    L.push((o.fase==='desm' ? '📤 *DESMONTAGEM* — ' : '🔨 *MONTAGEM* — ') + ev.nome);
-    L.push('🚚 ' + x.v.tipo + ' ' + x.v.placa);
-    const dest = destinoTexto(ev); if(dest) L.push('📍 ' + dest);
-    if(hs){
-      if(o.fase !== 'desm' && hs.carregarDia) L.push('📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase() + (hs.carregarDia !== D ? ' (' + fmtD(hs.carregarDia).slice(0,5) + ')' : ''));
-      L.push('🕐 Sair ' + (x.hSai || hs.saida) + (hs.vespera ? ' (véspera)' : '') + ' · chegar ' + hs.chegada + (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : ''));
-    }
-    if(x.junto) L.push('🔗 Viagem junto com: ' + nomesJunto(ev.id, x.junto));
-    if(ev.respNome || ev.respTel) L.push('👤 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
-    try{ const u = linkMotorista(ev, o.fase, D, x.i); if(u) L.push('📡 Na hora de sair, abra e toque em INICIAR VIAGEM: ' + u); }catch(e){}
-    try{ L.push('🗺 Waze: ' + linkWaze(ev)); }catch(e){}
+    let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
+    L.push(...msgOperacao(o, D, {v: x.v, hSai: x.hSai || (hs && hs.saida) || null}));
+    if(hs && o.fase !== 'desm' && hs.carregarDia) L.push('📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase() + (hs.carregarDia !== D ? '' : ' (mesmo dia)'));
+    if(hs) L.push('🕐 Chegar no local: ' + hs.chegada + (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : ''));
+    if(x.junto) L.push('🔗 Viagem junto com: ' + nomesJunto(o.ev.id, x.junto));
+    try{ const u = linkMotorista(o.ev, o.fase, D, x.i); if(u) L.push('📡 Na hora de sair, abra e toque em INICIAR VIAGEM: ' + u); }catch(e){}
+    try{ L.push('🗺 Waze: ' + linkWaze(o.ev)); }catch(e){}
     if(k < lista.length - 1) L.push('');
   });
   return L.join('\n');
+}
+/* mensagem da EQUIPE: as operações do dia daquela equipe, no mesmo formato */
+function equipesDoDia(D){
+  const por = {};
+  opsDoDia(D).ops.forEach(o=>{
+    if(!o.fase) return;
+    const eq = o.ev.equipe || 'Sem equipe definida';
+    (por[eq] = por[eq] || []).push(o);
+  });
+  return por;
+}
+function msgEquipe(eq, ops, D){
+  const L = [];
+  ops.forEach((o, k)=>{
+    L.push(...msgOperacao(o, D, null));
+    try{ L.push('🗺 Waze: ' + linkWaze(o.ev)); }catch(e){}
+    if(k < ops.length - 1) L.push('');
+  });
+  return L.join('\n');
+}
+function copiarZap(texto, rot){
+  const t = decodeURIComponent(texto);
+  const fim = ok => toast(ok ? '📋 Mensagem ' + (rot ? 'de ' + rot + ' ' : '') + 'copiada — é só colar no grupo do WhatsApp.' : 'Não consegui copiar — abra pelo botão 📲 e copie de lá.');
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(()=>fim(true), ()=>fim(false)); return; }
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy'); document.body.removeChild(ta); fim(ok);
+  }catch(e){ fim(false); }
+}
+function copiarZapMotorista(nome){
+  const por = viagensDosMotoristas(ZAP_DIA); const lista = por[nome]; if(!lista) return;
+  copiarZap(encodeURIComponent(msgMotorista(nome, lista, ZAP_DIA)), nome);
+}
+function copiarZapEquipe(eq){
+  const por = equipesDoDia(ZAP_DIA); const ops = por[eq]; if(!ops) return;
+  copiarZap(encodeURIComponent(msgEquipe(eq, ops, ZAP_DIA)), 'equipe ' + eq);
+}
+function mandarZapEquipe(eq){
+  const por = equipesDoDia(ZAP_DIA); const ops = por[eq]; if(!ops) return;
+  const txt = msgEquipe(eq, ops, ZAP_DIA);
+  window.open('https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
 }
 let ZAP_DIA = null;
 function abrirZapMotoristas(D){
   ZAP_DIA = D || ZAP_DIA || somaDiaISO(HOJE, 1);
   const por = viagensDosMotoristas(ZAP_DIA);
   const nomes = Object.keys(por).sort();
+  const porEq = equipesDoDia(ZAP_DIA);
+  const eqs = Object.keys(porEq).sort();
   const corpo = '<div style="display:flex;gap:6px;margin-bottom:10px">'+[[HOJE,'Hoje'],[somaDiaISO(HOJE,1),'Amanhã'],[somaDiaISO(HOJE,2),rotDia(somaDiaISO(HOJE,2))]].map(([d,t])=>'<button class="mini" style="'+(d===ZAP_DIA?'background:#1c4fa0;color:#fff;border-color:#1c4fa0':'')+'" onclick="abrirZapMotoristas(\''+d+'\')">'+t+'</button>').join('')+'</div>'+
-    (nomes.length ? nomes.map(n=>{ const m = motoristas.find(y=>y.nome===n) || {};
+    '<div style="font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;margin:4px 0 6px">🧑‍✈️ MOTORISTAS</div>'+
+    (nomes.length ? nomes.map(n=>{ const m = motoristas.find(y=>y.nome===n) || {}; const nq = _lgEsc(n).replace(/'/g,"\\'");
       return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
         '<b style="min-width:120px">🧑‍✈️ '+_lgEsc(n)+'</b><span style="flex:1;font-size:12.5px;color:var(--muted)">'+por[n].map(({o,x})=>(o.fase==='desm'?'📤 ':'🔨 ')+_lgEsc(o.ev.nome)+' · '+_lgEsc(x.v.placa)).join(' | ')+(m.tel?'':' · <b style="color:#a86412">sem telefone no cadastro</b>')+'</span>'+
-        '<button class="mini" style="font-weight:800" onclick="mandarZapMotorista(\''+_lgEsc(n).replace(/'/g,"\\'")+'\')">📲 Enviar</button></div>'; }).join('')
-      : '<div class="alert" style="margin:0">Nenhum motorista com viagem ' + (ZAP_DIA===HOJE?'hoje':rotDia(ZAP_DIA).toLowerCase()) + '.</div>')+
-    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">A mensagem leva caminhão, endereço, hora de carregar, sair e chegar, o contato no local, o link do GPS e o Waze. O telefone do motorista fica em 👷 Equipes e Motoristas.</div>';
-  lgModal('📲 Escala dos motoristas no WhatsApp', fmtD(ZAP_DIA) + ' · ' + nomes.length + ' motorista(s) com viagem', corpo);
+        '<button class="mini" onclick="copiarZapMotorista(\''+nq+'\')">📋 Copiar</button>'+
+        '<button class="mini" style="font-weight:800" onclick="mandarZapMotorista(\''+nq+'\')">📲 Enviar</button></div>'; }).join('')
+      : '<div class="alert" style="margin:0 0 8px">Nenhum motorista com viagem ' + (ZAP_DIA===HOJE?'hoje':rotDia(ZAP_DIA).toLowerCase()) + '.</div>')+
+    '<div style="font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;margin:12px 0 6px">👷 EQUIPES</div>'+
+    (eqs.length ? eqs.map(eq=>{ const eqq = _lgEsc(eq).replace(/'/g,"\\'");
+      return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<b style="min-width:120px">👷 '+_lgEsc(eq)+'</b><span style="flex:1;font-size:12.5px;color:var(--muted)">'+porEq[eq].map(o=>(o.fase==='desm'?'📤 ':'🔨 ')+_lgEsc(nomeTV(o.ev.nome).slice(0,26))).join(' | ')+'</span>'+
+        '<button class="mini" onclick="copiarZapEquipe(\''+eqq+'\')">📋 Copiar</button>'+
+        '<button class="mini" style="font-weight:800" onclick="mandarZapEquipe(\''+eqq+'\')">📲 Enviar</button></div>'; }).join('')
+      : '<div class="alert" style="margin:0 0 8px">Nenhuma equipe com operação ' + (ZAP_DIA===HOJE?'hoje':rotDia(ZAP_DIA).toLowerCase()) + '.</div>')+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">As duas mensagens vão no formato padrão: 🛠 OPERAÇÃO, 📅 data, 📍 local, ⏰ saída, 👷 equipe e 🚚 frota. A do motorista leva ainda o carregamento, o link do GPS e o Waze. 📲 Enviar abre o WhatsApp (com o número do motorista, se estiver no cadastro) e 📋 Copiar é pra colar no grupo.</div>';
+  lgModal('📲 Mandar no WhatsApp — motoristas e equipes', fmtD(ZAP_DIA) + ' · ' + nomes.length + ' motorista(s) · ' + eqs.length + ' equipe(s)', corpo);
 }
 function mandarZapMotorista(nome){
   const por = viagensDosMotoristas(ZAP_DIA); const lista = por[nome]; if(!lista) return;
