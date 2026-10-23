@@ -781,6 +781,11 @@ details.lgbox[open] summary h3::before{content:'▾ '}
       <table><thead><tr><th>Veículo</th><th>Placa</th><th>Motorista</th><th>Dimensões (C×L×A)</th><th>Volume útil</th><th>Peso máximo</th><th>Situação</th><th></th></tr></thead>
       <tbody id="tb-veiculos"></tbody></table>
     </div>
+    <div class="panel">
+      <h2>🚛 Cavalos mecânicos</h2>
+      <p class="sub">A carreta só anda engatada num cavalo. Deixe cada cavalo engatado na carreta de sempre — dá pra trocar em cada evento ou arrastando no Painel Logística. Se a carreta fica no local, o cavalo volta livre pra puxar outra.</p>
+      <div id="tb-cavalos"></div>
+    </div>
   </section>
 
   <!-- ============ MATERIAIS ============ -->
@@ -1637,7 +1642,17 @@ function falhaNuvem(e, onde){
   try{ console.warn('nuvem (' + onde + ')', e); }catch(_){}
   marcarSync(false, textoOff());
 }
-const VERSAO_CENTRAL = '21/10 · nuvem 3';
+const VERSAO_CENTRAL = '21/10 · nuvem 4';
+/* nuvem que não responde (projeto pausado ou religando) não pode travar a Central: desiste em 15 s e usa a cópia daqui */
+function fetchComTempo(url, opt){
+  opt = opt || {};
+  const ctl = new AbortController(), t = setTimeout(()=>ctl.abort(), 12000);
+  if(opt.signal){ try{ opt.signal.addEventListener('abort', ()=>ctl.abort()); }catch(_){} }
+  return fetch(url, Object.assign({}, opt, {signal: ctl.signal}))
+    .catch(e=>{ if(ctl.signal.aborted) throw new TypeError('Failed to fetch — a nuvem não respondeu em 12 s'); throw e; })
+    .finally(()=>clearTimeout(t));
+}
+function novoClienteNuvem(){ return window.supabase.createClient(NUVEM.url, NUVEM.key, {global:{fetch: fetchComTempo}}); }
 /* o Postgres recusa o evento INTEIRO se tiver \u0000 ou emoji cortado pela metade (comum em texto do Pipefy/PDF) */
 function limparTextoNuvem(s){
   return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -1713,7 +1728,7 @@ async function tentarReconectar(){
     if(!window.supabase){
       await carregarSupabaseLib();
     }
-    if(!sb) sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
+    if(!sb) sb = novoClienteNuvem();
     const locais = eventos.slice(), cadLocal = JSON.parse(JSON.stringify(cadastrosAtuais()));
     const base = SYNC_BASE;
     await nuvemCarregar();
@@ -1750,6 +1765,7 @@ async function migrarDoAntigoSeVazio(){
   if(!NUVEM_ANTIGO || NUVEM_ANTIGO.url === NUVEM.url) return;
   try{
     const ja = await sb.from('plan_config').select('chave').eq('chave','migrado:antigo').limit(1);
+    if(ja.error && ehErroDeRede(ja.error)) throw ja.error;   /* nuvem fora do ar: não espera de novo */
     if(ja.error || (ja.data||[]).length) return;
     const tem = await sb.from('plan_eventos').select('id').limit(1);
     if(tem.error) return;
@@ -1765,7 +1781,7 @@ async function migrarDoAntigoSeVazio(){
     }
     await sb.from('plan_config').upsert({chave:'migrado:antigo', dados:{de: NUVEM_ANTIGO.url, quando: new Date().toISOString(), linhas: total}, atualizado_em: new Date().toISOString()});
     if(total) setTimeout(()=>toast('☁ Supabase novo: ' + total + ' registro(s) copiados do antigo (eventos, cadastros, recados).'), 1500);
-  }catch(e){ try{ console.warn('migração automática', e); }catch(_){} }
+  }catch(e){ if(ehErroDeRede(e)) throw e; try{ console.warn('migração automática', e); }catch(_){} }
 }
 async function nuvemCarregar(){
   if(!sb) return false;
@@ -1866,7 +1882,7 @@ function explicarErroNuvem(E){
   const m = (E.msg + ' ' + E.code + ' ' + E.det);
   if(typeof navigator !== 'undefined' && navigator.onLine === false) return 'O computador está sem internet. Assim que voltar, as mudanças sobem sozinhas.';
   if(/biblioteca/i.test(m)) return 'O navegador não conseguiu baixar a biblioteca do Supabase (rede da empresa ou antivírus bloqueando o jsdelivr/unpkg). Tente em outra rede ou libere esses sites.';
-  if(E.rede) return 'A internet está ok, mas o computador não consegue falar com o Supabase. As causas mais comuns: <b>o projeto do Supabase está pausado</b> (plano grátis pausa sozinho — entre em supabase.com/dashboard, abra o projeto e clique em <b>Restore</b>) ou a rede/antivírus bloqueando <b>supabase.co</b>.';
+  if(E.rede) return 'A internet está ok, mas o computador não consegue falar com o Supabase. Se você <b>acabou de retomar o projeto</b>, espere ficar tudo verde no painel do Supabase (pode levar alguns minutos) — a Central tenta de novo sozinha a cada 30 segundos. Outras causas: <b>o projeto do Supabase está pausado</b> (plano grátis pausa sozinho — entre em supabase.com/dashboard, abra o projeto e clique em <b>Restore</b>) ou a rede/antivírus bloqueando <b>supabase.co</b>.';
   if(/42501|row-level security|permission denied|violates row-level/i.test(m)) return 'O Supabase está <b>sem permissão de gravar</b> nas tabelas. Copie o SQL abaixo e rode no Supabase em <b>SQL Editor → New query → Run</b>.';
   if(/42P01|does not exist|relation .* not exist|Could not find the table|schema cache/i.test(m)) return 'Faltam as tabelas da Central no Supabase. Copie o SQL abaixo e rode no <b>SQL Editor</b>.';
   if(/22P05|\\u0000|Unicode|surrogate/i.test(m)) return 'Algum evento tinha um caractere invisível que o banco não aceita (comum em texto vindo do Pipefy ou de PDF). Agora a Central limpa isso sozinha antes de enviar — toque em <b>Enviar agora</b>.';
@@ -1914,7 +1930,7 @@ async function testarNuvem(){
   L.push('⏳ testando…'); put(); L.length = 0;
   L.push(typeof navigator !== 'undefined' && navigator.onLine === false ? '<b style="color:#c0392b">❌ navegador diz que está sem internet</b>' : '✅ internet do computador'); put();
   try{ await carregarSupabaseLib(); ok('biblioteca do Supabase carregada'); }catch(e){ ruim(e.message); put(); return; }
-  try{ if(!sb) sb = window.supabase.createClient(NUVEM.url, NUVEM.key); }catch(e){ ruim('não criei o cliente: ' + e.message); put(); return; }
+  try{ if(!sb) sb = novoClienteNuvem(); }catch(e){ ruim('não criei o cliente: ' + e.message); put(); return; }
   const t0 = Date.now();
   try{
     const r = await sb.from('plan_eventos').select('id').limit(1);
@@ -2412,6 +2428,7 @@ function padroesConfig(c){
   if(!Array.isArray(c.excluidos)) c.excluidos = [];   /* eventos excluídos: não voltam pela planilha nem pelo Pipefy */
   if(!c.urlCentral) c.urlCentral = 'https://conferenciagtp.vercel.app/central-planejamento.html';   /* mesmo site da Conferência — só funciona depois de subir o arquivo lá */
   if(!Array.isArray(c.pracas)) c.pracas = [];
+  if(!Array.isArray(c.cavalos)) c.cavalos = [];   /* cavalos mecânicos que puxam as carretas */
   /* praças conhecidas da região, já com ponto no mapa e valor de REFERÊNCIA (confira e ajuste) */
   const PRACAS_PADRAO = [
     {nome:'Ponte Rio-Niterói (Ecoponte)', valorEixo:4.9, ponte:true, vezes:1},
@@ -3560,7 +3577,7 @@ function mensagemDia(o, D){
   { const et = etapasNoDia(ev, D); if(et.length) L.push('🧩 Etapas do dia: ' + et.map(x=>x.nome + ((x.pessoas||[]).length ? ' (' + x.pessoas.join(', ') + ')' : '') + (x.obs ? ' — ' + x.obs : '')).join('; ')); }
   const prod = o.pessoas.find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome);
   if(o.viagens.length){
-    L.push('🚚 ' + o.viagens.map(x=>x.v.tipo + ' ' + x.v.placa + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.hSai ? ' — sai ' + x.hSai : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
+    L.push('🚚 ' + o.viagens.map(x=>rotVeicViagem(ev, x.fase, x.v) + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.hSai ? ' — sai ' + x.hSai : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
   }
   { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt);
     const se = saidaManual(ev, o.fase, 'eq'); if(se && !(hs && hs.saidaEq)) L.push('👷 Equipe sai às ' + se); }
@@ -7820,6 +7837,7 @@ function lgBusca(q){
   eventos.filter(e=>!evEncerrado(e)).forEach(e=>{ if(semAcentoSimples(e.nome + ' ' + (e.os||'') + ' ' + (e.cidade||'')).includes(q)) R.push({rot:'🎪 ' + _lgEsc(nomeTV(e.nome).slice(0,36)) + (e.cidade && e.cidade!=='—' ? ' · ' + _lgEsc(e.cidade) : '') + (e.mont ? ' · 🔨 ' + fmtD(e.mont).slice(0,5) : ''), ac:"verEvento('" + e.id + "')"}); });
   veiculos.forEach(v=>{ if(semAcentoSimples(v.tipo + ' ' + v.placa + ' ' + (v.modelo||'') + ' ' + (v.motoristaFixo||'')).includes(q)) R.push({rot:'🚚 ' + _lgEsc(v.tipo + ' ' + v.placa) + (v.agregado ? ' (agregado · ' + _lgEsc(v.motoristaFixo||'') + ')' : ''), ac:"lgFocar('v','" + v.id + "')"}); });
   motoristas.forEach(m=>{ if(semAcentoSimples(m.nome).includes(q)) R.push({rot:'🧑‍✈️ ' + _lgEsc(m.nome), ac:"lgFocar('m','" + _lgEsc(m.nome).replace(/'/g, "\\'") + "')"}); });
+  listaCavalos().forEach(c=>{ if(semAcentoSimples('cavalo ' + c.placa + ' ' + (c.modelo||'')).includes(q)) R.push({rot:'🚛 cavalo ' + _lgEsc(c.placa), ac:"lgFocar('c','" + c.id + "')"}); });
   box.style.display = '';
   box.innerHTML = R.length ? R.slice(0,8).map(r=>'<div onclick="document.getElementById(\'lg-busca-res\').style.display=\'none\';' + r.ac.replace(/"/g,'&quot;') + '" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px;background:#fff">' + r.rot + '</div>').join('')
     : '<div style="padding:8px 12px;font-size:12.5px;color:var(--muted);background:#fff">Nada encontrado.</div>';
@@ -7844,6 +7862,16 @@ function lgResolverLista(dias, dados){
   }); }catch(e){}
   [HOJE, somaDiaISO(HOJE,1)].forEach(D=>{ try{ opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{ if(!x.motorista && !x.jaLocal && !x.manut)
     itens.push({sev: D===HOJE?3:2, D, txt:'🚚 ' + _lgEsc(x.v.tipo + ' ' + x.v.placa) + ' <b>sem motorista</b> ' + rotDia(D).toLowerCase() + ' (' + _lgEsc(nomeTV(o.ev.nome).slice(0,24)) + ')', ac:"verEvento('" + o.ev.id + "')", rot:'Escalar'}); })); }catch(e){} });
+  if(listaCavalos().length) dias.forEach((D,j)=>{ try{
+    Object.keys(dados[j].vs).forEach(vid=>{ const v = veiculos.find(x=>x.id===vid); if(!ehCarreta(v)) return;
+      (dados[j].vs[vid]||[]).filter(it=>it.tipo==='viagem').forEach(it=>{
+        const c = cavaloObj(cavaloDe(it.ev, it.f, vid));
+        if(!c && D <= somaDiaISO(HOJE, 3)) itens.push({sev: D===HOJE?3:2, D, txt:'🚛 ' + _lgEsc(v.tipo + ' ' + v.placa) + ' <b>sem cavalo</b> ' + rotDia(D).toLowerCase() + ' (' + _lgEsc(nomeTV(it.ev.nome).slice(0,24)) + ')', ac:"verEvento('" + it.ev.id + "')", rot:'Escolher cavalo'});
+        else if(c && c.manut) itens.push({sev:2, D, txt:'🔧 ' + _lgEsc(rotCavalo(c)) + ' está em manutenção e puxa a ' + _lgEsc(v.placa) + ' ' + rotDia(D).toLowerCase(), ac:"verEvento('" + it.ev.id + "')", rot:'Trocar cavalo'});
+      }); });
+    Object.keys(dados[j].cs||{}).forEach(cid=>{ if(lgConflito(dados[j].cs[cid])){ const c = cavaloObj(cid);
+      itens.push({sev:1, D, txt:'🚛 ' + _lgEsc(rotCavalo(c)) + ' puxa 2 carretas ' + rotDia(D).toLowerCase() + ' — confira se dá tempo de largar uma e pegar a outra', ac:"lgFocar('c','" + cid + "')", rot:'Ver'}); } });
+  }catch(e){} });
   try{ notasPendentes().filter(n=>n.falta<=1).forEach(n=>itens.push({sev:3, D:HOJE, txt:'🧾 NF de ' + n.rot.toLowerCase().replace('🧾 nota fiscal de ','') + ' — <b>' + _lgEsc(nomeTV(n.ev.nome).slice(0,26)) + '</b> (' + _lgEsc(n.fase) + ' ' + fmtD(n.d).slice(0,5) + ')', ac:"marcarNotaHoje('" + n.ev.id + "','" + n.k + "')", rot:'✓ Emitida'})); }catch(e){}
   try{ segundasViagens().forEach(s=>itens.push({sev:1, D:s.D, txt:'💡 ' + _lgEsc(s.v.tipo + ' ' + s.v.placa) + ' volta ≈' + s.volta + ' ' + rotDia(s.D).toLowerCase() + ' — pode levar também <b>' + _lgEsc(nomeTV(s.ev2.nome).slice(0,24)) + '</b> (sai ' + s.saida2 + ', chega ≈' + s.chega2 + (s.atrasa ? ' ⚠' : '') + ')', ac:"aproveitarSegunda('" + s.ev1.id + "','" + s.f1 + "','" + s.D + "'," + s.i + ",'" + s.ev2.id + "')", rot:'🔁 Aproveitar'})); }catch(e){}
   itens.sort((a,b)=>b.sev - a.sev || a.D.localeCompare(b.D));
@@ -7919,6 +7947,147 @@ function htmlHoras(){
     '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Cada linha é um caminhão. Clique numa barra para abrir o evento. Buraco entre a volta e o fim do dia = espaço para uma 2ª viagem (o cockpit sugere em 💡).</div></div>';
 }
 /* ---- A3) MODO LISTA (celular) ---- */
+/* ===== 🚛 CAVALO MECÂNICO: a carreta só anda engatada num cavalo =====
+   - os cavalos ficam em CONFIG.cavalos (sobem pra nuvem junto com os cadastros)
+   - cada carreta pode ter um cavalo padrão (v.cavaloPadrao)
+   - em cada evento dá pra trocar o cavalo da viagem (ev.cavalos[fase][carreta])
+   - a carreta pode ficar no local e o cavalo volta: ele fica livre pra puxar outra */
+const ehCarreta = v => !!(v && String(v.tipo).toUpperCase() === 'CARRETA');
+function listaCavalos(){ if(!Array.isArray(CONFIG.cavalos)) CONFIG.cavalos = []; return CONFIG.cavalos; }
+function cavaloObj(id){ return id ? listaCavalos().find(c=>c.id===id) || null : null; }
+function cavaloDe(ev, f, vid){
+  const v = veiculos.find(x=>x.id===vid); if(!ehCarreta(v)) return null;
+  const m = ev && ev.cavalos || {};
+  let id = m[f] && m[f][vid];
+  if(id === undefined && f === 'desm') id = m.mont && m.mont[vid];
+  if(id === undefined) id = v.cavaloPadrao || null;
+  return cavaloObj(id) ? id : null;
+}
+function rotCavalo(c){ return c ? 'cavalo ' + c.placa : ''; }
+/* "CARRETA ICR 6H02 + cavalo ABC 1D23" (ou "+ cavalo a definir") */
+function rotVeicViagem(ev, f, v){
+  if(!v) return '';
+  let s = v.tipo + ' ' + v.placa;
+  if(ehCarreta(v) && listaCavalos().length){ const c = cavaloObj(cavaloDe(ev, f, v.id)); s += c ? ' + ' + rotCavalo(c) : ' + cavalo a definir'; }
+  return s;
+}
+function setCavaloEv(evId, f, vid, cid, semAbrir){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const c = cavaloObj(cid);
+  if(c && c.manut && !confirm('O ' + rotCavalo(c) + ' está em manutenção. Usar mesmo assim?')) { if(!semAbrir) verEvento(evId); return; }
+  ev.cavalos = ev.cavalos || {};
+  ev.cavalos[f] = ev.cavalos[f] || {};
+  ev.cavalos[f][vid] = cid || null;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  if(!semAbrir) verEvento(evId);
+  try{ renderLogistica(); }catch(e){}
+  /* mesmo cavalo em duas saídas no dia: só avisa (ele pode largar uma carreta e puxar outra) */
+  try{
+    const D = f === 'desm' ? dia(ev.desm) : dia(ev.mont);
+    const L = (logItensDia(D).cs || {})[cid] || [];
+    if(cid && lgConflito(L)) toast('🚛 O ' + rotCavalo(c) + ' também puxa outra carreta ' + rotDia(D).toLowerCase() + ' — confira os horários (ele larga uma e volta pra pegar a outra).');
+  }catch(e){}
+}
+function setCavaloPadrao(vid, cid){
+  const v = veiculos.find(x=>x.id===vid); if(!v) return;
+  v.cavaloPadrao = cid || null;
+  marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){}
+  const c = cavaloObj(cid);
+  toast(c ? '🚛 ' + v.tipo + ' ' + v.placa + ' agora sai, por padrão, engatada no ' + rotCavalo(c) + '.' : v.tipo + ' ' + v.placa + ' ficou sem cavalo padrão.');
+}
+/* select do cavalo dentro do evento */
+function selCavaloHtml(ev, f, v){
+  if(!ehCarreta(v)) return '';
+  const cs = listaCavalos();
+  if(!cs.length) return '<button class="mini" title="A carreta precisa de um cavalo mecânico" onclick="abrirCadCavalo()">🚛 + cavalo</button>';
+  const atual = cavaloDe(ev, f, v.id), m = ev.cavalos && ev.cavalos[f] || {};
+  const escolhido = Object.prototype.hasOwnProperty.call(m, v.id);
+  return '<select title="Cavalo mecânico que puxa esta carreta" style="border:1px solid '+(atual?'#1c4fa0':'#e08a1e')+';border-radius:7px;padding:7px 8px;max-width:170px;font-size:12px'+(atual?';color:#1c4fa0;font-weight:700':';color:#a86412;font-weight:700')+'" onchange="setCavaloEv(\''+ev.id+'\',\''+f+'\',\''+v.id+'\',this.value)">'+
+    '<option value="">🚛 cavalo?</option>'+
+    cs.map(c=>'<option value="'+c.id+'" '+(c.id===atual?'selected':'')+'>🚛 '+_lgEsc(c.placa)+(c.id===v.cavaloPadrao?' ★':'')+(c.manut?' 🔧':'')+'</option>').join('')+
+  '</select>'+(atual && !escolhido && v.cavaloPadrao===atual ? '' : '');
+}
+/* ---- cadastro do cavalo ---- */
+function abrirCadCavalo(){
+  const fi = 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%';
+  const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
+  const carretas = veiculos.filter(ehCarreta);
+  const corpo =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Placa do cavalo</label><input id="cc-placa" style="'+fi+';text-transform:uppercase" placeholder="AAA 0A00"></div>'+
+      '<div><label style="'+lb+'">Modelo (opcional)</label><input id="cc-modelo" style="'+fi+'" placeholder="Scania R440"></div>'+
+      '<div><label style="'+lb+'">Eixos (opcional)</label><input id="cc-eixos" type="number" style="'+fi+'" placeholder="3"></div>'+
+    '</div>'+
+    '<div><label style="'+lb+'">Engatado normalmente em</label><select id="cc-carreta" style="'+fi+'"><option value="">nenhuma (escolho em cada evento)</option>'+
+      carretas.map(v=>'<option value="'+v.id+'">'+_lgEsc(v.tipo+' '+v.placa)+(cavaloObj(v.cavaloPadrao)?' — hoje com '+_lgEsc(cavaloObj(v.cavaloPadrao).placa):'')+'</option>').join('')+'</select>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">A carreta já sai com esse cavalo nas viagens. Dá pra trocar o cavalo em cada evento ou arrastando no Painel Logística.</div></div>'+
+    '<div id="cc-aviso" style="color:#c0392b;font-weight:700;font-size:12.5px;margin-top:8px"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarCadCavalo()">💾 Cadastrar cavalo</button></div>';
+  lgModal('🚛 Cadastrar cavalo mecânico', 'O cavalo puxa a carreta — entra nas viagens, na manutenção e no planejador', corpo);
+}
+function salvarCadCavalo(){
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const placa = String(g('cc-placa')).trim().toUpperCase();
+  const aviso = document.getElementById('cc-aviso');
+  if(!placa){ aviso.textContent = 'Falta a placa.'; return; }
+  const sem = s => String(s).replace(/\s/g,'');
+  if(listaCavalos().some(c=>sem(c.placa)===sem(placa)) || veiculos.some(v=>sem(v.placa)===sem(placa))){ aviso.textContent = 'Já existe um veículo com a placa ' + placa + '.'; return; }
+  const c = {id:'c' + Date.now().toString(36), tipo:'CAVALO', cavalo:true, placa, modelo: String(g('cc-modelo')).trim() || '—', eixos: +g('cc-eixos') || null};
+  listaCavalos().push(c);
+  const car = g('cc-carreta'); if(car){ const v = veiculos.find(x=>x.id===car); if(v) v.cavaloPadrao = c.id; }
+  marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){} try{ renderLogistica(); }catch(e){}
+  fechar('ov-lg');
+  toast('🚛 Cavalo ' + placa + ' cadastrado' + (car ? ' e engatado na ' + (veiculos.find(x=>x.id===car)||{}).placa : '') + '.');
+}
+function setCavaloCampo(id, k, val){ const c = cavaloObj(id); if(!c) return; c[k] = val; salvar(); try{ renderCadastros(); }catch(e){} }
+function toggleManutCavalo(id){ const c = cavaloObj(id); if(!c) return; c.manut = !c.manut; marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderLogistica(); }catch(e){}
+  toast(c.manut ? '🔧 ' + rotCavalo(c) + ' em manutenção — as carretas engatadas nele vão acusar.' : '✅ ' + rotCavalo(c) + ' liberado.'); }
+function engatarPadrao(cid, carretaId){
+  /* tira este cavalo de outra carreta e engata na escolhida */
+  veiculos.forEach(v=>{ if(v.cavaloPadrao === cid) v.cavaloPadrao = null; });
+  if(carretaId){ const v = veiculos.find(x=>x.id===carretaId); if(v) v.cavaloPadrao = cid; }
+  marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){}
+}
+function removerCavalo(id){
+  const c = cavaloObj(id); if(!c) return;
+  const usos = eventos.filter(e=>!evEncerrado(e) && ['mont','desm'].some(f=>Object.values((e.cavalos||{})[f]||{}).includes(id)));
+  if(!confirm('Excluir o ' + rotCavalo(c) + '?' + (usos.length ? '\n\nEle está escolhido em ' + usos.length + ' evento(s) — essas carretas ficam sem cavalo.' : ''))) return;
+  const i = listaCavalos().indexOf(c); listaCavalos().splice(i, 1);
+  veiculos.forEach(v=>{ if(v.cavaloPadrao === id) v.cavaloPadrao = null; });
+  marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){}
+  toast(rotCavalo(c) + ' excluído.');
+}
+function htmlCavalosCad(){
+  const cs = listaCavalos(), carretas = veiculos.filter(ehCarreta);
+  const q = s => String(s==null?'':s).replace(/"/g,'&quot;');
+  const rows = cs.map(c=>{
+    const eng = carretas.find(v=>v.cavaloPadrao===c.id);
+    return '<tr><td style="white-space:nowrap"><b>🚛 CAVALO</b> <input class="cad" style="width:110px" value="'+q(c.modelo==='—'?'':c.modelo)+'" placeholder="modelo" onchange="setCavaloCampo(\''+c.id+'\',\'modelo\',this.value.trim()||\'—\')"></td>'+
+      '<td><input class="cad placa" value="'+q(c.placa)+'" onchange="setCavaloCampo(\''+c.id+'\',\'placa\',this.value.trim().toUpperCase())"></td>'+
+      '<td><select class="cad" style="width:190px" onchange="engatarPadrao(\''+c.id+'\',this.value)"><option value="">solto (escolho no evento)</option>'+
+        carretas.map(v=>'<option value="'+v.id+'" '+(eng && eng.id===v.id?'selected':'')+'>engatado na '+_lgEsc(v.placa)+'</option>').join('')+'</select></td>'+
+      '<td><input class="cad dim" style="width:50px" type="number" value="'+(c.eixos||'')+'" placeholder="eixos" onchange="setCavaloCampo(\''+c.id+'\',\'eixos\',+this.value||null)"> eixos</td>'+
+      '<td style="white-space:nowrap">'+(c.manut ? '<span class="dot" style="background:var(--red)"></span><b style="color:var(--red)">🔧 Em manutenção</b>' : '<span class="dot" style="background:var(--green)"></span>Ativo')+'</td>'+
+      '<td style="text-align:right;white-space:nowrap"><button class="mini" onclick="toggleManutCavalo(\''+c.id+'\')">'+(c.manut?'✔ Voltar à frota':'🔧 Manutenção')+'</button> <button class="mini danger" onclick="removerCavalo(\''+c.id+'\')">Excluir</button></td></tr>';
+  }).join('');
+  const semCav = carretas.filter(v=>!cavaloObj(v.cavaloPadrao));
+  return '<table><thead><tr><th>Cavalo</th><th>Placa</th><th>Engatado em</th><th>Eixos</th><th>Situação</th><th></th></tr></thead><tbody>'+
+    (rows || '<tr><td colspan="6" style="color:var(--muted)">Nenhum cavalo cadastrado ainda — as carretas aparecem como "cavalo a definir".</td></tr>')+
+    '<tr><td colspan="6"><button class="mini" style="font-weight:800" onclick="abrirCadCavalo()">➕ Cadastrar cavalo</button>'+
+      (cs.length && semCav.length ? ' <span style="font-size:12px;color:#a86412;margin-left:8px">'+semCav.length+' carreta(s) sem cavalo padrão: '+semCav.map(v=>_lgEsc(v.placa)).join(', ')+'</span>' : '')+'</td></tr></tbody></table>';
+}
+/* viagens do cavalo (para km/odômetro): toda viagem da carreta com ele, ida e volta */
+function viagensDoCavalo(cid, ini, fim){
+  const out = [];
+  veiculos.filter(ehCarreta).forEach(v=>viagensDoVeiculo(v.id, ini, fim).forEach(t=>{
+    if(cavaloDe(t.ev, t.f, v.id) !== cid) return;
+    out.push(Object.assign({}, t, {km: (+t.ev.km || 0) * 2 / (t.div || 1), carreta: v}));
+  }));
+  return out;
+}
+
 function htmlLista(){
   const dias = Array.from({length:3}, (_,i)=>somaDiaISO(logIni(), i));
   return '<div style="display:flex;gap:6px;margin-bottom:10px"><button class="mini" onclick="logMover(-1)">‹ dia</button><button class="mini" onclick="logMover(0)">Hoje</button><button class="mini" onclick="logMover(1)">dia ›</button></div>' +
@@ -7931,7 +8100,7 @@ function htmlLista(){
           let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
           return '<div onclick="verEvento(\'' + o.ev.id + '\')" style="border:1px solid ' + (c ? '#e4483c' : 'var(--line)') + ';border-radius:10px;padding:9px 11px;margin-bottom:7px;cursor:pointer' + (c ? ';background:#fdecea' : '') + '">' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>' + (o.fase==='desm' ? '📤' : '🔨') + ' ' + _lgEsc(nomeTV(o.ev.nome).slice(0,32)) + '</b><span style="flex:1"></span>' + (hs ? '<b style="font-size:12.5px">sai ' + (x.hSai || hs.saida) + '</b>' : '') + '</div>' +
-            '<div style="font-size:12px;color:var(--muted);margin-top:3px">🚚 ' + _lgEsc(x.v.tipo + ' ' + x.v.placa) + (x.motorista ? ' · 🧑‍✈️ ' + _lgEsc(x.motorista) : ' · <b style="color:#a86412">sem motorista</b>') + (o.ev.cidade && o.ev.cidade!=='—' ? ' · ' + _lgEsc(o.ev.cidade) : '') + (x.junto ? ' · 🔗' : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--muted);margin-top:3px">🚚 ' + _lgEsc(rotVeicViagem(o.ev, x.fase, x.v)) + (x.motorista ? ' · 🧑‍✈️ ' + _lgEsc(x.motorista) : ' · <b style="color:#a86412">sem motorista</b>') + (o.ev.cidade && o.ev.cidade!=='—' ? ' · ' + _lgEsc(o.ev.cidade) : '') + (x.junto ? ' · 🔗' : '') + '</div>' +
             (c ? '<button class="lgres" style="margin-top:5px" onclick="event.stopPropagation();lgResolver(\'v\',\'' + x.v.id + '\',\'' + D + '\')">⚠ em dois lugares · resolver</button>' : '') +
           '</div>'; }).join('') : '<div style="font-size:12.5px;color:var(--muted)">Sem viagem.</div>') +
         (D===HOJE ? (function(){ try{ const r = retornosCaminhoes(); return r.length ? '<div style="font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.5px;margin:10px 0 2px">🅿 ALGUM FICOU NO LOCAL?</div>' + htmlRetornos(r) : ''; }catch(e){ return ''; } })() : '') +
@@ -7954,7 +8123,7 @@ function logMover(n){ LOG_INI = n === 0 ? null : somaDiaISO(logIni(), n); render
 const _lgEsc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 /* o que cada caminhão e cada motorista faz num dia */
 function logItensDia(D){
-  const vs = {}, ms = {};
+  const vs = {}, ms = {}, cs = {};
   const put = (o, k, it) => { const l = (o[k] = o[k] || []); const j = l.findIndex(y=>y.ev.id===it.ev.id); if(j < 0) l.push(it); else if(l[j].tipo !== 'viagem' && it.tipo === 'viagem') l[j] = it; };
   eventos.forEach(e=>{
     if(e.esp || !e.mont) return;
@@ -7972,13 +8141,21 @@ function logItensDia(D){
         if(f==='desm' && !temFrotaDesm(e) && tipo === 'viagem' && (e.permanece || ficaAteDesm(e, x.v))) tipo = 'local';
         const it = {ev:e, f, x, tipo, D};
         if(tipo) put(vs, x.v, it);
+        /* cavalo: puxa a carreta no dia da viagem; se a carreta ficou no local, volta livre
+           (e no dia de buscar a carreta parada, vai buscar) — a não ser que tenha ficado junto */
+        const cid = cavaloDe(e, f, x.v);
+        if(cid){
+          const buscar = tipo === 'local' && f === 'desm' && dFase[0] === D;
+          if(tipo === 'viagem' || buscar) put(cs, cid, Object.assign({}, it, {tipo:'viagem'}));
+          else if(tipo && ficaM.includes(D)) put(cs, cid, Object.assign({}, it, {tipo:'fica'}));
+        }
         /* motorista: só no dia da viagem, ou se ficou junto com o caminhão no local */
         if(x.motorista && (tipo === 'viagem' || ficaM.includes(D))) put(ms, x.motorista, Object.assign({}, it, {tipo: tipo === 'viagem' ? 'viagem' : 'fica'}));
       });
     });
   });
   motoristas.forEach(m=>{ const s = motoristaNaBase(m.nome, D); if(s) (ms[m.nome] = ms[m.nome] || []).push({tipo:'base', s, D}); });
-  return {vs, ms};
+  return {vs, ms, cs};
 }
 /* mais de um evento ao mesmo tempo (viagem combinada conta como um só) */
 function lgConflito(lista){
@@ -8116,6 +8293,11 @@ function lgDrop(e, tipo, alvo, D){
   let motAtual = null; try{ motAtual = (escalaDo(ev, (p.f==='desm' && temFrotaDesm(ev)) ? 'desm' : 'mont').find(x=>x.i===p.i) || {}).motorista || null; }catch(err){}
   const trocaV = tipo === 'v' && alvo !== p.vid;
   const trocaM = tipo === 'm' && alvo !== motAtual;
+  const trocaC = tipo === 'c' && alvo !== cavaloDe(ev, p.f, p.vid);
+  if(tipo === 'c'){
+    if(!ehCarreta(veiculos.find(v=>v.id===p.vid))) return toast('Só carreta anda engatada em cavalo — arraste para a linha de um caminhão.');
+    const C = cavaloObj(alvo); if(C && C.manut && !confirm('O ' + rotCavalo(C) + ' está em manutenção. Usar mesmo assim?')) return;
+  }
   if(trocaV){
     const V = veiculos.find(v=>v.id===alvo); if(!V) return;
     if(V.manut) return toast('🔧 ' + V.tipo + ' ' + V.placa + ' está em manutenção.');
@@ -8125,8 +8307,8 @@ function lgDrop(e, tipo, alvo, D){
     if(V && V.agregado && !confirm('O ' + V.tipo + ' ' + V.placa + ' é agregado e costuma andar com ' + V.motoristaFixo + '. Colocar ' + alvo + ' nele mesmo assim?')) return;
     if(V && V.tipo === 'CARRETA'){ const m = motoristas.find(x=>x.nome===alvo); if(m && !m.carreta && !confirm(alvo + ' não está marcado como motorista de carreta. Colocar mesmo assim?')) return; }
   }
-  if(!mudouDia && !trocaV && !trocaM) return;
-  lgSnap((mudouDia ? 'mudança de dia' : trocaV ? 'troca de caminhão' : 'troca de motorista') + ' — ' + nomeTV(ev.nome), [ev.id]);
+  if(!mudouDia && !trocaV && !trocaM && !trocaC) return;
+  lgSnap((mudouDia ? 'mudança de dia' : trocaV ? 'troca de caminhão' : trocaC ? 'troca de cavalo' : 'troca de motorista') + ' — ' + nomeTV(ev.nome), [ev.id]);
   const partes = [];
   if(mudouDia){ lgMudarDia(ev, p.f, p.i, D); partes.push('a viagem passou para ' + rotDia(D).toLowerCase() + ' (' + fmtD(D).slice(0,5) + ')'); }
   if(trocaV){
@@ -8142,12 +8324,17 @@ function lgDrop(e, tipo, alvo, D){
     if(dz2){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
     partes.push('motorista: ' + alvo);
   }
+  if(trocaC){
+    ev.cavalos = ev.cavalos || {}; ev.cavalos[p.f] = ev.cavalos[p.f] || {}; ev.cavalos[p.f][p.vid] = alvo;
+    partes.push('carreta puxada pelo ' + rotCavalo(cavaloObj(alvo)));
+  }
   marcarPlanoSujo(); limparSecCache(); salvar(); replanejar(true); renderQuadro();
   const vidFinal = trocaV ? alvo : p.vid;
   const avisos = [];
   try{ if(trocaV){ const oc = ocupCaminhao(ev, p.f==='desm'?'desm':'mont'); if(oc && oc.pct > 100) avisos.push('⚠ a carga NÃO CABE (' + oc.pct + '%)'); } }catch(err){}
   try{ if(lgConflito((logItensDia(D).vs[vidFinal]||[]))) avisos.push('⚠ o caminhão fica em dois lugares ' + fmtD(D).slice(0,5)); }catch(err){}
   try{ if(trocaM && lgConflito((logItensDia(D).ms[alvo]||[]))) avisos.push('⚠ ' + alvo + ' fica em dois lugares ' + fmtD(D).slice(0,5)); }catch(err){}
+  try{ if(trocaC && lgConflito(((logItensDia(D).cs||{})[alvo]||[]))) avisos.push('⚠ o cavalo puxa 2 carretas ' + fmtD(D).slice(0,5) + ' — confira horários'); }catch(err){}
   toast('🚚 ' + nomeTV(ev.nome) + ' (' + (p.f==='desm'?'desmontagem':'montagem') + '): ' + partes.join(' · ') + '.' + (avisos.length ? ' ' + avisos.join(' · ') + '.' : ''), 'Desfazer', lgDesfazer);
   renderLogistica();
 }
@@ -8159,13 +8346,17 @@ function lgChip(it, rowTipo, rowKey){
   if(it.tipo === 'viagem'){ try{ const hs = horariosSaida(ev, it.f, D); if(hs && hs.saida) sai = (it.x.hora || hs.saida); }catch(e){} }
   const oc = it.tipo === 'viagem' && it.f === 'mont' ? ocupCaminhao(ev, 'mont') : null;
   const tit = (it.tipo==='viagem' ? (it.f==='desm'?'DESMONTAGEM':'MONTAGEM') : it.tipo==='local' ? 'caminhão parado no local' : 'fica no local') + ' — ' + ev.nome + (ev.cidade && ev.cidade!=='—' ? ' · ' + ev.cidade : '') + (+ev.km ? ' · ' + ev.km + ' km' : '') +
-    (it.x.motorista ? ' · motorista ' + it.x.motorista : '') + (sai ? ' · sai ' + sai : '') + (it.x.junto ? ' · 🔗 viagem combinada' : '') + ' — arraste para outro ' + (rowTipo==='v'?'caminhão':'motorista') + ' ou para outro dia' + ' no mesmo dia';
+    (it.x.motorista ? ' · motorista ' + it.x.motorista : '') + (sai ? ' · sai ' + sai : '') + (it.x.junto ? ' · 🔗 viagem combinada' : '') + ' — arraste para outro ' + (rowTipo==='v'?'caminhão':rowTipo==='c'?'cavalo':'motorista') + ' ou para outro dia' + ' no mesmo dia';
+  const cavC = rowTipo === 'v' ? cavaloObj(cavaloDe(ev, it.f, it.x.v)) : null;
+  const carretaV = rowTipo === 'v' && ehCarreta(veiculos.find(v=>v.id===it.x.v)) && listaCavalos().length;
   const arrasta = it.tipo === 'viagem' || it.tipo === 'local';
   return '<div class="lgchip '+(it.tipo==='viagem'?(it.f==='desm'?'d':'m'):'p')+'" '+(arrasta?'draggable="true" ondragstart="lgDrag(event,\''+ev.id+'\',\''+it.f+'\',\''+D+'\','+it.x.i+',\''+it.x.v+'\')"':'')+' onclick="verEvento(\''+ev.id+'\')" title="'+_lgEsc(tit)+'">'+
     '<span>'+ic+' '+_lgEsc(nomeTV(ev.nome).slice(0,20))+(it.x.junto?' 🔗':'')+'</span>'+
     (sai ? '<small>sai '+sai+'</small>' : (rowTipo==='v' && it.x.motorista && it.tipo==='viagem' ? '' : ''))+
     (rowTipo==='v' && it.x.motorista ? '<small>🧑‍✈️ '+_lgEsc(it.x.motorista)+'</small>' : '')+
     (rowTipo==='m' && it.x.v ? '<small>🚚 '+_lgEsc((veiculos.find(v=>v.id===it.x.v)||{}).placa||'')+'</small>' : '')+
+    (rowTipo==='c' && it.x.v ? '<small>🚚 '+_lgEsc((veiculos.find(v=>v.id===it.x.v)||{}).placa||'')+(it.x.motorista?' · '+_lgEsc(it.x.motorista.split(' ')[0]):'')+'</small>' : '')+
+    (carretaV && it.tipo === 'viagem' ? (cavC ? '<small>🚛 '+_lgEsc(cavC.placa)+'</small>' : '<small style="color:#a86412;font-weight:800">🚛 sem cavalo</small>') : '')+
     barraOcup(oc, true)+
   '</div>';
 }
@@ -8187,7 +8378,11 @@ function renderLogistica(){
     dias.map((D,j)=>{ const L = dados[j].ms[m.nome] || []; const c = lgConflito(L); if(c) confM++;
       return '<td class="lgcel'+(c?' conf':'')+(D===HOJE?' hoje':'')+'" ondragover="event.preventDefault()" ondrop="lgDrop(event,\'m\',\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\''+D+'\')">'+
         (L.length ? L.map(it=>lgChip(it,'m',m.nome)).join('') : '<span class="lglivre">livre</span>')+(c?'<button class="lgres" onclick="lgResolver(\'m\',\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\''+D+'\')">⚠ 2 lugares · resolver</button>':'')+'</td>'; }).join('')+'</tr>';
-  const corpoV = vsOrd.map(linhaV).join(''), corpoM = mos.map(linhaM).join('');
+  const linhaC = c => '<tr id="lgrow-c-'+lgIdSan(c.id)+'"'+(LG_FOCO && LG_FOCO.tipo==='c' && LG_FOCO.chave===c.id ? ' style="outline:3px solid #f0851e"' : '')+'><th class="lgrow"><b>🚛 '+_lgEsc(c.placa)+'</b><small>cavalo'+(c.manut?' · 🔧 manutenção':'')+(function(){ const v = veiculos.find(x=>x.cavaloPadrao===c.id); return v ? ' · engatado na '+_lgEsc(v.placa) : ' · solto'; })()+'</small></th>'+
+    dias.map((D,j)=>{ const L = (dados[j].cs||{})[c.id] || []; const c2 = lgConflito(L);
+      return '<td class="lgcel'+(c2?' conf':'')+(c.manut?' manut':'')+(D===HOJE?' hoje':'')+'" ondragover="event.preventDefault()" ondrop="lgDrop(event,\'c\',\''+c.id+'\',\''+D+'\')">'+
+        (L.length ? L.map(it=>lgChip(it,'c',c.id)).join('') : '<span class="lglivre">'+(c.manut?'🔧':'livre')+'</span>')+(c2?'<div style="font-size:10.5px;color:#a86412;font-weight:800;margin-top:2px">⚠ 2 saídas · confira horário</div>':'')+'</td>'; }).join('')+'</tr>';
+  const corpoV = vsOrd.map(linhaV).join(''), corpoM = mos.map(linhaM).join(''), corpoC = listaCavalos().map(linhaC).join('');
   /* fretes do período */
   const fretes = [];
   dias.forEach(D=>eventos.forEach(e=>{ if(e.esp || !(e.fretes||[]).length) return; if(diasEntre(e.mont, fimMont(e)).includes(D) || (e.desm && diasEntre(e.desm, fimDesm(e)).includes(D))) fretes.push({D, e}); }));
@@ -8219,6 +8414,7 @@ function renderLogistica(){
     '<div class="lgwrap"><table class="lgtab"><thead><tr><th></th>'+dias.map(D=>{ const dt = new Date(D+'T12:00'); const n = new Set(Object.values(dados[dias.indexOf(D)].vs).flat().filter(it=>it.tipo==='viagem').map(it=>it.ev.id)).size;
         return '<th class="'+(D===HOJE?'hoje':'')+'">'+SEM[dt.getDay()]+' <b>'+D.slice(8)+'/'+D.slice(5,7)+'</b><small>'+(n ? n+' saída(s)' : 'sem saída')+'</small></th>'; }).join('')+'</tr></thead><tbody>'+
       '<tr class="lgsec"><td colspan="8">🚚 CAMINHÕES</td></tr>'+corpoV+
+      (corpoC ? '<tr class="lgsec"><td colspan="8">🚛 CAVALOS (puxam as carretas)</td></tr>'+corpoC : '')+
       '<tr class="lgsec"><td colspan="8">🧑‍✈️ MOTORISTAS</td></tr>'+corpoM+
     '</tbody></table></div>'+
     (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc(x.emp||'frete')).join(', ')+'</div>').join('')+'</details>' : '')+
@@ -8353,9 +8549,9 @@ function msgOperacao(o, D, extra){
   else L.push(' • A DECIDIR');
   const prod = (o.pessoas || []).find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome.toUpperCase());
   if(extra && extra.v){
-    L.push('🚚 Frota: ' + extra.v.tipo + ' ' + extra.v.placa);
+    L.push('🚚 Frota: ' + rotVeicViagem(ev, o.fase, extra.v));
   } else {
-    const fr = (frotaDo(ev, o.fase) || []).map(id=>{ const v = veiculos.find(y=>y.id===id); return v ? v.tipo + ' ' + v.placa : null; }).filter(Boolean);
+    const fr = (frotaDo(ev, o.fase) || []).map(id=>{ const v = veiculos.find(y=>y.id===id); return v ? rotVeicViagem(ev, o.fase, v) : null; }).filter(Boolean);
     L.push('🚚 Frota: ' + (fr.length ? fr.join(' + ') : 'A DECIDIR'));
   }
   if(ev.respNome || ev.respTel) L.push('👤 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
@@ -8492,13 +8688,13 @@ function custoViagem(t, v){
 function odometroAtual(v){
   if(!(+v.odo)) return null;
   const desde = somaDiaISO(v.odoData || HOJE, 1);
-  const rod = viagensDoVeiculo(v.id, desde, HOJE).reduce((s,t)=>s+t.km, 0);
+  const rod = (v.cavalo ? viagensDoCavalo(v.id, desde, HOJE) : viagensDoVeiculo(v.id, desde, HOJE)).reduce((s,t)=>s+t.km, 0);
   return Math.round(+v.odo + rod);
 }
 function alertasFrota(){
   const A = [];
   const venc = (d, txt, quem) => { if(!d) return; const f = difDias(HOJE, d); if(f < 0) A.push({sev:3, txt: quem + ': ' + txt + ' VENCIDO em ' + fmtD(d).slice(0,5)}); else if(f <= 30) A.push({sev:2, txt: quem + ': ' + txt + ' vence em ' + f + ' dia(s) (' + fmtD(d).slice(0,5) + ')'}); };
-  veiculos.forEach(v=>{
+  veiculos.concat(listaCavalos()).forEach(v=>{
     const q = v.tipo + ' ' + v.placa, at = odometroAtual(v);
     if(at != null){
       [['oleoKm','troca de óleo'],['revKm','revisão']].forEach(([k,t])=>{ if(!(+v[k])) return; const falta = +v[k] - at;
@@ -8510,22 +8706,22 @@ function alertasFrota(){
   return A.sort((a,b)=>b.sev-a.sev);
 }
 function setVeic(id, k, val){
-  const v = veiculos.find(x=>x.id===id); if(!v) return;
+  const v = veiculos.find(x=>x.id===id) || cavaloObj(id); if(!v) return;
   if(k === 'odo'){ v.odo = +val || null; v.odoData = HOJE; }
   else if(/Km$/.test(k)) v[k] = +val || null;
   else v[k] = val || null;
   salvar(); renderLogistica();
 }
 function setMotCad(nome, k, val){ const m = motoristas.find(x=>x.nome===nome); if(!m) return; m[k] = val || null; salvar(); renderLogistica(); }
-function toggleManutVeic(id){ const v = veiculos.find(x=>x.id===id); if(!v) return; v.manut = !v.manut; salvar(); replanejar(true); renderQuadro(); renderLogistica();
+function toggleManutVeic(id){ if(cavaloObj(id)) return toggleManutCavalo(id); const v = veiculos.find(x=>x.id===id); if(!v) return; v.manut = !v.manut; salvar(); replanejar(true); renderQuadro(); renderLogistica();
   toast(v.manut ? '🔧 ' + v.tipo + ' ' + v.placa + ' em manutenção — sai das sugestões até você liberar.' : '✅ ' + v.tipo + ' ' + v.placa + ' liberado.'); }
 function htmlFrota(){
   const A = alertasFrota();
   const inp = 'border:1px solid var(--line);border-radius:6px;padding:3px 6px;font:inherit;font-size:12px';
   const corKm = (alvo, at) => { if(!(+alvo) || at == null) return ''; const f = +alvo - at; return f <= 0 ? 'color:#c0392b;font-weight:800' : f <= 1000 ? 'color:#e08a1e;font-weight:800' : 'color:#0f8a4d'; };
   const corD = d => { if(!d) return ''; const f = difDias(HOJE, d); return f < 0 ? ';border-color:#c0392b;color:#c0392b' : f <= 30 ? ';border-color:#e08a1e;color:#a86412' : ''; };
-  const rows = veiculos.map(v=>{ const at = odometroAtual(v);
-    return '<tr><td><b>'+_lgEsc(v.tipo+' '+v.placa)+'</b><br><small style="color:var(--muted)">'+(v.agregado?'agregado':'próprio')+'</small></td>'+
+  const rows = veiculos.concat(listaCavalos()).map(v=>{ const at = odometroAtual(v);
+    return '<tr><td><b>'+(v.cavalo?'🚛 ':'')+_lgEsc(v.tipo+' '+v.placa)+'</b><br><small style="color:var(--muted)">'+(v.cavalo?'cavalo mecânico':v.agregado?'agregado':'próprio')+'</small></td>'+
       '<td><input type="number" placeholder="km no painel" value="'+(v.odo||'')+'" style="'+inp+';width:96px" onchange="setVeic(\''+v.id+'\',\'odo\',this.value)"><br><small style="color:var(--muted)">'+(v.odoData?'lido '+fmtD(v.odoData).slice(0,5):'')+'</small></td>'+
       '<td><b>'+(at!=null?num(at)+' km':'—')+'</b><br><small style="color:var(--muted)">'+(at!=null && +v.odo ? '+'+num(at - v.odo)+' km rodados' : 'informe o km')+'</small></td>'+
       '<td><input type="number" placeholder="km" value="'+(v.oleoKm||'')+'" style="'+inp+';width:90px" onchange="setVeic(\''+v.id+'\',\'oleoKm\',this.value)"><br><small style="'+corKm(v.oleoKm, at)+'">'+(+v.oleoKm && at!=null ? (v.oleoKm-at<=0?'PASSOU '+num(at-v.oleoKm):'faltam '+num(v.oleoKm-at))+' km' : '')+'</small></td>'+
@@ -8535,7 +8731,7 @@ function htmlFrota(){
       '<td><button class="mini" style="'+(v.manut?'background:#c0392b;color:#fff;border-color:#c0392b':'')+'" onclick="toggleManutVeic(\''+v.id+'\')">'+(v.manut?'🔧 em manutenção':'colocar em manutenção')+'</button></td></tr>'; }).join('');
   const mrows = motoristas.map(m=>'<span style="display:inline-flex;gap:6px;align-items:center;margin:4px 14px 4px 0;font-size:12.5px">🧑‍✈️ <b>'+_lgEsc(m.nome)+'</b> CNH vence <input type="date" value="'+(m.cnhVenc||'')+'" style="'+inp+corD(m.cnhVenc)+'" onchange="setMotCad(\''+_lgEsc(m.nome).replace(/'/g,"\\'")+'\',\'cnhVenc\',this.value)"></span>').join('');
   return '<details class="lgbox"><summary><h3 style="display:inline">🔧 Frota — manutenção e documentos</h3>'+(A.length ? ' <b style="color:'+(A.some(a=>a.sev===3)?'#c0392b':'#e08a1e')+'">· '+A.length+' alerta(s)</b>' : '')+'</summary>'+
-    '<div style="display:flex;gap:8px;margin:8px 0"><button class="mini" style="font-weight:800" onclick="abrirCadVeiculo()">➕ Cadastrar caminhão</button><button class="mini" style="font-weight:800" onclick="abrirCadMotorista()">➕ Cadastrar motorista</button></div>'+
+    '<div style="display:flex;gap:8px;margin:8px 0"><button class="mini" style="font-weight:800" onclick="abrirCadVeiculo()">➕ Cadastrar caminhão</button><button class="mini" style="font-weight:800" onclick="abrirCadMotorista()">➕ Cadastrar motorista</button><button class="mini" style="font-weight:800" onclick="abrirCadCavalo()">➕ Cadastrar cavalo</button></div>'+
     (A.length ? '<div style="margin:8px 0;font-size:12.5px;line-height:1.7">'+A.map(a=>'<div style="color:'+(a.sev===3?'#c0392b':'#a86412')+';font-weight:700">'+(a.sev===3?'🔴 ':'🟡 ')+_lgEsc(a.txt)+'</div>').join('')+'</div>' : '')+
     '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="text-align:left;color:var(--muted);font-size:11px"><th>Caminhão</th><th>Km no painel (hoje)</th><th>Km agora (estimado)</th><th>Próxima troca de óleo</th><th>Próxima revisão</th><th>Licenciamento</th><th>Seguro</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div style="margin-top:10px">'+mrows+'</div>'+
@@ -8614,10 +8810,17 @@ function previsaoFrota(){
     const faltaV = Math.max(0, semCam.length - livresV);
     const faltaM = Math.max(0, (semMot + semCam.length) - livresM);
     const saidas = mIni.length + dIni.length;
-    const nivel = (faltaV || faltaM) ? 2
+    /* cavalos: quantas carretas saem no dia × cavalos disponíveis */
+    const totC = listaCavalos().filter(c=>!c.manut).length;
+    let carSai = 0, semCav = [];
+    if(listaCavalos().length) Object.keys(dados.vs).forEach(vid=>{ const v = veiculos.find(x=>x.id===vid); if(!ehCarreta(v)) return;
+      (dados.vs[vid]||[]).filter(it=>it.tipo==='viagem').forEach(it=>{ carSai++; if(!cavaloDe(it.ev, it.f, vid)) semCav.push({ev:it.ev, v}); }); });
+    const ocupC = Object.keys(dados.cs || {}).length;
+    let nivel = (faltaV || faltaM) ? 2
       : ((semCam.length && semCam.length === livresV) || (saidas && (livresV === 0 || livresM === 0 || oc.eqs >= (oc.totE||totE))) ? 1 : 0);
+    if(listaCavalos().length && (carSai > totC || semCav.length) && nivel < 1) nivel = 1;
     out.push({D, ocupV, totV, livresV, ocupM, totM, livresM, semCam, semMot, faltaV, faltaM,
-      m: mIni, dm: dIni, eqs: oc.eqs, totE: oc.totE || totE, pes, totPes, nivel});
+      m: mIni, dm: dIni, eqs: oc.eqs, totE: oc.totE || totE, pes, totPes, nivel, totC, ocupC, carSai, semCav});
   }
   PREV_CACHE = out;
   return out;
@@ -8672,6 +8875,8 @@ function capSugestoes(p){
     let ags = []; try{ ags = lgLivresMotorista(D, null).filter(m=>m.agregado).map(m=>m.nome); }catch(e){}
     S.push({txt:'🧑‍✈️ Tem caminhão mas <b>faltam '+p.faltaM+' motorista(s)</b>'+(ags.length ? ' — agregados livres: <b>'+ags.map(_lgEsc).join(', ')+'</b>' : ' — sem agregado livre: escalone as saídas (2ª viagem) ou contrate frete com motorista'), ac:'', rot:''});
   }
+  if(listaCavalos().length && p.carSai > p.totC) S.push({txt:'🚛 Saem <b>'+p.carSai+' carretas</b> e só tem <b>'+p.totC+' cavalo(s)</b> — um cavalo vai ter que largar uma carreta e voltar pra puxar outra: escalone os horários ou deixe a carreta no local (o cavalo volta livre)', ac:'', rot:''});
+  if((p.semCav||[]).length) S.push({txt:'🚛 <b>'+p.semCav.length+' carreta(s) sem cavalo</b> nesse dia: '+p.semCav.slice(0,3).map(s=>_lgEsc(s.v.placa)+' ('+_lgEsc(nomeTV(s.ev.nome).slice(0,18))+')').join(', '), ac:"verEvento('"+p.semCav[0].ev.id+"')", rot:'Escolher cavalo'});
   if(p.faltaV && p.semCam[0]) S.push({txt:'🚛 Vão faltar <b>'+p.faltaV+' caminhão(ões)</b> — contrate frete com antecedência', ac:"verEvento('"+p.semCam[0].ev.id+"')", rot:'Contratar frete'});
   if(p.eqs >= p.totE && (p.m.length + p.dm.length) > 0){
     const alvo = p.m.find(ev=>!ev.esp) || p.dm.find(ev=>!ev.esp);
@@ -8711,6 +8916,7 @@ function htmlPrevisao(){
         capBarra('🧑‍✈️ Motoristas', sel.ocupM, sel.totM, sel.semMot ? '· '+sel.semMot+' viagem(ns) sem motorista' : '')+
         capBarra('👷 Equipes', sel.eqs, sel.totE, '')+
         capBarra('🧍 Pessoas', sel.pes, sel.totPes, '')+
+        (listaCavalos().length ? capBarra('🚛 Cavalos', Math.max(sel.ocupC||0, sel.carSai||0), sel.totC||0, (sel.carSai ? '· '+sel.carSai+' carreta(s) saem' : '')+((sel.semCav||[]).length ? ' · '+sel.semCav.length+' sem cavalo' : '')) : '')+
       '</div>'+
       (S.length ? '<div style="font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.5px;margin:10px 0 4px">COMO DESAFOGAR</div>'+
         S.slice(0,7).map(s=>'<div style="display:flex;gap:10px;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--line)"><span style="flex:1;min-width:220px">'+s.txt+'</span>'+(s.ac && s.rot ? '<button class="mini" style="white-space:nowrap" onclick="'+s.ac.replace(/"/g,'&quot;')+'">'+s.rot+'</button>' : '')+'</div>').join('')
@@ -11014,6 +11220,7 @@ function blocoFrota(ev, modo){
              '<span style="display:flex;gap:10px;align-items:center">'+
              '<input type="date" value="'+(x.dia || padraoDia)+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:'+(alternado?'#a86412':'var(--muted)')+'" title="Dia em que ESTA viagem sai (dias alternados). Volte para '+(padraoDia?fmtD(padraoDia):'a data da fase')+' para acompanhar o evento." onchange="setDiaViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              '<input type="time" value="'+(x.hora||'')+'" style="border:1px solid '+(x.hora?'#1c4fa0':'var(--line)')+';border-radius:7px;padding:6px 8px;font-size:12px'+(x.hora?';color:#1c4fa0;font-weight:700':';color:var(--muted)')+'" title="Hora de saída DESTA viagem. Vazio = conta automática (estrada + margem)." onchange="setHoraViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
+             selCavaloHtml(ev, fase, v2)+
              sel+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
              (fase==='mont' && conta[x.v]===1 ? (function(){
@@ -11068,7 +11275,7 @@ function blocoDesmontagem(ev){
       return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+
         (x.motorista?' <span style="color:var(--muted);font-size:12px">'+x.motorista+'</span>':'')+
         (ficaAteDesm(ev, x.v) ? ' <span class="tag" style="color:#1c4fa0">📍 já está no local</span>' : '')+'</span>'+
-        '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">volta em '+
+        '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">'+(ehCarreta(v2) && listaCavalos().length ? selCavaloHtml(ev, 'desm', v2) : '')+'volta em '+
         '<input type="date" value="'+padraoD+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--muted)" title="Se este caminhão volta em outro dia (dias alternados), troque aqui — a frota da desmontagem passa a ser própria" onchange="diaDesmViagem(\''+ev.id+'\','+x.i+',this.value)"></span></div>';
     }).join('');
     return cab + '<div class="row"><span style="color:var(--muted)">Volta com os mesmos da montagem'+
@@ -12694,6 +12901,7 @@ function renderCadastros(){
     '<td>'+eventos.filter(e=>produtorDo(e)===p.nome).length+'</td>'+
     '<td style="text-align:right"><button class="mini danger" onclick="removerProdutor('+i+')">Remover</button></td></tr>').join('');
 
+  { const tc = document.getElementById('tb-cavalos'); if(tc) tc.innerHTML = htmlCavalosCad(); }
   document.getElementById('tb-veiculos').innerHTML = veiculos.map(v=>{
     const ocupado = eventos.some(e=>(e.veiculos||[]).includes(v.id));
     const q = s => String(s==null?'':s).replace(/"/g,'&quot;');
@@ -15330,7 +15538,7 @@ async function salvar(){
   try{
     if(!window.supabase){ try{ await carregarSupabaseLib(); }catch(e){} }
     if(window.supabase && NUVEM.url){
-      sb = window.supabase.createClient(NUVEM.url, NUVEM.key);
+      sb = novoClienteNuvem();
       const locais = eventos.slice(), cadLocal = JSON.parse(JSON.stringify(cadastrosAtuais()));
       const temBase = Object.keys(SYNC_BASE.ev).length > 0;
       await migrarDoAntigoSeVazio();
