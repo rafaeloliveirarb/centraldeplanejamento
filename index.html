@@ -620,6 +620,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
           <button onclick="relatorioOps()">🖨 Relatório de operações<small>montagens e desmontagens do período</small></button>
           <button onclick="sincronizarAgenda()">📋 Sincronizar agenda<small>a agenda já se atualiza sozinha</small></button>
           <button onclick="redistribuirProdutores()">⚖ Redistribuir produtores<small>solta os fixados e a IA sugere de novo</small></button>
+          <button onclick="abrirPuxarCard()">📥 Puxar card do Pipefy<small>pelo número do card — de qualquer fase</small></button>
           <button onclick="abrirLote()">📥 Importar planilha / XML<small>só acrescenta eventos novos</small></button>
           <button onclick="exportarBackup()">💾 Backup<small>baixa o quadro inteiro num arquivo</small></button>
         </div>
@@ -861,6 +862,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
           <input id="cfg-pf-token" type="password" placeholder="Token pessoal do Pipefy (só se NÃO for via Supabase)" style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyToken=this.value.trim();salvar()">
           <input id="cfg-pf-pipe" placeholder="Nº do pipe (ou vários, separados por vírgula)" style="width:260px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.pipefyPipe=this.value.trim();CONFIG.pipefyUltimo='';salvar()">
           <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
+        <button class="mini" style="font-weight:800" onclick="abrirPuxarCard()">📥 Puxar card pelo número</button>
           <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button></div>
         <div id="pf-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">A cada 15 minutos a Central confere a fase BACKLOG do Pipefy e acrescenta os cards que entraram lá. Não mexe nem apaga nada que já esteja no programa. O token fica em Pipefy → foto do perfil → Configurações da conta → Tokens de acesso pessoal. O número do pipe está no endereço do pipe (app.pipefy.com/pipes/<b>123456</b>).</div>
       </div>
@@ -954,6 +956,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
         <button class="mini" onclick="copiarFuncPipefy()">📋 Copiar código da função</button>
         <button class="mini" onclick="testarPipefy()">Testar conexão</button>
         <button class="mini" onclick="puxarPipefy(true)">Puxar agora</button>
+        <button class="mini" style="font-weight:800" onclick="abrirPuxarCard()">📥 Puxar card pelo número</button>
         <button class="mini" onclick="limparDuplicados()">🧹 Tirar duplicados</button>
         <button class="mini" onclick="ligarTodosPipefy(true).then(()=>sincronizarFasesPipefy())">🔗 Ligar eventos ao Pipefy</button>
         <button class="mini" onclick="carregarTabelaEnderecos(true).then(()=>preencherEnderecosDaTabela(true)).catch(e=>toast('Database: '+e.message))">📍 Puxar endereços (Evento / Obra)</button>
@@ -5845,6 +5848,69 @@ async function puxarPipefy(manual){
   }finally{ pipefyRodando = false; }
 }
 const fimDesmLote = e => e.desmFim || e.desm || e.evtFim || e.evt || e.mont;
+/* ===== 📥 PUXAR UM CARD DO PIPEFY PELO NÚMERO =====
+   a busca automática só traz card NOVO do BACKLOG; aqui entra qualquer card, de qualquer fase,
+   e a Central explica por que ele não tinha vindo sozinho */
+function abrirPuxarCard(pre){
+  const corpo =
+    '<div style="font-size:13px;margin-bottom:10px">Cole o <b>número do card</b> (ou o link do card no Pipefy). Entra de qualquer fase e com qualquer data — se já estiver na Central, eu abro ele.</div>'+
+    '<div style="display:flex;gap:8px"><input id="pc-num" value="'+_lgEsc(pre||'')+'" placeholder="ex.: 1451268897 ou o link do card" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font:inherit" onkeydown="if(event.key===\'Enter\')puxarCardPipefy(this.value)">'+
+    '<button class="mini" style="font-weight:800;background:#1c4fa0;color:#fff;border-color:#1c4fa0" onclick="puxarCardPipefy(document.getElementById(\'pc-num\').value)">📥 Puxar</button></div>'+
+    '<div id="pc-res" style="margin-top:12px;font-size:13px"></div>';
+  lgModal('📥 Puxar card do Pipefy', 'pelo número do card', corpo);
+  setTimeout(()=>{ try{ const i = document.getElementById('pc-num'); if(i && i.focus) i.focus(); }catch(e){} }, 50);
+}
+function idDoCardTexto(t){
+  const ns = String(t||'').match(/\d{6,}/g) || [];
+  return ns.sort((a,b)=>b.length - a.length)[0] || null;
+}
+async function puxarCardPipefy(txt){
+  const res = document.getElementById('pc-res'); const put = h => { if(res) res.innerHTML = h; };
+  const cid = idDoCardTexto(txt);
+  if(!cid){ put('<b style="color:#c0392b">Não achei o número do card nesse texto.</b>'); return null; }
+  put('⏳ Buscando o card ' + cid + ' no Pipefy…');
+  let card = null;
+  try{
+    const d = await pipefyGQL('query{ card(id: ' + JSON.stringify(cid) + '){ id title updated_at current_phase{ name } pipe{ id name } ' + CAMPOS_PF() + ' } }');
+    card = d && d.card;
+  }catch(e){
+    try{ const d2 = await pipefyGQL('query{ card(id: ' + JSON.stringify(cid) + '){ id title updated_at current_phase{ name } ' + CAMPOS_PF() + ' } }'); card = d2 && d2.card; }
+    catch(e2){ put('<b style="color:#c0392b">Não consegui ler o card no Pipefy:</b> ' + _lgEsc(e2.message || e.message)); return null; }
+  }
+  if(!card){ put('<b style="color:#c0392b">O Pipefy não devolveu o card ' + cid + '.</b> Confira o número (ou se o token tem acesso a esse pipe).'); return null; }
+  const pendentes = new Set();
+  const e = cardParaLote(card, pendentes);
+  /* por que não veio sozinho */
+  const porque = [];
+  const fase = card.current_phase && card.current_phase.name;
+  const pipes = String(CONFIG.pipefyPipe||'').split(/[,;\s]+/).filter(Boolean);
+  if(card.pipe && card.pipe.id && pipes.length && !pipes.includes(String(card.pipe.id))) porque.push('o card é do pipe <b>' + _lgEsc(card.pipe.name || card.pipe.id) + '</b>, e a Central só lê o pipe ' + _lgEsc(pipes.join(', ')));
+  if(fase && !faseCasaFiltro(fase, fasesPipefyFiltro())) porque.push('ele está na fase <b>' + _lgEsc(fase) + '</b> — sozinha, a Central só puxa card novo de <b>' + _lgEsc((CONFIG.pipefyFases || 'BACKLOG')) + '</b>');
+  if((CONFIG.pipefyVistos||[]).map(String).includes(String(card.id))) porque.push('ele já estava no BACKLOG quando o Pipefy foi ligado (ou já tinha sido conferido antes), então ficou de fora');
+  if(!(e.mont || e.desm)) porque.push('o card está <b>sem data</b> de montagem e de desmontagem');
+  else if((dia(fimDesmLote(e)) || '9999') < somaDiaISO(HOJE, -3)) porque.push('as datas dele já passaram (termina ' + fmtD(dia(fimDesmLote(e))) + ')');
+  const porqueHtml = porque.length ? '<div style="font-size:12px;color:var(--muted);margin-top:8px"><b>Por que não tinha vindo sozinho:</b><br>• ' + porque.join('<br>• ') + '</div>' : '';
+  const ja = jaNoPrograma(e);
+  if(ja){
+    if(!ja.pipefyId){ ja.pipefyId = String(card.id); salvar(); }
+    put('✅ <b>' + _lgEsc(ja.nome) + '</b> já está na Central.' + (ja.esp ? ' <span style="color:#a86412">(está como ' + _lgEsc(ja.esp) + ' — veja na 🗑 Lixeira ou em Finalizados)</span>' : '') + ' <button class="mini" onclick="fechar(\'ov-lg\');verEvento(\'' + ja.id + '\')">Abrir</button>' + porqueHtml);
+    return ja;
+  }
+  if(!(e.mont || e.desm)){ put('<b style="color:#c0392b">' + _lgEsc(e.nome) + '</b> não tem data de montagem nem de desmontagem no Pipefy — preencha lá e puxe de novo.' + porqueHtml); return null; }
+  if(foiExcluido(e) && !confirm('"' + e.nome + '" foi excluído da Central antes. Trazer de volta?')){ put('Nada foi feito.'); return null; }
+  e.marcado = true;
+  pendentes.forEach(n => { if((e.itens||[]).some(x=>x.nome===n) && !catalogo.some(c=>c.nome===n)) catalogo.push({nome:n, cat:'A conferir', un:'un', peso:0, vol:0, jailson:false, pendente:true}); });
+  const vistos = new Set((CONFIG.pipefyVistos || []).map(String)); vistos.add(String(card.id)); CONFIG.pipefyVistos = [...vistos];
+  lote = [e]; gravarLote(true);
+  const novo = eventos.find(x=>String(x.pipefyId||'')===String(card.id));
+  if(!novo){ put('<b style="color:#c0392b">Não consegui gravar o card.</b>' + porqueHtml); return null; }
+  try{ await preencherEnderecosDaTabela(false); }catch(_){}
+  put('✅ <b>' + _lgEsc(novo.nome) + '</b> entrou na Central' + (fase ? ' (fase ' + _lgEsc(fase) + ')' : '') + '. <button class="mini" onclick="fechar(\'ov-lg\');verEvento(\'' + novo.id + '\')">Abrir</button>' + porqueHtml +
+    ((dia(fimDesmLote(novo)) || '9999') < HOJE ? '<div style="font-size:12px;color:#a86412;margin-top:6px">As datas já passaram: ele aparece no quadro se você escolher um período que inclua essas datas.</div>' : ''));
+  toast('📥 ' + nomeTV(novo.nome) + ' puxado do Pipefy.');
+  return novo;
+}
+
 if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMotorista){
   setTimeout(()=>{ try{ carregarQRLib(); }catch(e){} }, 7000);
   setTimeout(()=>{ try{ if(window.__abrirEvHash && eventos.some(e=>e.id===window.__abrirEvHash)){ verEvento(window.__abrirEvHash); window.__abrirEvHash = null; } }catch(e){} }, 3000);
