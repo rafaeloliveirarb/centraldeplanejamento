@@ -4054,7 +4054,7 @@ async function coordGalpao(){
   return CONFIG.galpaoCoord;
 }
 /* medidas do caminhão na rua (altura total, comprimento total, peso bruto) — cadastro ou estimativa pelo tipo */
-const TARA = {'TOCO':6500, 'TRUCK':8500, 'CARRETA':16000, 'BAÚ':6000, 'F-4000':3200};
+const TARA = {'TOCO':6500, 'TRUCK':8500, 'CARRETA':16000, 'BAÚ':6000, 'F-4000':3200, 'MUNCK':13000};
 function dimsCaminhao(v){
   if(!v) return null;
   const tipo = String(v.tipo||'').toUpperCase();
@@ -4706,7 +4706,7 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto){
 }
 
 /* ================= CUSTO DA VIAGEM: diesel + pedágio ================= */
-const CONSUMO_TIPO = {'TOCO':5, 'TRUCK':4, 'CARRETA':2.5, 'BAÚ':5.5, 'F-4000':7}, EIXOS_TIPO = {'TOCO':2, 'TRUCK':3, 'CARRETA':5, 'BAÚ':2, 'F-4000':2};
+const CONSUMO_TIPO = {'TOCO':5, 'TRUCK':4, 'CARRETA':2.5, 'BAÚ':5.5, 'F-4000':7, 'MUNCK':3.5}, EIXOS_TIPO = {'TOCO':2, 'TRUCK':3, 'CARRETA':5, 'BAÚ':2, 'F-4000':2, 'MUNCK':3};
 const consumoDe = v => +v.consumo || CONSUMO_TIPO[String(v.tipo||'').toUpperCase()] || 4;
 const eixosDe = v => +v.eixos || EIXOS_TIPO[String(v.tipo||'').toUpperCase()] || 2;
 const reais = n => 'R$ ' + (Math.round(n)).toLocaleString('pt-BR');
@@ -13001,7 +13001,7 @@ function renderCadastros(){
 }
 
 /* ---- edição de equipes ---- */
-const TIPOS_VEICULO = ['TOCO','TRUCK','CARRETA','BAÚ','F-4000'];
+const TIPOS_VEICULO = ['TOCO','TRUCK','CARRETA','BAÚ','F-4000','MUNCK'];
 function setMembros(i, texto){
   const nomes = String(texto||'').split(',').map(s=>s.trim()).filter(Boolean);
   equipes[i].membros = nomes;
@@ -13107,7 +13107,8 @@ const CAD_VEIC_PADRAO = {
   'TRUCK':  {c:8.50, l:2.50, a:2.50, vol:53.0, peso:12000},
   'CARRETA':{c:13.90,l:2.44, a:2.80, vol:95,   peso:27000},
   'BAÚ':    {c:6.90, l:2.45, a:2.30, vol:39.0, peso:7680},
-  'F-4000': {c:4.20, l:2.15, a:2.00, vol:18.0, peso:4000}
+  'F-4000': {c:4.20, l:2.15, a:2.00, vol:18.0, peso:4000},
+  'MUNCK':  {c:7.00, l:2.50, a:2.40, vol:42.0, peso:9000}
 };
 function cadVeicPadrao(){
   const t = document.getElementById('cv-tipo').value, p = CAD_VEIC_PADRAO[t];
