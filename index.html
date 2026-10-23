@@ -12908,7 +12908,7 @@ function renderCadastros(){
     return '<tr><td style="white-space:nowrap">'+
       '<select class="cad" style="font-weight:700;width:110px" onchange="setVeiculoCampo(\''+v.id+'\',\'tipo\',this.value)">'+
         TIPOS_VEICULO.map(t=>'<option '+(t===v.tipo?'selected':'')+'>'+t+'</option>').join('')+
-        (TIPOS_VEICULO.includes(v.tipo)?'':'<option selected>'+v.tipo+'</option>')+'</select> '+
+        (TIPOS_VEICULO.includes(v.tipo)?'':'<option selected>'+v.tipo+'</option>')+'<option value="CAVALO">CAVALO</option></select> '+
       '<input class="cad" style="width:110px" value="'+q(v.modelo==='—'?'':v.modelo)+'" placeholder="modelo" onchange="setVeiculoCampo(\''+v.id+'\',\'modelo\',this.value.trim()||\'—\')"></td>'+
     '<td><input class="cad placa" value="'+q(v.placa)+'" onchange="setVeiculoCampo(\''+v.id+'\',\'placa\',this.value.trim().toUpperCase())"></td>'+
     '<td><select class="cad" style="width:150px" onchange="setMotoristaFixo(\''+v.id+'\',this.value)">'+
@@ -13050,7 +13050,23 @@ function renomearProdutor(i, novo){
 }
 
 /* ---- edição de veículos ---- */
+function virarCavalo(id){
+  const i = veiculos.findIndex(x=>x.id===id); if(i < 0) return;
+  const v = veiculos[i];
+  const usos = eventos.filter(e=>!evEncerrado(e) && ((e.veiculos||[]).includes(id) || (e.veiculosD||[]).includes(id)));
+  if(usos.length){ toast('🚛 ' + v.tipo + ' ' + v.placa + ' está em ' + usos.length + ' evento(s) como caminhão de carga (' + usos.slice(0,2).map(e=>nomeTV(e.nome).slice(0,20)).join(', ') + '). Tire de lá antes de transformar em cavalo.'); renderCadastros(); return; }
+  if(!confirm(v.placa + ' vai virar CAVALO MECÂNICO: sai da lista de caminhões de carga e passa a puxar as carretas. Continuar?')){ renderCadastros(); return; }
+  const c = {id: v.id, tipo:'CAVALO', cavalo:true, placa: v.placa, modelo: v.modelo || '—', eixos: v.eixos || null};
+  ['odo','odoData','oleoKm','revKm','licVenc','segVenc','manut'].forEach(k=>{ if(v[k] != null) c[k] = v[k]; });
+  if(v.agregado) motoristas.forEach(m=>{ if(m.veiculo === id){ m.veiculo = null; m.agregado = false; } });
+  veiculos.splice(i, 1);
+  listaCavalos().push(c);
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderCadastros(); renderQuadro(); try{ renderLogistica(); }catch(e){}
+  toast('🚛 ' + c.placa + ' agora é cavalo mecânico. Engate ele numa carreta na tabela "Cavalos mecânicos" logo abaixo.');
+  setTimeout(()=>{ try{ const t = document.getElementById('tb-cavalos'); if(t && t.scrollIntoView) t.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){} }, 100);
+}
 function setVeiculoCampo(id, campo, valor){
+  if(campo === 'tipo' && valor === 'CAVALO') return virarCavalo(id);
   const v = veiculos.find(x=>x.id===id); if(!v) return;
   v[campo] = valor;
   salvar(); renderCadastros(); renderQuadro();
@@ -13095,6 +13111,9 @@ const CAD_VEIC_PADRAO = {
 };
 function cadVeicPadrao(){
   const t = document.getElementById('cv-tipo').value, p = CAD_VEIC_PADRAO[t];
+  const dims = document.getElementById('cv-dims'), cav = document.getElementById('cv-cav');
+  if(dims && dims.style) dims.style.display = t === 'CAVALO' ? 'none' : '';
+  if(cav && cav.style) cav.style.display = t === 'CAVALO' ? '' : 'none';
   if(!p) return;
   [['cv-c',p.c],['cv-l',p.l],['cv-a',p.a],['cv-vol',p.vol],['cv-peso',p.peso]].forEach(([id,v])=>{ const e = document.getElementById(id); if(e) e.value = v; });
 }
@@ -13103,11 +13122,11 @@ function abrirCadVeiculo(){
   const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
   const corpo =
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px">'+
-      '<div><label style="'+lb+'">Tipo</label><select id="cv-tipo" style="'+fi+'" onchange="cadVeicPadrao()">'+TIPOS_VEICULO.map(t=>'<option>'+t+'</option>').join('')+'</select></div>'+
+      '<div><label style="'+lb+'">Tipo</label><select id="cv-tipo" style="'+fi+'" onchange="cadVeicPadrao()">'+TIPOS_VEICULO.map(t=>'<option>'+t+'</option>').join('')+'<option value="CAVALO">CAVALO (puxa carreta)</option></select></div>'+
       '<div><label style="'+lb+'">Placa</label><input id="cv-placa" style="'+fi+';text-transform:uppercase" placeholder="AAA 0A00"></div>'+
       '<div><label style="'+lb+'">Modelo (opcional)</label><input id="cv-modelo" style="'+fi+'" placeholder="VW 15-180"></div>'+
     '</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0 12px">'+
+    '<div id="cv-dims"><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:0 12px">'+
       '<div><label style="'+lb+'">Compr. (m)</label><input id="cv-c" type="number" step="0.05" style="'+fi+'" value="6.70"></div>'+
       '<div><label style="'+lb+'">Larg. (m)</label><input id="cv-l" type="number" step="0.05" style="'+fi+'" value="2.50"></div>'+
       '<div><label style="'+lb+'">Alt. (m)</label><input id="cv-a" type="number" step="0.05" style="'+fi+'" value="2.55"></div>'+
@@ -13118,7 +13137,10 @@ function abrirCadVeiculo(){
     '<div><label style="'+lb+'">De quem é o caminhão?</label>'+
       '<select id="cv-dono" style="'+fi+'"><option value="">🏠 Da empresa (motorista pela escala do dia)</option>'+
         motoristas.map(m=>'<option value="'+_lgEsc(m.nome).replace(/"/g,'&quot;')+'">🧑‍✈️ Agregado — fixo com '+_lgEsc(m.nome)+'</option>').join('')+
-      '</select></div>'+
+      '</select></div></div>'+
+    '<div id="cv-cav" style="display:none"><label style="'+lb+'">Engatado normalmente em</label><select id="cv-carreta" style="'+fi+'"><option value="">nenhuma (escolho em cada evento)</option>'+
+      veiculos.filter(ehCarreta).map(v=>'<option value="'+v.id+'">'+_lgEsc(v.tipo+' '+v.placa)+(cavaloObj(v.cavaloPadrao)?' — hoje com '+_lgEsc(cavaloObj(v.cavaloPadrao).placa):'')+'</option>').join('')+'</select>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">O cavalo não leva carga: ele puxa a carreta. Fica na tabela "Cavalos mecânicos", com manutenção e documentos.</div></div>'+
     '<div id="cv-aviso" style="color:#c0392b;font-weight:700;font-size:12.5px;margin-top:8px"></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
@@ -13131,7 +13153,15 @@ function salvarCadVeiculo(){
   const placa = g('cv-placa').trim().toUpperCase();
   const aviso = document.getElementById('cv-aviso');
   if(!placa){ aviso.textContent = 'Falta a placa.'; return; }
-  if(veiculos.some(v=>v.placa.replace(/\s/g,'') === placa.replace(/\s/g,''))){ aviso.textContent = 'Já existe um caminhão com a placa ' + placa + '.'; return; }
+  if(veiculos.concat(listaCavalos()).some(v=>v.placa.replace(/\s/g,'') === placa.replace(/\s/g,''))){ aviso.textContent = 'Já existe um veículo com a placa ' + placa + '.'; return; }
+  if(g('cv-tipo') === 'CAVALO'){
+    const c = {id:'c' + Date.now().toString(36), tipo:'CAVALO', cavalo:true, placa, modelo: g('cv-modelo').trim() || '—', eixos:null};
+    listaCavalos().push(c);
+    const car = g('cv-carreta'); if(car){ veiculos.forEach(v=>{ if(v.cavaloPadrao === c.id) v.cavaloPadrao = null; }); const v = veiculos.find(x=>x.id===car); if(v) v.cavaloPadrao = c.id; }
+    marcarPlanoSujo(); limparSecCache(); salvar(); try{ renderCadastros(); }catch(e){} try{ renderQuadro(); }catch(e){} try{ renderLogistica(); }catch(e){}
+    fechar('ov-lg');
+    return toast('🚛 Cavalo ' + placa + ' cadastrado' + (car ? ' e engatado na ' + (veiculos.find(x=>x.id===car)||{}).placa : '') + '.');
+  }
   const v = {id:'v' + Date.now().toString(36), tipo: g('cv-tipo') || 'TRUCK', modelo: g('cv-modelo').trim() || '—', placa,
     c:+g('cv-c')||0, l:+g('cv-l')||0, a:+g('cv-a')||0, vol:+g('cv-vol')||0, peso:+g('cv-peso')||0, status:'Estimado'};
   veiculos.push(v);
