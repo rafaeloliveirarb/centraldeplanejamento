@@ -11295,8 +11295,11 @@ function abrirOcorrencia(evId, fase, vid){
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">'+
       '<div><label style="'+lb+'">Trocar o motorista da viagem para (opcional)</label><select id="oc-mot" style="'+fi+'"><option value="">— não trocar —</option>'+
         motoristas.filter(m=>m.situacao!=='Indisponível').map(m=>'<option>'+_lgEsc(m.nome)+'</option>').join('')+'</select></div>'+
-      '<div style="display:flex;align-items:flex-end;padding-bottom:4px"><label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" id="oc-manut"> 🔧 Colocar o caminhão <b>em manutenção</b></label></div>'+
+      '<div><label style="'+lb+'">Trocar o caminhão da viagem para (opcional)</label><select id="oc-vtroca" style="'+fi+'"><option value="">— não trocar —</option>'+
+        (function(){ let livres = []; try{ livres = lgLivresCaminhao(dia(ev.mont) || HOJE, ev).map(x=>x.v.id); }catch(e){}
+          return veiculos.filter(x=>!x.manut).sort((a,b)=>(livres.includes(b.id)?1:0)-(livres.includes(a.id)?1:0)).map(x=>'<option value="'+x.id+'">'+_lgEsc(x.tipo+' '+x.placa)+(livres.includes(x.id)?' · livre':'')+(x.agregado?' (agregado)':'')+'</option>').join(''); })()+'</select></div>'+
     '</div>'+
+    '<div style="margin-top:10px"><label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" id="oc-manut"> 🔧 Colocar o caminhão <b>em manutenção</b> <small style="color:var(--muted)">(sai das sugestões e deixa de "ficar no local")</small></label></div>'+
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
       '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarOcorrencia()">💾 Registrar</button></div>';
@@ -11315,19 +11318,32 @@ function salvarOcorrencia(){
   ev.ocorr.unshift({id:'oc'+Date.now().toString(36), q:new Date().toISOString(), d, v:vid, tipo, txt, mot: motNovo || null, manut});
   ev.ocorr = ev.ocorr.slice(0, 40);
   partes.push(rotOcorr(tipo) + (txt ? ' — ' + txt : ''));
-  let motVelho = null;
-  if(motNovo && vid){
-    const dz = ctx.fase==='desm' && temFrotaDesm(ev);
+  const dz = ctx.fase==='desm' && temFrotaDesm(ev);
+  const vagaI = vid ? (escalaDo(ev, dz?'desm':'mont').find(x=>x.v===vid) || {}).i : null;
+  const vTroca = g('oc-vtroca') || null;
+  if(vTroca && vagaI != null && vTroca !== vid){
+    trocarVeiculoVaga(ev.id, vagaI, vTroca, ctx.fase);
+    const nv = veiculos.find(x=>x.id===vTroca);
+    if(nv) partes.push('a viagem passou para o ' + nv.tipo + ' ' + nv.placa + (nv.agregado && nv.motoristaFixo ? ' com ' + nv.motoristaFixo : ''));
+  }
+  if(motNovo && vagaI != null){
     const esc = escalaDo(ev, dz?'desm':'mont');
-    const alvoI = (esc.find(x=>x.v===vid) || {}).i;
-    if(alvoI != null){
-      motVelho = (esc.find(x=>x.i===alvoI) || {}).motorista || null;
-      const nova = esc.map(x=>({i:x.i, v:x.v, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null, motorista: x.i===alvoI ? motNovo : x.motorista}));
-      if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
-      partes.push('motorista trocado' + (motVelho ? ' de ' + motVelho : '') + ' para ' + motNovo);
-    }
+    const motVelho = (esc.find(x=>x.i===vagaI) || {}).motorista || null;
+    const nova = esc.map(x=>({i:x.i, v:x.v, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null, motorista: x.i===vagaI ? motNovo : x.motorista}));
+    if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
+    partes.push('motorista trocado' + (motVelho && motVelho !== motNovo ? ' de ' + motVelho : '') + ' para ' + motNovo);
   }
   if(manut && v){ v.manut = true; partes.push(v.tipo + ' ' + v.placa + ' entrou em manutenção'); }
+  /* quebrou, voltou ou foi pra oficina: ele NÃO está mais parado no local do evento */
+  if(vid && (manut || tipo === 'quebrou' || tipo === 'voltou' || tipo === 'acidente')){
+    let soltou = false;
+    if(ev.fica && ev.fica[vid]){ delete ev.fica[vid]; if(!Object.keys(ev.fica).length) delete ev.fica; soltou = true; }
+    if(ev.ficaMot && ev.ficaMot[vid]){ delete ev.ficaMot[vid]; if(!Object.keys(ev.ficaMot).length) delete ev.ficaMot; }
+    if(ev.ficaD && ev.ficaD[vid]){ delete ev.ficaD[vid]; if(!Object.keys(ev.ficaD).length) delete ev.ficaD; soltou = true; }
+    if(ev.ficaMotD && ev.ficaMotD[vid]){ delete ev.ficaMotD[vid]; if(!Object.keys(ev.ficaMotD).length) delete ev.ficaMotD; }
+    if(soltou) partes.push('saiu do "fica no local"');
+  }
+
   /* entra no histórico do evento, com autor */
   try{
     let quem = null; try{ quem = localStorage.getItem('cpl:quem'); }catch(e){}
