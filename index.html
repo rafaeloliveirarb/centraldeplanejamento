@@ -8810,6 +8810,7 @@ function htmlFrota(){
     '<div style="display:flex;gap:8px;margin:8px 0"><button class="mini" style="font-weight:800" onclick="abrirCadVeiculo()">➕ Cadastrar caminhão</button><button class="mini" style="font-weight:800" onclick="abrirCadMotorista()">➕ Cadastrar motorista</button><button class="mini" style="font-weight:800" onclick="abrirCadCavalo()">➕ Cadastrar cavalo</button></div>'+
     (A.length ? '<div style="margin:8px 0;font-size:12.5px;line-height:1.7">'+A.map(a=>'<div style="color:'+(a.sev===3?'#c0392b':'#a86412')+';font-weight:700">'+(a.sev===3?'🔴 ':'🟡 ')+_lgEsc(a.txt)+'</div>').join('')+'</div>' : '')+
     '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="text-align:left;color:var(--muted);font-size:11px"><th>Caminhão</th><th>Km no painel (hoje)</th><th>Km agora (estimado)</th><th>Próxima troca de óleo</th><th>Próxima revisão</th><th>Licenciamento</th><th>Seguro</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    (function(){ const O = ocorrRecentes(30); return O.length ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:#b0483c">⚠ Ocorrências nos últimos 30 dias · '+O.length+'</summary>'+O.slice(0,25).map(x=>linhaOcorr(x.ev, x.o, true)).join('')+'</details>' : ''; })()+
     '<div style="margin-top:10px">'+mrows+'</div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Digite o km que está no painel do caminhão; a Central soma sozinha os km de cada viagem escalada depois disso. Caminhão em manutenção sai das sugestões da IA e do "resolver conflito".</div></details>';
 }
@@ -11262,6 +11263,115 @@ function separarFrotaDesm(id, ligar){
   salvar(); renderQuadro(); verEvento(id);
   toast(ligar ? 'Agora a desmontagem tem caminhões próprios — ajuste abaixo.' : 'A desmontagem voltou a usar os caminhões da montagem.');
 }
+/* ===== ⚠ OCORRÊNCIAS DA VIAGEM =====
+   registro do que deu errado na rua: quebrou, voltou no meio do caminho, trocou motorista…
+   fica no evento (ev.ocorr), entra no histórico e aparece na Frota do Painel Logística */
+const OCORR_TIPOS = [
+  ['quebrou','🔧 Quebrou no caminho'],
+  ['voltou','↩ Voltou no meio do caminho'],
+  ['mot','🧑‍✈️ Troca de motorista'],
+  ['atraso','⏰ Atraso na viagem'],
+  ['acidente','🚨 Acidente'],
+  ['multa','📄 Multa / fiscalização'],
+  ['outro','⚠ Outro']
+];
+const rotOcorr = t => (OCORR_TIPOS.find(x=>x[0]===t) || ['', '⚠'])[1];
+let OC_CTX = null;
+function abrirOcorrencia(evId, fase, vid){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  OC_CTX = {evId, fase: fase || 'mont'};
+  const fi = 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%';
+  const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
+  const fr = [...new Set([...(frotaDo(ev,'mont')||[]), ...(temFrotaDesm(ev) ? (frotaDo(ev,'desm')||[]) : [])])];
+  const corpo =
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Caminhão</label><select id="oc-v" style="'+fi+'">'+
+        '<option value="">— o evento todo —</option>'+
+        fr.map(id=>{ const v = veiculos.find(x=>x.id===id); return v ? '<option value="'+id+'" '+(id===vid?'selected':'')+'>'+_lgEsc(v.tipo+' '+v.placa)+'</option>' : ''; }).join('')+'</select></div>'+
+      '<div><label style="'+lb+'">Dia</label><input id="oc-data" type="date" value="'+HOJE+'" style="'+fi+'"></div>'+
+      '<div><label style="'+lb+'">O que aconteceu</label><select id="oc-tipo" style="'+fi+'">'+OCORR_TIPOS.map(t=>'<option value="'+t[0]+'">'+t[1]+'</option>').join('')+'</select></div>'+
+    '</div>'+
+    '<div><label style="'+lb+'">Conte o que houve</label><input id="oc-txt" style="'+fi+'" placeholder="ex.: quebrou a bomba na Via Lagos, voltou de guincho" onkeydown="if(event.key===\'Enter\')salvarOcorrencia()"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Trocar o motorista da viagem para (opcional)</label><select id="oc-mot" style="'+fi+'"><option value="">— não trocar —</option>'+
+        motoristas.filter(m=>m.situacao!=='Indisponível').map(m=>'<option>'+_lgEsc(m.nome)+'</option>').join('')+'</select></div>'+
+      '<div style="display:flex;align-items:flex-end;padding-bottom:4px"><label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer"><input type="checkbox" id="oc-manut"> 🔧 Colocar o caminhão <b>em manutenção</b></label></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarOcorrencia()">💾 Registrar</button></div>';
+  lgModal('⚠ Registrar ocorrência', _lgEsc(nomeTV(ev.nome)) + ' — fica no histórico do evento e na frota', corpo);
+  setTimeout(()=>{ try{ const i = document.getElementById('oc-txt'); if(i && i.focus) i.focus(); }catch(e){} }, 60);
+}
+function salvarOcorrencia(){
+  const ctx = OC_CTX; if(!ctx) return;
+  const ev = eventos.find(e=>e.id===ctx.evId); if(!ev) return;
+  const g = id => { const e = document.getElementById(id); return e ? (e.type==='checkbox' ? e.checked : e.value) : ''; };
+  const vid = g('oc-v') || null, tipo = g('oc-tipo') || 'outro', txt = String(g('oc-txt')||'').trim(), d = g('oc-data') || HOJE;
+  const motNovo = g('oc-mot') || null, manut = !!g('oc-manut');
+  const v = vid ? veiculos.find(x=>x.id===vid) : null;
+  const partes = [];
+  ev.ocorr = ev.ocorr || [];
+  ev.ocorr.unshift({id:'oc'+Date.now().toString(36), q:new Date().toISOString(), d, v:vid, tipo, txt, mot: motNovo || null, manut});
+  ev.ocorr = ev.ocorr.slice(0, 40);
+  partes.push(rotOcorr(tipo) + (txt ? ' — ' + txt : ''));
+  let motVelho = null;
+  if(motNovo && vid){
+    const dz = ctx.fase==='desm' && temFrotaDesm(ev);
+    const esc = escalaDo(ev, dz?'desm':'mont');
+    const alvoI = (esc.find(x=>x.v===vid) || {}).i;
+    if(alvoI != null){
+      motVelho = (esc.find(x=>x.i===alvoI) || {}).motorista || null;
+      const nova = esc.map(x=>({i:x.i, v:x.v, dia:x.dia||null, hora:x.hora||null, junto:x.junto||null, motorista: x.i===alvoI ? motNovo : x.motorista}));
+      if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; } else { ev.veiculos = [...frotaDo(ev)]; ev.escala = nova; }
+      partes.push('motorista trocado' + (motVelho ? ' de ' + motVelho : '') + ' para ' + motNovo);
+    }
+  }
+  if(manut && v){ v.manut = true; partes.push(v.tipo + ' ' + v.placa + ' entrou em manutenção'); }
+  /* entra no histórico do evento, com autor */
+  try{
+    let quem = null; try{ quem = localStorage.getItem('cpl:quem'); }catch(e){}
+    fotografar(ev);   /* a troca de motorista não vira linha dobrada no histórico automático */
+    ev.hist = [{q:new Date().toISOString(), quem: quem || null, o:['⚠ Ocorrência ' + fmtD(d).slice(0,5) + (v ? ' (' + v.tipo + ' ' + v.placa + ')' : '') + ': ' + partes.join(' · ')]}, ...(ev.hist||[])].slice(0,80);
+  }catch(e){}
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  fechar('ov-lg');
+  try{ renderLogistica(); }catch(e){}
+  try{ verEvento(ev.id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 60); }catch(e){}
+  toast('⚠ Ocorrência registrada: ' + partes.join(' · ') + '.');
+  OC_CTX = null;
+}
+function tirarOcorrencia(evId, oid){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const o = (ev.ocorr||[]).find(x=>x.id===oid); if(!o) return;
+  if(!confirm('Apagar esta ocorrência do registro?')) return;
+  ev.ocorr = ev.ocorr.filter(x=>x.id!==oid);
+  if(!ev.ocorr.length) delete ev.ocorr;
+  salvar(); renderQuadro(); verEvento(evId); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 60);
+}
+function linhaOcorr(ev, o, comEvento){
+  const v = o.v ? veiculos.find(x=>x.id===o.v) : null;
+  return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--line)">'+
+    '<b style="color:#b0483c;white-space:nowrap">'+rotOcorr(o.tipo)+'</b>'+
+    '<span style="flex:1;min-width:200px"><b>'+fmtD(o.d).slice(0,5)+'</b>'+(v ? ' · '+_lgEsc(v.tipo+' '+v.placa) : '')+(comEvento ? ' · <a href="#" onclick="event.preventDefault();verEvento(\''+ev.id+'\')">'+_lgEsc(nomeTV(ev.nome).slice(0,26))+'</a>' : '')+
+    (o.txt ? ' — '+_lgEsc(o.txt) : '')+(o.mot ? ' · 🧑‍✈️ trocou para <b>'+_lgEsc(o.mot)+'</b>' : '')+(o.manut ? ' · 🔧 foi para manutenção' : '')+'</span>'+
+    (comEvento ? '' : '<button class="mini danger" onclick="tirarOcorrencia(\''+ev.id+'\',\''+o.id+'\')">Tirar</button>')+'</div>';
+}
+function htmlOcorrEv(ev){
+  const L = ev.ocorr || [];
+  return '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)">'+
+    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:13px">⚠ Ocorrências da viagem</b>'+
+    '<span style="font-size:12px;color:var(--muted)">quebra, volta no meio do caminho, troca de motorista — fica registrado</span>'+
+    '<span style="flex:1"></span><button class="mini" onclick="abrirOcorrencia(\''+ev.id+'\',\'mont\')">➕ Registrar ocorrência</button></div>'+
+    (L.length ? '<div style="margin-top:6px">'+L.map(o=>linhaOcorr(ev, o, false)).join('')+'</div>' : '')+
+  '</div>';
+}
+function ocorrRecentes(dias){
+  const corte = somaDiaISO(HOJE, -(dias || 30)), out = [];
+  eventos.forEach(ev=>(ev.ocorr||[]).forEach(o=>{ if((o.d||'') >= corte) out.push({ev, o}); }));
+  return out.sort((a,b)=>String(b.o.d).localeCompare(String(a.o.d)) || String(b.o.q||'').localeCompare(String(a.o.q||'')));
+}
+
 /* seletor e lista de veículos de uma fase */
 function blocoFrota(ev, modo){
   const fase = modo==='desm' || modo==='lista-desm' ? 'desm' : 'mont';
@@ -11298,6 +11408,7 @@ function blocoFrota(ev, modo){
              '<input type="time" value="'+(x.hora||'')+'" style="border:1px solid '+(x.hora?'#1c4fa0':'var(--line)')+';border-radius:7px;padding:6px 8px;font-size:12px'+(x.hora?';color:#1c4fa0;font-weight:700':';color:var(--muted)')+'" title="Hora de saída DESTA viagem. Vazio = conta automática (estrada + margem)." onchange="setHoraViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              selCavaloHtml(ev, fase, v2)+
              sel+
+             '<button class="mini" title="Registrar ocorrência: quebrou, voltou no meio do caminho, trocou motorista" onclick="abrirOcorrencia(\''+ev.id+'\',\''+fase+'\',\''+x.v+'\')">⚠</button>'+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
              (fase==='mont' && conta[x.v]===1 ? (function(){
                const f = (ev.fica||{})[x.v], ate = ficaAte(ev, x.v);
@@ -11330,7 +11441,7 @@ function blocoFrota(ev, modo){
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFicaD(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão"><input type="checkbox" '+(motFicaD(ev, x.v)?'checked':'')+' onchange="setFicaMotD(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
              })() : '');
-    }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + '</div>';
+    }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + (modo==='lista-mont' ? htmlOcorrEv(ev) : '') + '</div>';
 }
 /* bloco da desmontagem: fechado por padrão, abre quando os caminhões são outros */
 function blocoDesmontagem(ev){
