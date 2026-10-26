@@ -3589,8 +3589,11 @@ function mensagemDia(o, D){
   if(equipeTxt.length) L.push('👷 ' + equipeTxt.join(', ') + (ev.dorme && !o.fora ? ' — 🛏 equipe dorme no local' : ''));
   { const et = etapasNoDia(ev, D); if(et.length) L.push('🧩 Etapas do dia: ' + et.map(x=>x.nome + ((x.pessoas||[]).length ? ' (' + x.pessoas.join(', ') + ')' : '') + (x.obs ? ' — ' + x.obs : '')).join('; ')); }
   const prod = o.pessoas.find(pp=>pp.prod); if(prod) L.push('🎬 Produtor: ' + prod.nome);
-  if(o.viagens.length){
-    L.push('🚚 ' + o.viagens.map(x=>rotVeicViagem(ev, x.fase, x.v) + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.hSai ? ' — sai ' + x.hSai : '') + (x.jaLocal ? ' — já no local' : '')).join(' · '));
+  const fretesDia = (ev.fretes||[]).filter(f=>f.fase===o.fase);
+  if(o.viagens.length || fretesDia.length){
+    const ptsV = o.viagens.map(x=>rotVeicViagem(ev, x.fase, x.v) + (x.motorista ? ' (' + x.motorista + ')' : '') + (x.hSai ? ' — sai ' + x.hSai : '') + (x.jaLocal ? ' — já no local' : ''));
+    fretesDia.forEach(f=>ptsV.push('FRETE' + (f.placa ? ' ' + f.placa : '') + (f.emp ? ' (' + f.emp + ')' : '')));
+    L.push('🚚 ' + ptsV.join(' · '));
   }
   { const hs = saidaDaOp(o, D); if(hs) L.push(txtSaida(hs)); const ad = alertaDescarga(ev, hs); if(ad) L.push(ad.txt); const ar = alertaRestricao(ev, o.fase, D, hs); if(ar) L.push(ar.txt);
     const se = saidaManual(ev, o.fase, 'eq'); if(se && !(hs && hs.saidaEq)) L.push('👷 Equipe sai às ' + se); }
@@ -8493,7 +8496,7 @@ function renderLogistica(){
       (corpoC ? '<tr class="lgsec"><td colspan="8">🚛 CAVALOS (puxam as carretas)</td></tr>'+corpoC : '')+
       '<tr class="lgsec"><td colspan="8">🧑‍✈️ MOTORISTAS</td></tr>'+corpoM+
     '</tbody></table></div>'+
-    (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc(x.emp||'frete')).join(', ')+'</div>').join('')+'</details>' : '')+
+    (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc([x.placa, x.emp].filter(Boolean).join(' · ')||'frete')).join(' | ')+'</div>').join('')+'</details>' : '')+
     '<div style="margin-top:12px">'+htmlFrota()+htmlCusto()+'</div>';
   box.innerHTML = topo + cockpit + corpo;
 }
@@ -8628,6 +8631,7 @@ function msgOperacao(o, D, extra){
     L.push('🚚 Frota: ' + rotVeicViagem(ev, o.fase, extra.v));
   } else {
     const fr = (frotaDo(ev, o.fase) || []).map(id=>{ const v = veiculos.find(y=>y.id===id); return v ? rotVeicViagem(ev, o.fase, v) : null; }).filter(Boolean);
+    (ev.fretes||[]).filter(f=>f.fase===o.fase).forEach(f=>fr.push('FRETE' + (f.placa ? ' ' + f.placa : '') + (f.emp ? ' (' + f.emp + ')' : '')));
     L.push('🚚 Frota: ' + (fr.length ? fr.join(' + ') : 'A DECIDIR'));
   }
   if(ev.respNome || ev.respTel) L.push('👤 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
@@ -8846,7 +8850,7 @@ function htmlCusto(){
        ['📦 Fretes', C.fretes.length+' frete(s) · ≈'+num(fkm)+' km', R(ftot), fkm&&ftot?'R$ '+(ftot/fkm).toFixed(2).replace('.',',')+'/km':'']].map(c=>
         '<div style="flex:1;min-width:180px;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><div style="font-size:12px;color:var(--muted);font-weight:700">'+c[0]+'</div><div style="font-size:18px;font-weight:800">'+c[2]+'</div><div style="font-size:12px;color:var(--muted)">'+c[1]+(c[3]?' · <b style="color:var(--ink)">'+c[3]+'</b>':'')+'</div></div>').join('')+'</div>'+
     (rows ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="text-align:left;color:var(--muted);font-size:11px"><th>Caminhão</th><th>Viagens</th><th>Km</th><th>Diesel</th><th>R$ diesel</th><th>Pedágio</th><th>Total</th><th>R$/km</th></tr></thead><tbody>'+rows+'</tbody></table></div>' : '<div style="font-size:12.5px;color:var(--muted)">Nenhuma viagem escalada neste mês.</div>')+
-    (C.fretes.length ? '<div style="margin-top:8px;font-size:12.5px"><b>Fretes:</b> '+C.fretes.map(f=>_lgEsc(f.ev.nome)+' ('+_lgEsc(f.f.emp||'')+(+f.f.val?' · '+R(f.f.val):'')+')').join(' · ')+'</div>' : '')+
+    (C.fretes.length ? '<div style="margin-top:8px;font-size:12.5px"><b>Fretes:</b> '+C.fretes.map(f=>_lgEsc(f.ev.nome)+' ('+_lgEsc([f.f.placa, f.f.emp].filter(Boolean).join(' · '))+(+f.f.val?' · '+R(f.f.val):'')+')').join(' · ')+'</div>' : '')+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">Diesel a R$ '+String(CONFIG.precoDiesel||0).replace('.',',')+' (Integrações). Agregado: o valor pago a ele não está na Central — aqui entra só o diesel e o pedágio estimados, para comparar. Frete: o valor lançado no evento.</div></details>';
 }
 
@@ -9320,7 +9324,7 @@ function verEvento(id){
     '</div></div>'+
 
     '<div class="sec" id="sec-caminhoes"><h4>'+dotSec(ev,'caminhoes')+' 🚚 CAMINHÕES</h4>'+
-      '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Frete fechado por fora: lance no quadro de fretes aqui embaixo.</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Caminhão de fora (frete fechado por viagem): escolha 🚛 FRETE na lista de veículos e coloque a placa e o freteiro.</div>'+
       '<div class="info">'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':(txtFica(ev) ? '<span style="color:#1c4fa0">'+txtFica(ev)+'</span>' : 'Retorna ao galpão'))+'</b></div>'+
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
@@ -9348,7 +9352,6 @@ function verEvento(id){
            if(distintos===1) return total+' viagens do mesmo caminhão';
            return total+' viagens · '+distintos+' veículo'+(distintos>1?'s':'');
          })()+'</b></div></div>' : '')+
-    blocoFretes(ev)+
     blocoJuntarEv(ev)+blocoPermanencia(ev)+''+
     '</div>'+
   
@@ -9422,7 +9425,6 @@ function verEvento(id){
         'onchange="setRespTel(\''+ev.id+'\',this.value.trim())"></div>'+
       '</div></div>'+
 
-    '<div class="sec" id="sec-compras"><h4>'+dotSec(ev,'compras')+' 🛒 COMPRAS E LOCAÇÕES</h4>'+blocoCompras(ev)+'</div>'+
 
     '<div class="sec"><details'+((ev.hist||[]).length?'':' open')+'><summary style="cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.6px;color:var(--muted);text-transform:uppercase">🕘 Histórico de alterações'+
       ((ev.hist||[]).length ? ' <span style="text-transform:none;letter-spacing:0;font-weight:600">· '+ev.hist.length+' registro(s), último '+
@@ -9446,7 +9448,7 @@ function verEvento(id){
 /* ===== SEMÁFORO DAS 8 SEÇÕES DO EVENTO =====
    verde = pronto · amarelo = falta detalhe · vermelho = trava a operação */
 const SECOES = [['datas','DATAS'],['equipes','EQUIPES'],['caminhoes','CAMINHÕES'],['estruturas','ESTRUTURAS'],
-  ['checklist','CHECKLIST'],['riscos','RISCOS'],['producao','PRODUÇÃO'],['compras','COMPRAS']];
+  ['checklist','CHECKLIST'],['riscos','RISCOS'],['producao','PRODUÇÃO']];
 /* o que conta nos ALERTAS (semáforo do card, Em risco, Por setor, filtro): foco em equipes e logística */
 const ALERTA = [['equipes','EQUIPES'],['caminhoes','CAMINHÕES E MOTORISTAS'],['riscos','CONFLITOS'],['nf','NOTA FISCAL']];
 const DONOS_PADRAO = {nf:'Produção', datas:'Comercial', equipes:'Operação', caminhoes:'Logística', estruturas:'Projetos', checklist:'Logística', riscos:'Operação', producao:'Produção', compras:'Compras'};
@@ -11028,15 +11030,43 @@ function toggleTercItem(id, ix){
   ev.itens[ix].terc = !ev.itens[ix].terc;
   salvar(); verEvento(id);
 }
-function addFrete(id){
-  const ev = eventos.find(e=>e.id===id); if(!ev) return;
-  const emp = (document.getElementById('fr-emp')||{}).value || '';
-  if(!emp.trim()) return toast('Escreva quem faz o frete.');
-  ev.fretes = ev.fretes || [];
-  ev.fretes.push({emp: emp.trim(), fase: (document.getElementById('fr-fase')||{}).value || 'mont', val: +((document.getElementById('fr-val')||{}).value) || 0});
-  salvar(); verEvento(id);
+function abrirFreteForm(evId, fase){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const fi = 'border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:100%';
+  const lb = 'display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 3px;text-transform:uppercase;letter-spacing:.4px';
+  const corpo =
+    '<div style="font-size:12.5px;color:var(--muted);margin-bottom:4px">Caminhão de fora, fechado por viagem — não é da frota nem agregado. Vale a '+(fase==='desm'?'desmontagem':'montagem')+' deste evento.</div>'+
+    '<div style="display:grid;grid-template-columns:2fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">Freteiro / transportadora</label><input id="fr-emp" style="'+fi+'" placeholder="ex.: José do frete · Transportadora Silva" onkeydown="if(event.key===\'Enter\')salvarFrete()"></div>'+
+      '<div><label style="'+lb+'">Placa</label><input id="fr-placa" style="'+fi+';text-transform:uppercase" placeholder="AAA 0A00"></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px">'+
+      '<div><label style="'+lb+'">WhatsApp (opcional)</label><input id="fr-tel" style="'+fi+'" placeholder="(21) 99999-0000"></div>'+
+      '<div><label style="'+lb+'">Valor do frete R$ (opcional)</label><input id="fr-val" type="number" min="0" style="'+fi+'" placeholder="0"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="background:#1c4fa0;color:#fff;border-color:#1c4fa0;font-weight:800" onclick="salvarFrete()">💾 Contratar frete</button></div>';
+  OC_CTX = {evId, fase: fase || 'mont', frete: true};
+  lgModal('🚛 Frete — ' + (fase==='desm' ? 'desmontagem' : 'montagem'), _lgEsc(nomeTV(ev.nome)), corpo);
+  setTimeout(()=>{ try{ const i = document.getElementById('fr-emp'); if(i && i.focus) i.focus(); }catch(e){} }, 60);
 }
-function rmFrete(id, ix){ const ev = eventos.find(e=>e.id===id); if(!ev || !ev.fretes) return; ev.fretes.splice(ix,1); if(!ev.fretes.length) ev.fretes = null; salvar(); verEvento(id); }
+function salvarFrete(){
+  const ctx = OC_CTX; if(!ctx || !ctx.frete) return;
+  const ev = eventos.find(e=>e.id===ctx.evId); if(!ev) return;
+  const g = id => ((document.getElementById(id)||{}).value || '').trim();
+  const emp = g('fr-emp'), placa = g('fr-placa').toUpperCase();
+  if(!emp && !placa) return toast('Escreva quem faz o frete (ou a placa).');
+  ev.fretes = ev.fretes || [];
+  ev.fretes.push({emp, placa: placa || null, tel: g('fr-tel') || null, fase: ctx.fase, val: +g('fr-val') || 0});
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  fechar('ov-lg'); OC_CTX = null;
+  verEvento(ev.id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 60);
+  try{ renderLogistica(); }catch(e){}
+  toast('🚛 Frete contratado: ' + [emp, placa].filter(Boolean).join(' · ') + '.');
+}
+const rotFrete = f => ['🚛 FRETE', f.placa, f.emp].filter(Boolean).join(' · ');
+function rmFrete(id, ix){ const ev = eventos.find(e=>e.id===id); if(!ev || !ev.fretes) return; ev.fretes.splice(ix,1); if(!ev.fretes.length) ev.fretes = null; marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 60); }
 function blocoFretes(ev){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const L = ev.fretes || [];
@@ -11394,8 +11424,9 @@ function blocoFrota(ev, modo){
   const fr = frotaDo(ev, fase);
   if(modo==='mont' || modo==='desm')
     return '<label class="f"><i>Adicionar veículo '+(fase==='desm'?'à desmontagem':'à montagem')+'</i>'+
-      '<select onchange="addVeiculo(\''+ev.id+'\',this.value,\''+fase+'\');this.value=\'\'">'+
+      '<select onchange="if(this.value===\'__frete\'){abrirFreteForm(\''+ev.id+'\',\''+fase+'\')}else{addVeiculo(\''+ev.id+'\',this.value,\''+fase+'\')};this.value=\'\'">'+
       '<option value="">Escolher veículo...</option>'+
+      '<option value="__frete">🚛 FRETE — caminhão de fora (placa e freteiro)…</option>'+
       veiculos.map(v2=>{ const n = fr.filter(x=>x===v2.id).length;
         return '<option value="'+v2.id+'"'+(v2.manut?' disabled':'')+'>'+v2.tipo+' '+v2.placa+' — '+num(v2.vol)+' m³ / '+num(v2.peso)+' kg'+
           (v2.manut ? ' · 🔧 EM MANUTENÇÃO' : '')+
@@ -11457,7 +11488,10 @@ function blocoFrota(ev, modo){
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFicaD(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão"><input type="checkbox" '+(motFicaD(ev, x.v)?'checked':'')+' onchange="setFicaMotD(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
              })() : '');
-    }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') + (modo==='lista-mont' ? htmlOcorrEv(ev) : '') + '</div>';
+    }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') +
+    (ev.fretes||[]).map((f,ix)=>f.fase===fase ? '<div class="row"><span style="flex:1"><b>🚛 FRETE'+(f.placa ? ' · '+_lgEsc(f.placa) : '')+'</b>'+(f.emp ? ' <span style="color:var(--muted)">'+_lgEsc(f.emp)+'</span>' : '')+(+f.val ? ' · '+reais(+f.val) : '')+(f.tel ? ' · <a href="https://wa.me/'+zap(f.tel)+'?text='+encodeURIComponent(msgOperacao({ev, fase:f.fase, pessoas: []}, dia(f.fase==='desm'?ev.desm:ev.mont) || HOJE, null).join(String.fromCharCode(10)))+'" target="_blank">📲 '+_lgEsc(f.tel)+'</a>' : '')+'</span>'+
+      '<button class="mini danger" onclick="rmFrete(\''+ev.id+'\','+ix+')">Tirar</button></div>' : '').join('') +
+    (modo==='lista-mont' ? htmlOcorrEv(ev) : '') + '</div>';
 }
 /* bloco da desmontagem: fechado por padrão, abre quando os caminhões são outros */
 function blocoDesmontagem(ev){
