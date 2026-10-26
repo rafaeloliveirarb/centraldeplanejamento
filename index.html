@@ -2620,13 +2620,15 @@ function blocoAntes(ev){
    o motorista não — ele volta e fica livre */
 function ficaAte(e, vid){ const f = ((e && e.fica) || {})[vid]; if(!f) return null; if(f === 'desm') return dia(e.desm) || null; return f; }
 /* dia em que ESTE caminhão sai: a viagem com dia próprio conta no dia dela; sem dia próprio, acompanha a montagem */
-function iniFica(e, vid){
+function iniFica(e, vid, ate){
   const ds = escalaDo(e, 'mont').filter(x=>x.v===vid).map(x=>x.dia || dia(e.mont)).filter(Boolean).sort();
-  return ds[0] || dia(e.mont) || null;
+  if(!ds.length) return dia(e.mont) || null;
+  if(ate){ const antes = ds.filter(d=>d <= ate); if(antes.length) return antes[antes.length-1]; }
+  return ds[0];
 }
 function extraFica(e, vid){
   const ate = ficaAte(e, vid); if(!ate) return [];
-  const ini = iniFica(e, vid);
+  const ini = iniFica(e, vid, ate);
   if(!ini || ate < ini) return [];
   return diasEntre(ini, ate);
 }
@@ -2653,7 +2655,7 @@ function setFica(id, vid, val){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.fica = Object.assign({}, ev.fica || {});
   if(!val || val === 'nao'){ delete ev.fica[vid]; if(ev.ficaMot){ delete ev.ficaMot[vid]; if(!Object.keys(ev.ficaMot).length) delete ev.ficaMot; } }
-  else if(val === 'data') ev.fica[vid] = somaDiaISO(iniFica(ev, vid) || HOJE, 2);
+  else if(val === 'data'){ const ult = escalaDo(ev,'mont').filter(x=>x.v===vid).map(x=>x.dia || dia(ev.mont)).filter(Boolean).sort().pop(); ev.fica[vid] = somaDiaISO(ult || dia(ev.mont) || HOJE, 2); }
   else ev.fica[vid] = val;
   if(!Object.keys(ev.fica).length) delete ev.fica;
   marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); irSecao && setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
@@ -2664,8 +2666,8 @@ function setFica(id, vid, val){
    ev.ficaD = { idDoVeiculo: 'AAAA-MM-DD' (volta nesse dia) | 'fim' (fica até o fim da desmontagem) }
    ev.ficaMotD = { idDoVeiculo: true } — o motorista fica junto. Só vale com caminhões próprios da desmontagem. */
 function ficaAteD(e, vid){ if(!e || !temFrotaDesm(e)) return null; const f = (e.ficaD || {})[vid]; if(!f) return null; if(f === 'fim') return dia(fimDesm(e)) || dia(e.desm) || null; return f; }
-function iniFicaD(e, vid){ const s = (e.escalaD||[]).filter(x=>x.v===vid).map(x=>x.dia || dia(e.desm)).filter(Boolean).sort(); return s[0] || dia(e.desm) || null; }
-function extraFicaD(e, vid){ const ate = ficaAteD(e, vid), ini = iniFicaD(e, vid); if(!ate || !ini || ate < ini) return []; return diasEntre(ini, ate); }
+function iniFicaD(e, vid, ate){ const s = (e.escalaD||[]).filter(x=>x.v===vid).map(x=>x.dia || dia(e.desm)).filter(Boolean).sort(); if(!s.length) return dia(e.desm) || null; if(ate){ const antes = s.filter(d=>d <= ate); if(antes.length) return antes[antes.length-1]; } return s[0]; }
+function extraFicaD(e, vid){ const ate = ficaAteD(e, vid), ini = iniFicaD(e, vid, ate); if(!ate || !ini || ate < ini) return []; return diasEntre(ini, ate); }
 function motFicaD(e, vid){ return !!(((e && e.ficaMotD) || {})[vid] && ficaAteD(e, vid)); }
 /* genéricos por fase — usados nas reservas, conflitos, dias seguidos e contagens */
 function xFica(e, vid, f){ return f === 'desm' ? extraFicaD(e, vid) : extraFica(e, vid); }
@@ -11457,10 +11459,10 @@ function blocoFrota(ev, modo){
              sel+
              '<button class="mini" title="Registrar ocorrência: quebrou, voltou no meio do caminho, trocou motorista" onclick="abrirOcorrencia(\''+ev.id+'\',\''+fase+'\',\''+x.v+'\')">⚠</button>'+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
-             (fase==='mont' && conta[x.v]===1 ? (function(){
+             (fase==='mont' && conta[x.v]===total[x.v] ? (function(){
                const f = (ev.fica||{})[x.v], ate = ficaAte(ev, x.v);
                const val = !f ? 'nao' : f==='desm' ? 'desm' : 'data';
-               return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local do evento?</span>'+
+               return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local do evento?'+(total[x.v]>1?' <small style="color:#a86412">(depois da última viagem)</small>':'')+'</span>'+
                  '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+
                  '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px'+(f?';border-color:#1c4fa0;color:#1c4fa0;font-weight:600':'')+'" onchange="setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">'+
                    '<option value="nao"'+(val==='nao'?' selected':'')+'>Não — volta pro galpão</option>'+
@@ -11468,11 +11470,11 @@ function blocoFrota(ev, modo){
                    (ev.desm ? '<option value="desm"'+(val==='desm'?' selected':'')+'>Fica até a desmontagem</option>' : '')+
                  '</select>'+
                  (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
-                 (ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFica(ev, x.v))+' até '+fmtD(ate)+' (não sai pra outro evento nesses dias)">'+rotFicaDias(iniFica(ev, x.v), ate)+'</span>' : '')+
+                 (ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFica(ev, x.v, ate))+' até '+fmtD(ate)+' (não sai pra outro evento nesses dias)">'+rotFicaDias(iniFica(ev, x.v, ate), ate)+'</span>' : '')+
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFica(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão — ele fica preso para outras viagens nesses dias"><input type="checkbox" '+(motFica(ev, x.v)?'checked':'')+' onchange="setFicaMot(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
              })() : '')+
-             (fase==='desm' && conta[x.v]===1 ? (function(){
+             (fase==='desm' && conta[x.v]===total[x.v] ? (function(){
                const f = (ev.ficaD||{})[x.v], ate = ficaAteD(ev, x.v);
                const val = !f ? 'nao' : f==='fim' ? 'fim' : 'data';
                const multi = dia(fimDesm(ev)) && dia(fimDesm(ev)) !== dia(ev.desm);
@@ -11484,7 +11486,7 @@ function blocoFrota(ev, modo){
                    (multi ? '<option value="fim"'+(val==='fim'?' selected':'')+'>Fica até o fim da desmontagem</option>' : '')+
                  '</select>'+
                  (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFicaD(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
-                 (ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFicaD(ev, x.v))+' até '+fmtD(ate)+'">'+rotFicaDias(iniFicaD(ev, x.v), ate)+'</span>' : '')+
+                 (ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFicaD(ev, x.v, ate))+' até '+fmtD(ate)+'">'+rotFicaDias(iniFicaD(ev, x.v, ate), ate)+'</span>' : '')+
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFicaD(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão"><input type="checkbox" '+(motFicaD(ev, x.v)?'checked':'')+' onchange="setFicaMotD(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
                  '</span></div>';
              })() : '');
