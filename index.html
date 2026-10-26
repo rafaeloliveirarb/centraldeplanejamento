@@ -3073,7 +3073,7 @@ function analisar(ev, ag){
     r.equipe = 'Jailson';
     r.just.equipe = 'O evento leva ' + mats.slice(0,3).join(', ') + '. Esse material é da equipe Jailson, e essa regra vem antes de qualquer outra.';
     const oc = ocupante(ag,'eq','Jailson',dEq,ev.id);
-    if(oc){
+    if(oc && (!ev.equipe || ev.equipe === 'Jailson')){
       r.equipeConflito = true;
       r.conflitos.push({msg:'A equipe Jailson já está no evento "' + nomeDo(oc.id) + '" em ' + fmtD(oc.dia) + ', que é data de montagem ou desmontagem deste.', ev:oc.id, dica:'Negocie a data com o produtor, desdobre a equipe ou troque a equipe manualmente assumindo o risco do material.'});
     }
@@ -3091,9 +3091,12 @@ function analisar(ev, ag){
           ? 'o histórico de confirmações aponta ' + livres[0] + ': em eventos parecidos (' + sinaisDe(ev).map(rotuloSinal).join(', ') + '), essa foi a escolha confirmada ' + nota + ' vez(es).'
           : livres[0] + ' é a que trabalhou menos dias no mês (' + diasMesEquipe(livres[0], dia(ev.mont)) + ').');
     } else {
-      r.equipe = cand[0]; r.equipeConflito = true;
-      const oc = ocupante(ag,'eq',cand[0],dEq,ev.id);
-      r.conflitos.push({msg:'Jardel, Leo Freitas e Geovanesson estão comprometidas na montagem ou na desmontagem' + (oc ? ' — ' + cand[0] + ' está no evento "' + nomeDo(oc.id) + '" em ' + fmtD(oc.dia) : '') + '.', ev:oc?oc.id:null, dica:'Antecipe a montagem em um dia ou libere uma equipe encerrando outra desmontagem mais cedo.'});
+      r.equipe = cand[0];
+      if(!ev.equipe){
+        r.equipeConflito = true;
+        const oc = ocupante(ag,'eq',cand[0],dEq,ev.id);
+        r.conflitos.push({msg:cand.join(', ') + ' estão comprometidas na montagem ou na desmontagem' + (oc ? ' — ' + cand[0] + ' está no evento "' + nomeDo(oc.id) + '" em ' + fmtD(oc.dia) : '') + '.', ev:oc?oc.id:null, dica:'Antecipe a montagem em um dia ou libere uma equipe encerrando outra desmontagem mais cedo.'});
+      }
       r.just.equipe = 'Todas as equipes compatíveis estão ocupadas nas datas. É preciso remanejar datas ou dividir a operação.';
     }
   }
@@ -3227,9 +3230,17 @@ function analisar(ev, ag){
         dica:'Inclua um veículo mais comprido (carreta) ou reveja o material.'});
   }
 
-  /* montador escalado em dois lugares no mesmo dia */
+  /* a equipe ESCALADA está em outro evento nas mesmas datas + montador em dois lugares */
   if(ev.equipe && ev.equipe!==EQUIPE_TERC && !evSemNossaEquipe(ev)){
-    const repetidos = [];
+    let ocE = null;
+    for(const o of eventos){
+      if(o.id === ev.id || evSemNossaEquipe(o) || o.equipe !== ev.equipe) continue;
+      const comuns = dEq.filter(d2=>diasEquipe(o).includes(d2));
+      if(comuns.length){ ocE = {id:o.id, dia:comuns[0]}; break; }
+    }
+    if(!ocE){ const v = ocupante(ag,'eq',ev.equipe,dEq,ev.id); if(v && /^(folga:|base:)/.test(String(v.id))) ocE = v; }
+    if(ocE) r.conflitos.push({msg:'A equipe ' + ev.equipe + ' (escalada neste evento) também está em "' + nomeDo(ocE.id) + '" em ' + fmtD(ocE.dia) + '.', ev: String(ocE.id).startsWith('folga:') || String(ocE.id).startsWith('base:') ? null : ocE.id, dica:'Troque a equipe de um dos dois, ajuste as datas ou desdobre a equipe entre eles.'});
+    let repetidos = [];
     pessoasOp(ev, ev.equipe).forEach(m=>{
       const oc = ocupante(ag,'mt', m, diasDe(ev, m), ev.id);
       if(oc) repetidos.push({nome:m, ev:oc.id, dia:oc.dia});
@@ -3244,6 +3255,9 @@ function analisar(ev, ag){
         if(comuns.length) repetidos.push({nome:m, ev:o.id, dia:comuns[0]});
       });
     });
+    /* o choque da equipe inteira já foi avisado acima: não repete os membros dela um a um */
+    if(ocE) repetidos = repetidos.filter(x=>x.ev !== ocE.id || !montadoresBase(ev, ev.equipe).includes(x.nome));
+
     if(repetidos.length){
       const lista = repetidos.map(x=>x.nome + ' (também em "' + nomeDo(x.ev) + '" em ' + fmtD(x.dia) + ')').join('; ');
       r.conflitos.push({
