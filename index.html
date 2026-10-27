@@ -519,6 +519,7 @@ label.f input:focus,label.f select:focus,label.f textarea:focus{border-color:#9f
 #tv .tv-rod{padding:12px 30px;background:#7a2a22;font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden}
 #tv .tv-rod.ok{background:#16502f}
 #tv .tv-rod.n3{background:#7a2a22}#tv .tv-rod.n2{background:#8a4d0e}#tv .tv-rod.n1{background:#5c4a0c}
+#tv .tv-rod.eq{background:#1c3f74}#tv .tv-rod.cam{background:#14532f}#tv .tv-rod.fol{background:#4a3a7a}
 #tv .tv-rod .tv-rodn{display:inline-block;background:rgba(0,0,0,.25);border-radius:6px;padding:1px 9px;margin-right:12px;font-size:16px}
 #tv .tv-cont{background:#16214a;border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:15px;line-height:1.35;border-left:5px solid #f0851e;color:#d6dcf0}
 #tv .tv-cont.d{border-left-color:#3d7be0}
@@ -15410,29 +15411,46 @@ function renderTV(){
   contagemTV(listas[0].r);
   folgasTV(); try{ muralTV(); }catch(e){} try{ baseFixaTV(); }catch(e){}
   document.querySelectorAll('#tv .tv-lista').forEach((e2,i)=>{ e2.scrollTop = guarda[i] || 0; });
-  /* rodapé: o que precisa de atenção — um por vez, do mais grave para o menos */
-  const al = [];
-  listas.forEach(({D, r}, i)=>{ const q = i===0 ? 'Hoje' : i===1 ? 'Amanhã' : rotDia(D);
-    r.duplos.forEach(x=>al.push({n:2, t:q + ': ' + x.nome + ' em dois lugares'}));
-    r.camDuplo.forEach(x=>al.push({n:2, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' em dois eventos'}));
-    r.ops.forEach(o=>{ const b = resumoBloqueio(o.ev, o.fase, D); if(b) al.push({n:3, t:q + ': ' + nomeTV(o.ev.nome) + ' — ' + b.replace(/^🚧\s*/,'ROTA BLOQUEADA: ')}); });
-    r.ops.forEach(o=>{ const t = resumoTransito(o.ev, o.fase, D); if(t && t.nivel) al.push({n: t.nivel===2 ? 3 : 1, t:q + ': ' + nomeTV(o.ev.nome) + ' — ' + t.txt.replace(/^\S+\s/,'')}); });
-    r.ops.filter(o=>o.fora).forEach(o=>al.push({n:1, t:q + ': ' + nomeTV(o.ev.nome) + ' — dia fora da montagem (' + o.pessoas.filter(pp=>!pp.prod).map(pp=>pp.nome).join(', ') + ')'}));
-    r.ops.forEach(o=>o.viagens.forEach(x=>{
-      if(x.manut) al.push({n:3, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' está em manutenção'});
-      else if(!x.motorista && !x.jaLocal) al.push({n:3, t:q + ': ' + x.v.tipo + ' ' + x.v.placa + ' sem motorista (' + nomeTV(o.ev.nome) + ')'});
-    }));
-  });
-  seguidos().filter(s=>s.ini <= somaDiaISO(HOJE, 4)).forEach(s=>al.push({n: s.passou ? 2 : 1, t: txtSeguido(s)}));
-
-  eventos.forEach(ev=>{ if(ev.esp || !ev.mont) return;
-    [[dia(ev.mont), 'nfM', 'NF DE REMESSA', 'montagem'], [dia(ev.desm), 'nfD', 'NF DE RETORNO', 'desmontagem']].forEach(([d, k, rot, fase])=>{
-      if(!d || ev[k] || d < HOJE || difDias(HOJE, d) > 2) return;
-      al.push({n:2, t:'🧾 ' + rot + ': ' + nomeTV(ev.nome) + ' — ' + fase + ' ' + fmtD(d).slice(0,5)});
-    }); });
-  caminhoesNaRua().filter(c=>c.passou && c.fim >= HOJE).forEach(c=>al.push({n:1, t: txtCamRua(c, true)}));
-  const vistos = new Set();
-  TV_ALERTAS = al.filter(a=>{ if(vistos.has(a.t)) return false; vistos.add(a.t); return true; }).sort((a,b)=>b.n - a.n);
+  /* rodapé: onde estão as EQUIPES, os CAMINHÕES e quem está de FOLGA — uma página por vez */
+  calcRodTV();
+}
+function calcRodTV(){
+  const esc2 = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const pags = [];
+  /* 1) onde está cada equipe hoje */
+  try{
+    const ops = opsDoDia(HOJE).ops;
+    const onde = {};
+    equipes.filter(e2=>e2.nome!==EQUIPE_TERC).forEach(e2=>onde[e2.nome] = null);
+    ops.forEach(o=>{ const eq = o.ev.equipe; if(eq && (eq in onde) && !onde[eq]) onde[eq] = (o.fase==='desm' ? '📤 ' : '🔨 ') + nomeTV(o.ev.nome) + (o.ev.cidade && o.ev.cidade!=='—' ? ' ('+o.ev.cidade+')' : ''); });
+    try{ baseDoDia(HOJE).forEach(s2=>{ if(s2.equipe && (s2.equipe in onde) && !onde[s2.equipe]) onde[s2.equipe] = '🏠 serviço na base'; }); }catch(e){}
+    const txt = Object.keys(onde).map(n2=>'<b>'+esc2(n2)+'</b> → '+(onde[n2] ? esc2(onde[n2]) : 'galpão · livre')).join(' &nbsp;·&nbsp; ');
+    if(txt) pags.push({cls:'eq', t:'👷 EQUIPES HOJE — ' + txt});
+  }catch(e){}
+  /* 2) onde está cada caminhão hoje (na rua / parado no local / galpão / manutenção) */
+  try{
+    const dd = logItensDia(HOJE);
+    const fora = [];
+    veiculos.forEach(v=>{
+      const L = (dd.vs[v.id]||[]); if(!L.length) return;
+      const it = L.find(x=>x.tipo==='viagem') || L[0];
+      fora.push('<b>'+esc2(v.tipo+' '+v.placa)+'</b> → '+(it.tipo==='viagem' ? (it.f==='desm'?'📤 ':'🔨 ') : '🅿 parado em ')+esc2(nomeTV(it.ev.nome))+(it.x && it.x.motorista && it.tipo==='viagem' ? ' ('+esc2(it.x.motorista)+')' : ''));
+    });
+    for(let i=0; i<fora.length; i+=4) pags.push({cls:'cam', t:'🚚 CAMINHÕES NA RUA — ' + fora.slice(i, i+4).join(' &nbsp;·&nbsp; ')});
+    const livres = veiculos.filter(v=>!v.manut && !(dd.vs[v.id]||[]).length).map(v=>v.tipo+' '+v.placa);
+    const manut = veiculos.filter(v=>v.manut).map(v=>v.tipo+' '+v.placa);
+    if(livres.length) pags.push({cls:'cam', t:'🏠 NO GALPÃO — ' + esc2(livres.join(' · ')) + (manut.length ? ' &nbsp;&nbsp;🔧 MANUTENÇÃO: ' + esc2(manut.join(' · ')) : '')});
+    else if(manut.length) pags.push({cls:'cam', t:'🔧 MANUTENÇÃO — ' + esc2(manut.join(' · '))});
+  }catch(e){}
+  /* 3) folga e férias (Escala + folgas marcadas na Central) */
+  try{
+    if(TV_FOLGAS.html) pags.push({cls:'fol', t:'💤 FOLGA E FÉRIAS — ' + TV_FOLGAS.html});
+    else {
+      const fo = Object.keys(CONFIG.folgasPessoa || {}).filter(n2=>(CONFIG.folgasPessoa[n2]||[]).includes(HOJE));
+      pags.push({cls:'fol', t:'💤 FOLGA HOJE — ' + (fo.length ? esc2(fo.join(', ')) : 'ninguém de folga marcado')});
+    }
+  }catch(e){}
+  TV_ALERTAS = pags;
   mostrarAlertaTV();
 }
 let TV_ALERTAS = [], TV_AL_I = 0, TV_AL_T = null;
@@ -15440,16 +15458,16 @@ function mostrarAlertaTV(avancar){
   const rod = document.getElementById('tv-rod'); if(!rod) return;
   if(!TV_ALERTAS.length){
     rod.className = 'tv-rod ok';
-    rod.textContent = '✔ Tudo certo: todos os caminhões com motorista, ninguém em dois lugares.   Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    rod.textContent = '✔ Nada na rua hoje — equipes e caminhões no galpão.   Atualizado ' + new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   } else {
     if(avancar) TV_AL_I++;
     if(TV_AL_I >= TV_ALERTAS.length) TV_AL_I = 0;
     const a = TV_ALERTAS[TV_AL_I];
-    rod.className = 'tv-rod n' + a.n;
-    rod.innerHTML = '<span class="tv-rodn">' + (TV_AL_I+1) + '/' + TV_ALERTAS.length + '</span>' + (a.n===3 ? '⛔ ' : '⚠ ') + String(a.t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    rod.className = 'tv-rod ' + (a.cls || 'ok');
+    rod.innerHTML = '<span class="tv-rodn">' + (TV_AL_I+1) + '/' + TV_ALERTAS.length + '</span>' + a.t;
   }
   clearTimeout(TV_AL_T);
-  if(document.getElementById('tv') && document.getElementById('tv').classList.contains('on')) TV_AL_T = setTimeout(()=>mostrarAlertaTV(true), 7000);
+  if(document.getElementById('tv') && document.getElementById('tv').classList.contains('on')) TV_AL_T = setTimeout(()=>mostrarAlertaTV(true), 9000);
 }
 /* nome sem o número do Pipefy; endereço de rua vira só a cidade */
 function nomeTV(n){ if(nomePareceDescricao(n)) n = String(n).split(/ - |\(/)[0].slice(0, 45).trim() + '…'; return String(n||'').replace(/\s*[-–]?\s*\(\s*\d{5,}\s*\)\s*/g, ' ').replace(/\s{2,}/g,' ').trim(); }
