@@ -2630,11 +2630,22 @@ function iniFica(e, vid, ate){
   }
   return ds[0];
 }
-function extraFica(e, vid){
+function extraFicaPrinc(e, vid){
   const ate = ficaAte(e, vid); if(!ate) return [];
   const ini = iniFica(e, vid, ate);
   if(!ini || ate < ini) return [];
   return diasEntre(ini, ate);
+}
+/* "fica no local" de OUTRAS viagens do mesmo caminhão: ev.ficaV = { idVeiculo: { 'AAAA-MM-DD' (dia que a viagem sai): {ate, mot} } } */
+function ficaVLista(e, vid){
+  const m = ((e && e.ficaV) || {})[vid]; if(!m) return [];
+  const saidas = new Set(escalaDo(e, 'mont').filter(x=>x.v===vid).map(x=>x.dia || dia(e.mont)).filter(Boolean));
+  return Object.keys(m).filter(s=>saidas.has(s) && m[s] && m[s].ate && m[s].ate >= s).map(s=>({de:s, ate:m[s].ate, mot:!!m[s].mot}));
+}
+function extraFica(e, vid){
+  const S = new Set(extraFicaPrinc(e, vid));
+  ficaVLista(e, vid).forEach(p=>diasEntre(p.de, p.ate).forEach(d=>S.add(d)));
+  return [...S].sort();
 }
 /* "fica 1 dia no local · 25 a 26/10" */
 function rotFicaDias(ini, ate){
@@ -2644,7 +2655,34 @@ function rotFicaDias(ini, ate){
 }
 /* motorista que fica junto com o caminhão no local: preso nos mesmos dias */
 function motFica(e, vid){ return !!(((e && e.ficaMot) || {})[vid] && ficaAte(e, vid)); }
-function extraFicaMot(e, vid){ return motFica(e, vid) ? extraFica(e, vid) : []; }
+function extraFicaMot(e, vid){
+  const S = new Set(motFica(e, vid) ? extraFicaPrinc(e, vid) : []);
+  ficaVLista(e, vid).filter(p=>p.mot).forEach(p=>diasEntre(p.de, p.ate).forEach(d=>S.add(d)));
+  return [...S].sort();
+}
+function setFicaV(id, vid, saida, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !saida) return;
+  ev.ficaV = Object.assign({}, ev.ficaV || {});
+  const m = ev.ficaV[vid] = Object.assign({}, ev.ficaV[vid] || {});
+  if(!val || val === 'nao') delete m[saida];
+  else {
+    let ate = val;
+    if(val === 'data'){ const prox = escalaDo(ev,'mont').filter(y=>y.v===vid).map(y=>y.dia || dia(ev.mont)).filter(Boolean).sort().find(d2=>d2 > saida); ate = prox || somaDiaISO(saida, 2); }
+    if(!/^20\d\d-\d\d-\d\d$/.test(ate)) return;
+    m[saida] = Object.assign({}, m[saida] || {}, {ate});
+  }
+  if(!Object.keys(m).length) delete ev.ficaV[vid];
+  if(!Object.keys(ev.ficaV).length) delete ev.ficaV;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+  const v = veiculos.find(x=>x.id===vid), p = ((ev.ficaV||{})[vid]||{})[saida];
+  if(v) toast(p ? '📍 ' + v.tipo + ' ' + v.placa + ' fica no local de ' + fmtD(saida).slice(0,5) + ' até ' + fmtD(p.ate).slice(0,5) + '.' : '🚚 ' + v.tipo + ' ' + v.placa + ' volta pro galpão depois da viagem de ' + fmtD(saida).slice(0,5) + '.');
+}
+function setFicaVMot(id, vid, saida, on){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const p = ((ev.ficaV||{})[vid]||{})[saida]; if(!p) return;
+  p.mot = !!on;
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id); setTimeout(()=>{ try{ irSecao('caminhoes'); }catch(e){} }, 50);
+}
 function setFicaMot(id, vid, on){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   ev.ficaMot = Object.assign({}, ev.ficaMot || {});
@@ -3194,7 +3232,7 @@ function analisar(ev, ag){
     viagensEv.forEach(t=>{
       eventos.forEach(o=>{
         if(o.id === ev.id || o.esp || !((o.fica && o.fica[t.v]) || (o.ficaD && o.ficaD[t.v]))) return;
-        const pm = (o.fica && o.fica[t.v]) ? extraFica(o, t.v).filter(d=>d !== dia(o.mont)) : [];
+        const pm = ((o.fica && o.fica[t.v]) || (o.ficaV && o.ficaV[t.v])) ? extraFica(o, t.v).filter(d=>d !== dia(o.mont)) : [];
         const pd = (o.ficaD && o.ficaD[t.v]) ? extraFicaD(o, t.v).filter(d=>d !== iniFicaD(o, t.v)) : [];
         const pres = pm.concat(pd).filter(d=>t.dias.includes(d)); if(!pres.length || ja.has(t.v+o.id)) return;
         ja.add(t.v+o.id);
@@ -11397,6 +11435,7 @@ function salvarOcorrencia(){
   if(vid && (manut || tipo === 'quebrou' || tipo === 'voltou' || tipo === 'acidente')){
     let soltou = false;
     if(ev.fica && ev.fica[vid]){ delete ev.fica[vid]; if(!Object.keys(ev.fica).length) delete ev.fica; soltou = true; }
+    if(ev.ficaV && ev.ficaV[vid]){ delete ev.ficaV[vid]; if(!Object.keys(ev.ficaV).length) delete ev.ficaV; soltou = true; }
     if(ev.ficaMot && ev.ficaMot[vid]){ delete ev.ficaMot[vid]; if(!Object.keys(ev.ficaMot).length) delete ev.ficaMot; }
     if(ev.ficaD && ev.ficaD[vid]){ delete ev.ficaD[vid]; if(!Object.keys(ev.ficaD).length) delete ev.ficaD; soltou = true; }
     if(ev.ficaMotD && ev.ficaMotD[vid]){ delete ev.ficaMotD[vid]; if(!Object.keys(ev.ficaMotD).length) delete ev.ficaMotD; }
@@ -11491,9 +11530,23 @@ function blocoFrota(ev, modo){
                const saidaDesta = x.dia || dia(ev.mont) || '';
                const ultima = conta[x.v] === total[x.v];
                const minha = !!(ate && iniFica(ev, x.v, ate) === saidaDesta);
-               /* sem período marcado: o controle aparece em toda viagem; com período: só na viagem em que ele começa */
-               if(ate && !minha) return '';
-               if(minha && total[x.v] > 1 && !ultima && conta[x.v] !== 1 && saidaDesta === (x.dia || dia(ev.mont) || '') && escalaDo(ev,'mont').filter(y=>y.v===x.v && (y.dia || dia(ev.mont)) === saidaDesta && y.i < x.i).length) return '';
+               /* mesma saída repetida (duas viagens no mesmo dia): o controle fica só na primeira */
+               if(escalaDo(ev,'mont').filter(y=>y.v===x.v && (y.dia || dia(ev.mont)) === saidaDesta && y.i < x.i).length) return '';
+               if(ate && !minha){
+                 /* o período principal é de outra viagem: esta tem o "fica" próprio */
+                 const p = ((ev.ficaV||{})[x.v]||{})[saidaDesta];
+                 const vv = p ? 'data' : 'nao';
+                 return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local depois desta viagem?'+(total[x.v]>1?' <small style="color:#a86412">(sai '+fmtD(saidaDesta).slice(0,5)+')</small>':'')+'</span>'+
+                   '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+
+                   '<select style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px'+(p?';border-color:#1c4fa0;color:#1c4fa0;font-weight:600':'')+'" onchange="setFicaV(\''+ev.id+'\',\''+x.v+'\',\''+saidaDesta+'\',this.value)">'+
+                     '<option value="nao"'+(vv==='nao'?' selected':'')+'>Não — volta pro galpão</option>'+
+                     '<option value="data"'+(vv==='data'?' selected':'')+'>Fica no local até…</option>'+
+                   '</select>'+
+                   (p ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+p.ate+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFicaV(\''+ev.id+'\',\''+x.v+'\',\''+saidaDesta+'\',this.value)">' : '')+
+                   (p ? '<span class="tag" style="color:#1c4fa0">'+rotFicaDias(saidaDesta, p.ate)+'</span>' : '')+
+                   (p ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(p.mot?'#1c4fa0;font-weight:600':'var(--muted)')+'"><input type="checkbox" '+(p.mot?'checked':'')+' onchange="setFicaVMot(\''+ev.id+'\',\''+x.v+'\',\''+saidaDesta+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
+                   '</span></div>';
+               }
                const val = minha ? (f==='desm' ? 'desm' : 'data') : 'nao';
                return '<div class="row" style="border:none;padding-top:0;margin-top:-4px"><span style="font-size:12px;color:var(--muted);white-space:nowrap">📍 Fica no local depois desta viagem?'+(total[x.v]>1?' <small style="color:#a86412">(sai '+fmtD(saidaDesta).slice(0,5)+')</small>':'')+'</span>'+
                  '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">'+
@@ -11597,6 +11650,9 @@ function setDiaViagem(id, vaga, val, fase){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const dz = fase==='desm' && temFrotaDesm(ev);
   const padrao = dia(fase==='desm' ? ev.desm : ev.mont);
+  try{ if(!dz){ const xv = escalaDo(ev,'mont').find(y=>y.i===+vaga); const velho = xv && (xv.dia || padrao), novoD = val || padrao;
+    const m = xv && ev.ficaV && ev.ficaV[xv.v];
+    if(m && m[velho] && velho !== novoD && !m[novoD]){ m[novoD] = m[velho]; delete m[velho]; } } }catch(e){}
   const nova = escalaDo(ev, dz?'desm':'mont')
     .map(x=>({i:x.i, v:x.v, motorista:x.motorista, hora:x.hora||null, junto:x.junto||null,
       dia: x.i===+vaga ? ((val && val!==padrao) ? val : null) : (x.dia||null)}));
