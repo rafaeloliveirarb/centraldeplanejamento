@@ -31,7 +31,7 @@ small{color:var(--muted)}
 </head>
 <body>
 <h1>🛠 Conserto da Central de Planejamento</h1>
-<div class="sub">Página de uma vez só. Ela arruma, direto na nuvem, os cards que o Planejamento de Equipes criou sem data de montagem — são eles que estão travando a Central. A Central e o Planejamento de Equipes não são alterados.</div>
+<div class="sub">Página de uma vez só. Ela tira da nuvem os cards que o Planejamento de Equipes criou na Central — são eles que estão travando a tela — e arruma qualquer outro card que tenha ficado sem data de montagem. O arquivo da Central não é alterado, e os cards que já eram da Central ficam.</div>
 
 <div class="card">
   <button class="pri" id="b1" onclick="procurar()">1 · Procurar problemas</button>
@@ -67,21 +67,27 @@ async function procurar(){
     const todos = (r.data||[]).map(x=>x.dados).filter(d=>d && d.id);
     PLANO = [];
     todos.forEach(d=>{
-      if(ehData(d.mont)) return;                       /* este está bem */
+      /* 1) card que o Planejamento de Equipes criou na Central: sai (com as cópias, se houver) */
+      if(d.origemPlaneq){ PLANO.push({d, acao:'del'}); return; }
+      /* 2) card da própria Central sem data de montagem: ganha a do evento ou da desmontagem */
+      if(ehData(d.mont)) return;
       const outra = [d.evt, d.desm].map(dia).find(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));
-      if(outra) PLANO.push({d, acao:'fix', data:outra});          /* ganha a data do evento ou da desmontagem */
-      else PLANO.push({d, acao: d.origemPlaneq ? 'del' : 'fix', data: new Date().toISOString().slice(0,10)}); /* sem data nenhuma */
+      PLANO.push({d, acao:'fix', data: outra || new Date().toISOString().slice(0,10)});
     });
     if(!PLANO.length){
-      res.innerHTML = '<div class="alert green">✅ Nenhum card com problema — os '+todos.length+' cards da Central estão com data de montagem. Se a Central ainda travar, me chama de novo no Claude.</div>';
+      res.innerHTML = '<div class="alert green">✅ Nenhum card com problema — os '+todos.length+' cards da Central estão certos. Se a Central ainda travar, me chama de novo no Claude com um print desta tela.</div>';
       document.getElementById('b1').disabled = false;
       return;
     }
-    res.innerHTML = '<div class="alert red">⚠ '+PLANO.length+' card(s) sem data de montagem — são estes que travam a Central:</div>'+
-      PLANO.map(p=>'<div class="lin"><b>'+esc(p.d.nome||'(sem nome)')+'</b>'+
-        (p.acao==='del' ? '<span class="tag t-del">será excluído (vazio)</span>'
+    const DEL = PLANO.filter(p=>p.acao==='del'), FIX = PLANO.filter(p=>p.acao==='fix');
+    const linhas = L => L.slice(0, 30).map(p=>'<div class="lin"><b>'+esc(p.d.nome||'(sem nome)')+'</b>'+
+        (p.acao==='del' ? '<span class="tag t-del">sai da Central</span>'
           : '<span class="tag t-fix">ganha montagem '+p.data.slice(8)+'/'+p.data.slice(5,7)+'</span>')+'</div>').join('')+
-      '<div class="alert">Nada mais é mexido: equipe, caminhões e as outras datas desses cards ficam como estão.</div>';
+      (L.length > 30 ? '<div class="lin"><small>… e mais '+(L.length-30)+'</small></div>' : '');
+    res.innerHTML = '<div class="alert red">⚠ A Central tem '+todos.length+' card(s); '+PLANO.length+' estão travando a tela.</div>'+
+      (DEL.length ? '<div style="margin-top:10px;font-weight:800;font-size:13.5px">Criados pelo Planejamento de Equipes — saem da Central ('+DEL.length+'):</div>'+linhas(DEL) : '')+
+      (FIX.length ? '<div style="margin-top:10px;font-weight:800;font-size:13.5px">Sem data de montagem — só ganham a data ('+FIX.length+'):</div>'+linhas(FIX) : '')+
+      '<div class="alert">Os outros '+(todos.length - PLANO.length)+' cards não são tocados: equipe, caminhões e datas ficam como estão.</div>';
     document.getElementById('passo2').style.display = '';
     document.getElementById('b1').disabled = false;
   }catch(e){
@@ -97,7 +103,6 @@ async function consertar(){
     const agora = new Date().toISOString();
     const salvar = PLANO.filter(p=>p.acao==='fix').map(p=>{
       p.d.mont = p.data;
-      if(!ehData(p.d.desm) && !p.d.manutencao) p.d.desm = p.d.desm || null;
       p.d.hist = [{q:agora, quem:'Conserto', o:['🛠 Card estava sem data de montagem (travava a Central) — ganhou a montagem em '+p.data]}, ...(p.d.hist||[])].slice(0,80);
       return {id:p.d.id, dados:p.d, atualizado_em:agora};
     });
@@ -110,7 +115,7 @@ async function consertar(){
       const r = await cliente().from('plan_eventos').delete().in('id', del.slice(i, i+25));
       if(r.error) throw r.error;
     }
-    res.innerHTML = '<div class="alert green">✅ Pronto — '+salvar.length+' card(s) consertado(s)'+(del.length ? ' e '+del.length+' excluído(s)' : '')+
+    res.innerHTML = '<div class="alert green">✅ Pronto — '+(del.length ? del.length+' card(s) do Planejamento retirado(s)' : '')+(del.length && salvar.length ? ' e ' : '')+(salvar.length ? salvar.length+' card(s) consertado(s)' : '')+
       '.<br><br><b>Agora feche TODAS as abas da Central e abra de novo.</b> Ela deve voltar ao normal. Depois pode fechar e apagar esta página.</div>';
     PLANO = [];
   }catch(e){
