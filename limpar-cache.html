@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limpar cache da Central</title>
+<style>
+:root{--ink:#17233f;--muted:#7a839e;--line:#e3e8f2;--pri:#1c4fa0;--ok:#0f8a4d;--bad:#c0392b;--amber:#9a6a00}
+*{box-sizing:border-box;margin:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#eef1f8;color:var(--ink);padding:16px;max-width:760px;margin:0 auto}
+h1{font-size:20px;margin:8px 0 4px}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+button{border:0;border-radius:11px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer}
+.pri{background:var(--pri);color:#fff}
+.ok{background:var(--ok);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.alert{border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px;background:#fdf4df;color:var(--amber)}
+.alert.green{background:#e8f6ee;color:var(--ok)}
+.alert.red{background:#fdecea;color:var(--bad)}
+.lin{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.lin:last-child{border-bottom:0}
+.lin b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:600}
+.tag{font-size:11.5px;font-weight:800;border-radius:7px;padding:3px 8px;white-space:nowrap;background:#e3edfb;color:var(--pri)}
+.tag.big{background:#fdecea;color:var(--bad)}
+small{color:var(--muted)}
+</style>
+</head>
+<body>
+<h1>🧽 Limpar o cache da Central</h1>
+<div class="sub">A Central guarda uma cópia dos dados no próprio navegador para abrir mais rápido. Essa cópia pode ter ficado entupida e estar travando a tela. Esta página mostra e apaga só essa cópia local — <b>nada da nuvem é apagado</b>: na próxima vez a Central baixa tudo de novo, limpo. <b>Importante:</b> abra esta página no mesmo site da Central que está travando e no mesmo computador.</div>
+
+<div class="card">
+  <button class="pri" id="b1" onclick="olhar()">1 · Ver o que está guardado</button>
+  <div id="res"></div>
+</div>
+
+<div class="card" id="passo2" style="display:none">
+  <button class="ok" id="b2" onclick="limpar()">2 · Limpar agora</button>
+  <div id="res2"></div>
+</div>
+
+<script>
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const kb = n => n >= 1048576 ? (n/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n/1024)) + ' KB';
+function olhar(){
+  const res = document.getElementById('res');
+  try{
+    const linhas = []; let total = 0;
+    for(let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i), v = localStorage.getItem(k) || '';
+      total += v.length;
+      let extra = '';
+      if(k === 'cpl:dados'){ try{ const d = JSON.parse(v); extra = ' · ' + ((d && d.eventos) || []).length + ' evento(s) guardados'; }catch(e){ extra = ' · não consegui ler (corrompido)'; } }
+      if(k === 'cpl:base'){ try{ const d = JSON.parse(v); extra = ' · marca de ' + Object.keys((d && d.ev) || {}).length + ' evento(s)'; }catch(e){ extra = ' · não consegui ler (corrompido)'; } }
+      linhas.push({k, n: v.length, extra});
+    }
+    linhas.sort((a,b)=>b.n - a.n);
+    res.innerHTML = (linhas.length
+      ? '<div class="alert">Este site guarda <b>'+kb(total)+'</b> neste navegador ('+linhas.length+' item(ns)):</div>'+
+        linhas.slice(0, 25).map(l=>'<div class="lin"><b>'+esc(l.k)+'<small>'+esc(l.extra)+'</small></b><span class="tag'+(l.n > 1048576 ? ' big' : '')+'">'+kb(l.n)+'</span></div>').join('')+
+        (linhas.length > 25 ? '<div class="lin"><small>… e mais '+(linhas.length-25)+'</small></div>' : '')
+      : '<div class="alert green">Não tem nada guardado neste navegador para este site. Se a Central trava mesmo assim, me manda um print desta tela — e confere se você abriu esta página no mesmo endereço da Central que trava.</div>');
+    if(linhas.length) document.getElementById('passo2').style.display = '';
+  }catch(e){
+    res.innerHTML = '<div class="alert red">Não consegui olhar o armazenamento: '+esc(e.message||e)+'</div>';
+  }
+}
+async function limpar(){
+  const res = document.getElementById('res2');
+  document.getElementById('b2').disabled = true;
+  try{
+    const n = localStorage.length;
+    try{ localStorage.clear(); }catch(e){}
+    try{ sessionStorage.clear(); }catch(e){}
+    let bancos = 0;
+    try{
+      if(indexedDB.databases){
+        const L = await indexedDB.databases();
+        await Promise.all(L.map(d=>new Promise(ok=>{ if(!d.name) return ok(); const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = ()=>ok(); bancos++; })));
+      }
+    }catch(e){}
+    try{ if(navigator.serviceWorker){ (await navigator.serviceWorker.getRegistrations()).forEach(r=>r.unregister()); } }catch(e){}
+    res.innerHTML = '<div class="alert green">✅ Limpo — '+n+' item(ns)'+(bancos ? ' e '+bancos+' banco(s) local(is)' : '')+' apagados deste navegador.'+
+      '<br><br><b>Agora feche todas as abas da Central e abra ela de novo.</b> A primeira abertura baixa tudo da nuvem e pode levar um pouco mais — se o Chrome perguntar, toque em <b>Aguarde</b>.'+
+      '<br><br>Se usa a Central em outro computador ou celular e lá também trava, abra esta mesma página lá e limpe também.</div>';
+  }catch(e){
+    res.innerHTML = '<div class="alert red">Deu erro: '+esc(e.message||e)+' — pode tocar de novo.</div>';
+    document.getElementById('b2').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
