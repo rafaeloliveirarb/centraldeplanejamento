@@ -1590,8 +1590,26 @@ details.lgbox[open] summary h3::before{content:'▾ '}
   window.fetch = function(u, o){
     var url = String((u && u.url) || u).replace(/^https?:\/\//,'').slice(0,72), t = Date.now();
     __diag('→ pedindo '+url);
-    return F.apply(this, arguments).then(function(r){ __diag('← '+r.status+' '+url+' ('+(Date.now()-t)+'ms)'); return r; },
-      function(e){ __diag('✖ falhou '+url+' — '+String(e && e.message).slice(0,70)); throw e; });
+    return F.apply(this, arguments).then(function(r){
+      __diag('← '+r.status+' '+url+' ('+(Date.now()-t)+'ms)');
+      try{
+        var c = r.clone(), tc = Date.now();
+        c.text().then(function(tx){
+          var kb2 = tx.length >= 1048576 ? (tx.length/1048576).toFixed(1)+'MB' : Math.max(1, Math.round(tx.length/1024))+'KB';
+          __diag('⤵ corpo de '+url.split('?')[0].split('/').pop()+': '+kb2+' ('+(Date.now()-tc)+'ms)');
+        }, function(){});
+      }catch(e){}
+      if(window.__diagAgora) __diagAgora('digerindo a resposta de '+url.split('?')[0].split('/').pop());
+      return r;
+    }, function(e){ __diag('✖ falhou '+url+' — '+String(e && e.message).slice(0,70)); throw e; });
+  };
+  var JP = JSON.parse;
+  JSON.parse = function(s){
+    var n = (s && s.length) || 0;
+    if(n > 3145728) __diag('⚠ lendo um JSON de '+(n/1048576).toFixed(1)+'MB…');
+    var t = Date.now(), r = JP.apply(JSON, arguments);
+    if(Date.now()-t > 300) __diag('🐘 ler esse JSON levou '+(Date.now()-t)+'ms ('+Math.round(n/1024)+'KB)');
+    return r;
   };
   try{
     var W = window.WebSocket, nmsg = 0;
@@ -16108,8 +16126,8 @@ async function salvar(){
 <script>
 /* ===== CAIXA-PRETA v2: marca as funções por onde a Central passa ===== */
 (function(){ if(!window.__diag) return;
-  var lista = ['migrarDoAntigoSeVazio','nuvemCarregar','fotografarTudo','dedupeEventos','mesclarLocal','marcarBase','marcarSync','nuvemEscutar','carregarRecados','enviarFilaRecados','renderQuadro','replanejar','novaAgenda','renderCadastros','corrigirAnosErrados','repararNomesDescricao','sincronizarAgenda','cadastrarNaEscala','sincronizarEscala','autoIA7','autoFinalizar','calcularKmEmLote','carregarFolgasEsc','renderTV','renderPorFase','renderMapa','padroesConfig','tentarReconectar','nuvemGravar','atualizarClima','localizarEventos','checarLembretes','atualizarBotaoPend','atualizarBtnRisco','atualizarBtnJornada','alertasFrota','geocodEndereco','carregarRecados','prepararTV'];
-  var fundo = {renderQuadro:1, replanejar:1, novaAgenda:1, marcarSync:1, renderCadastros:1};
+  var lista = ['migrarDoAntigoSeVazio','nuvemCarregar','fotografarTudo','dedupeEventos','mesclarLocal','marcarBase','marcarSync','nuvemEscutar','carregarRecados','enviarFilaRecados','renderQuadro','replanejar','novaAgenda','renderCadastros','corrigirAnosErrados','repararNomesDescricao','sincronizarAgenda','cadastrarNaEscala','sincronizarEscala','autoIA7','autoFinalizar','calcularKmEmLote','carregarFolgasEsc','renderTV','renderPorFase','renderMapa','padroesConfig','tentarReconectar','nuvemGravar','atualizarClima','localizarEventos','checarLembretes','atualizarBotaoPend','atualizarBtnRisco','atualizarBtnJornada','alertasFrota','geocodEndereco','carregarRecados','prepararTV','digital','canon','resumoEv','analisar','gruposDuplicados','limparObjNuvem'];
+  var fundo = {renderQuadro:1, replanejar:1, novaAgenda:1, marcarSync:1, renderCadastros:1, digital:1, canon:1, resumoEv:1, analisar:1};
   lista.forEach(function(n){
     var f = window[n];
     if(typeof f !== 'function'){ return; }
