@@ -16175,23 +16175,35 @@ async function salvar(){
     nuvemCarregar = async function(){
       async function lerTab(rota){
         var nome2 = rota.split('?')[0];
-        __diag('🧪 v6: baixando '+nome2+' na mão…');
-        var resp = await fetch(NUVEM.url+'/rest/v1/'+rota, {headers:{apikey:NUVEM.key, Authorization:'Bearer '+NUVEM.key}});
-        __diag('🧪 v6: '+nome2+' respondeu '+resp.status+' — lendo o corpo…');
-        var t1 = Date.now(), tx = await resp.text();
-        __diag('🧪 v6: corpo de '+nome2+': '+Math.round(tx.length/1024)+'KB em '+(Date.now()-t1)+'ms — agora o parse…');
-        var t2 = Date.now(), j = JSON.parse(tx);
-        __diag('🧪 v6: parse de '+nome2+' ok — '+j.length+' linha(s) em '+(Date.now()-t2)+'ms');
-        return j;
+        for(var tent = 1; tent <= 4; tent++){
+          var ctl = new AbortController(), tAb = setTimeout(function(){ ctl.abort(); }, 12000);
+          try{
+            __diag('🧪 v8: baixando '+nome2+(tent > 1 ? ' — tentativa '+tent : '')+'…');
+            var resp = await fetch(NUVEM.url+'/rest/v1/'+rota, {headers:{apikey:NUVEM.key, Authorization:'Bearer '+NUVEM.key}, signal:ctl.signal, cache:'no-store'});
+            __diag('🧪 v8: '+nome2+' respondeu '+resp.status+' — lendo o corpo (se a internet cair no meio, desisto em 12s)…');
+            var t1 = Date.now(), tx = await resp.text();
+            clearTimeout(tAb);
+            __diag('🧪 v8: corpo de '+nome2+': '+Math.round(tx.length/1024)+'KB em '+(Date.now()-t1)+'ms');
+            var j = JSON.parse(tx);
+            __diag('🧪 v8: '+nome2+' ok — '+j.length+' linha(s)');
+            return j;
+          }catch(e){
+            clearTimeout(tAb);
+            var motivo = (e && e.name === 'AbortError') ? 'a INTERNET CAIU NO MEIO do download (não terminou em 12s)' : String(e && e.message).slice(0,80);
+            __diag('🌐 v8: '+nome2+' falhou na tentativa '+tent+' — '+motivo);
+            if(tent === 4){ __diag('🌐 v8: 4 tentativas, 4 quedas — isso é problema na INTERNET/rede da empresa, não na Central.'); throw e; }
+            await new Promise(function(ok){ setTimeout(ok, 1200); });
+          }
+        }
       }
-      __diag('🧪 v6: começando, sem o conector do Supabase…');
+      __diag('🧪 v8: começando — com limite de tempo e repescagem…');
       const evd = await lerTab('plan_eventos?select=id,dados');
       const cfd = await lerTab('plan_config?select=chave,dados&and=(chave.not.like.loc:*,chave.not.like.msg:*)');
       const ev = {data: evd}, cf = {data: cfd};
-      __diag('🧪 v6: respostas em mãos — eventos='+evd.length+' configs='+cfd.length);
+      __diag('🧪 v8: respostas em mãos — eventos='+evd.length+' configs='+cfd.length);
       if(ev.data) {
         eventos = ev.data.map(r=>r.dados).filter(d=>d && d.id);
-        __diag('🧪 v6: quadro recebeu '+eventos.length+' evento(s)');
+        __diag('🧪 v8: quadro recebeu '+eventos.length+' evento(s)');
         idsConhecidos = new Set(eventos.map(e=>e.id));
         FOTO = {};
         for(var i = 0; i < eventos.length; i++){
@@ -16200,7 +16212,7 @@ async function salvar(){
           try{ FOTO[e1.id] = resumoEv(e1); }
           catch(er){ __diag('💥 v5: resumoEv quebrou no card "'+String(e1.nome||e1.id).slice(0,40)+'" — '+String(er && er.message).slice(0,90)); }
         }
-        __diag('🧪 v6: fotografias prontas');
+        __diag('🧪 v8: fotografias prontas');
       }
       (cf.data||[]).forEach(r=>{
         const d = r.dados || {};
@@ -16212,18 +16224,18 @@ async function salvar(){
           if(d.motoristas) motoristas = d.motoristas;
           if(d.veiculos) veiculos = d.veiculos;
           if(d.catalogo) catalogo = d.catalogo;
-          __diag('🧪 v6: cadastros ok — agora o CONFIG ('+(d.CONFIG ? Math.round(JSON.stringify(d.CONFIG).length/1024)+'KB' : 'vazio')+')');
+          __diag('🧪 v8: cadastros ok — agora o CONFIG ('+(d.CONFIG ? Math.round(JSON.stringify(d.CONFIG).length/1024)+'KB' : 'vazio')+')');
           if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
-          __diag('🧪 v6: CONFIG ok — agora APRENDA ('+(d.APRENDA ? Math.round(JSON.stringify(d.APRENDA).length/1024)+'KB' : 'vazio')+')');
+          __diag('🧪 v8: CONFIG ok — agora APRENDA ('+(d.APRENDA ? Math.round(JSON.stringify(d.APRENDA).length/1024)+'KB' : 'vazio')+')');
           if(d.APRENDA) APRENDA = d.APRENDA;
         }
       });
       if(window.__diagAgora) __diagAgora('ocioso');
-      __diag('🧪 v6: nuvemCarregar TERMINOU ✔');
+      __diag('🧪 v8: nuvemCarregar TERMINOU ✔');
       return true;
     };
-    __diag('🧪 v6 pronta: nuvemCarregar aberto por dentro');
-  }catch(e){ __diag('🧪 v6 não instalou: '+String(e && e.message)); }
+    __diag('🧪 v8 pronta: nuvemCarregar aberto por dentro');
+  }catch(e){ __diag('🧪 v8 não instalou: '+String(e && e.message)); }
 })();
 </script>
 </body>
