@@ -3371,7 +3371,7 @@ function replanejar(forcar){
   planoSujo = false;
   PLANO = {};
   const ag = novaAgenda();
-  const ordem = [...eventos].sort((a,b)=> a.mont.localeCompare(b.mont));
+  const ordem = [...eventos].sort((a,b)=> String(a.mont||'').localeCompare(String(b.mont||'')));
   /* folgas e férias da Escala prendem a pessoa (e a equipe, quando é o líder) */
   try{ Object.keys(FOLGAS_ESC).forEach(nome=>Object.keys(FOLGAS_ESC[nome]).forEach(d=>{
     const st = FOLGAS_ESC[nome][d];
@@ -3417,7 +3417,18 @@ function replanejar(forcar){
     if(!(e.escala||[]).length) a.escala.forEach(x => reservar(ag,'mo', x.motorista, diasEquipe(e).concat(extraFicaMot(e, x.v)), e.id));
   });
 }
-const plano = ev => PLANO[ev.id] || analisar(ev, novaAgenda());
+/* dois eventos dividindo o mesmo caminhão com "fica no local" podiam entrar num
+   ciclo infinito (analisar A → escala de B → analisar B → escala de A → …) e congelar
+   a Central. O guarda abaixo corta o ciclo: se o evento JÁ está sendo analisado,
+   devolve um plano vazio em vez de analisar de novo. */
+const PLANO_EM_CURSO = new Set();
+const plano = ev => {
+  if(PLANO[ev.id]) return PLANO[ev.id];
+  if(PLANO_EM_CURSO.has(ev.id)) return {equipe:null, escala:[], frota:[], produtor:null, conflitos:[]};
+  PLANO_EM_CURSO.add(ev.id);
+  try{ return analisar(ev, novaAgenda()); }
+  finally{ PLANO_EM_CURSO.delete(ev.id); }
+};
 /* qualquer coisa vinda de fora (realtime, restauração, importação) refaz a conta */
 function dadosMudaram(){ marcarPlanoSujo(); }
 /* propriedades internas que não devem viajar para a nuvem/backup */
