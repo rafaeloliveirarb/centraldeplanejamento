@@ -16173,17 +16173,25 @@ async function salvar(){
 (function(){ if(!window.__diag) return;
   try{
     nuvemCarregar = async function(){
-      if(!sb) return false;
-      __diag('🧪 v5: pedindo as duas tabelas…');
-      const [ev, cf] = await Promise.all([
-        sb.from('plan_eventos').select('id,dados'),
-        sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%')
-      ]);
-      __diag('🧪 v5: respostas em mãos — eventos='+((ev.data||[]).length)+' configs='+((cf.data||[]).length)+(ev.error?' ERROev '+ev.error.message:'')+(cf.error?' ERROcf '+cf.error.message:''));
-      if(ev.error || cf.error) throw (ev.error || cf.error);
+      async function lerTab(rota){
+        var nome2 = rota.split('?')[0];
+        __diag('🧪 v6: baixando '+nome2+' na mão…');
+        var resp = await fetch(NUVEM.url+'/rest/v1/'+rota, {headers:{apikey:NUVEM.key, Authorization:'Bearer '+NUVEM.key}});
+        __diag('🧪 v6: '+nome2+' respondeu '+resp.status+' — lendo o corpo…');
+        var t1 = Date.now(), tx = await resp.text();
+        __diag('🧪 v6: corpo de '+nome2+': '+Math.round(tx.length/1024)+'KB em '+(Date.now()-t1)+'ms — agora o parse…');
+        var t2 = Date.now(), j = JSON.parse(tx);
+        __diag('🧪 v6: parse de '+nome2+' ok — '+j.length+' linha(s) em '+(Date.now()-t2)+'ms');
+        return j;
+      }
+      __diag('🧪 v6: começando, sem o conector do Supabase…');
+      const evd = await lerTab('plan_eventos?select=id,dados');
+      const cfd = await lerTab('plan_config?select=chave,dados&and=(chave.not.like.loc:*,chave.not.like.msg:*)');
+      const ev = {data: evd}, cf = {data: cfd};
+      __diag('🧪 v6: respostas em mãos — eventos='+evd.length+' configs='+cfd.length);
       if(ev.data) {
         eventos = ev.data.map(r=>r.dados).filter(d=>d && d.id);
-        __diag('🧪 v5: quadro recebeu '+eventos.length+' evento(s)');
+        __diag('🧪 v6: quadro recebeu '+eventos.length+' evento(s)');
         idsConhecidos = new Set(eventos.map(e=>e.id));
         FOTO = {};
         for(var i = 0; i < eventos.length; i++){
@@ -16192,7 +16200,7 @@ async function salvar(){
           try{ FOTO[e1.id] = resumoEv(e1); }
           catch(er){ __diag('💥 v5: resumoEv quebrou no card "'+String(e1.nome||e1.id).slice(0,40)+'" — '+String(er && er.message).slice(0,90)); }
         }
-        __diag('🧪 v5: fotografias prontas');
+        __diag('🧪 v6: fotografias prontas');
       }
       (cf.data||[]).forEach(r=>{
         const d = r.dados || {};
@@ -16204,18 +16212,18 @@ async function salvar(){
           if(d.motoristas) motoristas = d.motoristas;
           if(d.veiculos) veiculos = d.veiculos;
           if(d.catalogo) catalogo = d.catalogo;
-          __diag('🧪 v5: cadastros ok — agora o CONFIG ('+(d.CONFIG ? Math.round(JSON.stringify(d.CONFIG).length/1024)+'KB' : 'vazio')+')');
+          __diag('🧪 v6: cadastros ok — agora o CONFIG ('+(d.CONFIG ? Math.round(JSON.stringify(d.CONFIG).length/1024)+'KB' : 'vazio')+')');
           if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
-          __diag('🧪 v5: CONFIG ok — agora APRENDA ('+(d.APRENDA ? Math.round(JSON.stringify(d.APRENDA).length/1024)+'KB' : 'vazio')+')');
+          __diag('🧪 v6: CONFIG ok — agora APRENDA ('+(d.APRENDA ? Math.round(JSON.stringify(d.APRENDA).length/1024)+'KB' : 'vazio')+')');
           if(d.APRENDA) APRENDA = d.APRENDA;
         }
       });
       if(window.__diagAgora) __diagAgora('ocioso');
-      __diag('🧪 v5: nuvemCarregar TERMINOU ✔');
+      __diag('🧪 v6: nuvemCarregar TERMINOU ✔');
       return true;
     };
-    __diag('🧪 v5 pronta: nuvemCarregar aberto por dentro');
-  }catch(e){ __diag('🧪 v5 não instalou: '+String(e && e.message)); }
+    __diag('🧪 v6 pronta: nuvemCarregar aberto por dentro');
+  }catch(e){ __diag('🧪 v6 não instalou: '+String(e && e.message)); }
 })();
 </script>
 </body>
