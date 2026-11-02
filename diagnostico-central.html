@@ -1571,8 +1571,9 @@ details.lgbox[open] summary h3::before{content:'▾ '}
 (function(){
   var d = document.createElement('div');
   d.style.cssText='position:fixed;left:8px;bottom:8px;z-index:2147483647;background:rgba(10,14,22,.96);color:#7CFC9A;font:11px/1.55 ui-monospace,Menlo,Consolas,monospace;padding:9px 11px;border-radius:9px;max-width:94vw;max-height:46vh;overflow:auto;white-space:pre-wrap;box-shadow:0 4px 18px rgba(0,0,0,.4)';
-  var t0 = Date.now(), L = [], E = [], ultM = '', ultN = 0;
-  function põe(){ d.textContent = '📋 DIAGNÓSTICO — me mande um print desta caixa\n' + (E.length ? '━━ PROBLEMAS ━━\n' + E.join('\n') + '\n━━━━━━━━━━━━\n' : '') + L.join('\n'); d.scrollTop = d.scrollHeight; }
+  var t0 = Date.now(), L = [], E = [], ultM = '', ultN = 0, AGORA = 'ocioso';
+  function põe(){ d.textContent = '📋 DIAGNÓSTICO — me mande um print desta caixa\n⚙ EXECUTANDO AGORA: ' + AGORA + '\n' + (E.length ? '━━ PROBLEMAS ━━\n' + E.join('\n') + '\n━━━━━━━━━━━━\n' : '') + L.join('\n'); d.scrollTop = d.scrollHeight; }
+  window.__diagAgora = function(m){ AGORA = m; põe(); };
   window.__diag = function(m){
     var t = ((Date.now()-t0)/1000).toFixed(1).padStart(5)+'s  ';
     if(m.indexOf('💥') === 0){ if(E.length < 6 && E.indexOf(t+m) < 0) E.push(t+m); põe(); return; }
@@ -1604,6 +1605,30 @@ details.lgbox[open] summary h3::before{content:'▾ '}
     var s = '📊 estado: "'+(el ? el.textContent : '—')+'" · eventos na tela: '+(typeof eventos !== 'undefined' ? eventos.length : '—');
     if(s !== ult){ ult = s; __diag(s); }
   }catch(e){} }, 700);
+  /* vigia TODOS os timers: se a página congelar, a linha ⚙ fica no culpado */
+  function vigia(orig, rot){
+    return function(cb, ms){
+      if(typeof cb !== 'function') return orig.apply(window, arguments);
+      var args = [].slice.call(arguments, 2);
+      var nome = rot+' '+(ms||0)+'ms'+(cb.name ? ' ('+cb.name+')' : '');
+      var visto = false;
+      return orig.call(window, function(){
+        var t = Date.now();
+        __diagAgora(nome + ' — começou aos ' + ((t-t0)/1000).toFixed(1) + 's');
+        try{ return cb.apply(this, args); }
+        finally{
+          var dur = Date.now()-t;
+          if(!visto || dur > 300){ visto = true; if(dur > 300) __diag('🐘 '+nome+' demorou '+dur+'ms'); }
+          __diagAgora('ocioso (último: '+nome+')');
+        }
+      }, ms);
+    };
+  }
+  window.setTimeout = vigia(window.setTimeout, '⏱ timeout');
+  window.setInterval = vigia(window.setInterval, '🔁 intervalo');
+  try{
+    new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ if(e.duration > 400) __diag('🐘 tarefa travou a tela por '+Math.round(e.duration)+'ms'); }); }).observe({entryTypes:['longtask']});
+  }catch(e){}
   __diag('caixa-preta ligada — carregando a Central…');
 })();
 </script>
@@ -16083,7 +16108,7 @@ async function salvar(){
 <script>
 /* ===== CAIXA-PRETA v2: marca as funções por onde a Central passa ===== */
 (function(){ if(!window.__diag) return;
-  var lista = ['migrarDoAntigoSeVazio','nuvemCarregar','fotografarTudo','dedupeEventos','mesclarLocal','marcarBase','marcarSync','nuvemEscutar','carregarRecados','enviarFilaRecados','renderQuadro','replanejar','novaAgenda','renderCadastros','corrigirAnosErrados','repararNomesDescricao','sincronizarAgenda','cadastrarNaEscala','sincronizarEscala','autoIA7','autoFinalizar','calcularKmEmLote','carregarFolgasEsc','renderTV','renderPorFase','renderMapa','padroesConfig','tentarReconectar','nuvemGravar'];
+  var lista = ['migrarDoAntigoSeVazio','nuvemCarregar','fotografarTudo','dedupeEventos','mesclarLocal','marcarBase','marcarSync','nuvemEscutar','carregarRecados','enviarFilaRecados','renderQuadro','replanejar','novaAgenda','renderCadastros','corrigirAnosErrados','repararNomesDescricao','sincronizarAgenda','cadastrarNaEscala','sincronizarEscala','autoIA7','autoFinalizar','calcularKmEmLote','carregarFolgasEsc','renderTV','renderPorFase','renderMapa','padroesConfig','tentarReconectar','nuvemGravar','atualizarClima','localizarEventos','checarLembretes','atualizarBotaoPend','atualizarBtnRisco','atualizarBtnJornada','alertasFrota','geocodEndereco','carregarRecados','prepararTV'];
   var fundo = {renderQuadro:1, replanejar:1, novaAgenda:1, marcarSync:1, renderCadastros:1};
   lista.forEach(function(n){
     var f = window[n];
@@ -16091,9 +16116,11 @@ async function salvar(){
     window[n] = function(){
       var t = Date.now();
       if(!fundo[n]) __diag('▶ '+n);
+      if(window.__diagAgora) __diagAgora('função '+n);
       var r;
       try{ r = f.apply(this, arguments); }
-      catch(e){ __diag('💥 '+n+' QUEBROU: '+String(e && e.message).slice(0,110)); throw e; }
+      catch(e){ __diag('💥 '+n+' QUEBROU: '+String(e && e.message).slice(0,110)); if(window.__diagAgora) __diagAgora('💥 parou dentro de '+n); throw e; }
+      if(window.__diagAgora) __diagAgora('ocioso (último: função '+n+')');
       if(r && typeof r.then === 'function'){
         return r.then(function(v){ __diag('✔ '+n+' ('+(Date.now()-t)+'ms)'); return v; },
           function(e){ __diag('💥 '+n+' FALHOU: '+String(e && e.message).slice(0,110)); throw e; });
