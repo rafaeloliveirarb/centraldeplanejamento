@@ -16168,5 +16168,55 @@ async function salvar(){
   __diag('sondas instaladas em '+lista.filter(function(n){return typeof window[n]==='function';}).length+' funções');
 })();
 </script>
+<script>
+/* ===== CAIXA-PRETA v5: nuvemCarregar aberto por dentro, passo a passo ===== */
+(function(){ if(!window.__diag) return;
+  try{
+    nuvemCarregar = async function(){
+      if(!sb) return false;
+      __diag('🧪 v5: pedindo as duas tabelas…');
+      const [ev, cf] = await Promise.all([
+        sb.from('plan_eventos').select('id,dados'),
+        sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%')
+      ]);
+      __diag('🧪 v5: respostas em mãos — eventos='+((ev.data||[]).length)+' configs='+((cf.data||[]).length)+(ev.error?' ERROev '+ev.error.message:'')+(cf.error?' ERROcf '+cf.error.message:''));
+      if(ev.error || cf.error) throw (ev.error || cf.error);
+      if(ev.data) {
+        eventos = ev.data.map(r=>r.dados).filter(d=>d && d.id);
+        __diag('🧪 v5: quadro recebeu '+eventos.length+' evento(s)');
+        idsConhecidos = new Set(eventos.map(e=>e.id));
+        FOTO = {};
+        for(var i = 0; i < eventos.length; i++){
+          var e1 = eventos[i];
+          if(i % 15 === 0){ if(window.__diagAgora) __diagAgora('fotografando '+(i+1)+'/'+eventos.length+': '+String(e1.nome||e1.id).slice(0,34)); }
+          try{ FOTO[e1.id] = resumoEv(e1); }
+          catch(er){ __diag('💥 v5: resumoEv quebrou no card "'+String(e1.nome||e1.id).slice(0,40)+'" — '+String(er && er.message).slice(0,90)); }
+        }
+        __diag('🧪 v5: fotografias prontas');
+      }
+      (cf.data||[]).forEach(r=>{
+        const d = r.dados || {};
+        if(window.__diagAgora) __diagAgora('lendo config "'+String(r.chave||'?').slice(0,30)+'" ('+Math.round(JSON.stringify(d).length/1024)+'KB)');
+        if(String(r.chave||'').startsWith('loc:')){ LOCS[r.chave.slice(4)] = d; return; }
+        if(r.chave==='cadastros'){
+          if(d.produtores) produtores = d.produtores;
+          if(d.equipes) equipes = d.equipes;
+          if(d.motoristas) motoristas = d.motoristas;
+          if(d.veiculos) veiculos = d.veiculos;
+          if(d.catalogo) catalogo = d.catalogo;
+          __diag('🧪 v5: cadastros ok — agora o CONFIG ('+(d.CONFIG ? Math.round(JSON.stringify(d.CONFIG).length/1024)+'KB' : 'vazio')+')');
+          if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
+          __diag('🧪 v5: CONFIG ok — agora APRENDA ('+(d.APRENDA ? Math.round(JSON.stringify(d.APRENDA).length/1024)+'KB' : 'vazio')+')');
+          if(d.APRENDA) APRENDA = d.APRENDA;
+        }
+      });
+      if(window.__diagAgora) __diagAgora('ocioso');
+      __diag('🧪 v5: nuvemCarregar TERMINOU ✔');
+      return true;
+    };
+    __diag('🧪 v5 pronta: nuvemCarregar aberto por dentro');
+  }catch(e){ __diag('🧪 v5 não instalou: '+String(e && e.message)); }
+})();
+</script>
 </body>
 </html>
