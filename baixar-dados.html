@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baixar dados da Central</title>
+<style>
+:root{--ink:#17233f;--muted:#7a839e;--line:#e3e8f2;--pri:#1c4fa0;--ok:#0f8a4d;--bad:#c0392b;--amber:#9a6a00}
+*{box-sizing:border-box;margin:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#eef1f8;color:var(--ink);padding:16px;max-width:720px;margin:0 auto}
+h1{font-size:20px;margin:8px 0 4px}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+button{border:0;border-radius:11px;padding:13px 20px;font-weight:800;font-size:16px;cursor:pointer;background:var(--pri);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.alert{border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px;background:#fdf4df;color:var(--amber)}
+.alert.green{background:#e8f6ee;color:var(--ok)}
+.alert.red{background:#fdecea;color:var(--bad)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #cdd6ea;border-top-color:var(--pri);border-radius:50%;animation:g .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<h1>📦 Baixar os dados da Central</h1>
+<div class="sub">Esta página só <b>lê</b> — não muda nada. Ela baixa as duas tabelas da nuvem e salva um arquivo <b>dados-central.json</b> no teu computador. Depois é só anexar esse arquivo aqui na conversa do Claude, que eu reproduzo o travamento no meu laboratório e devolvo a Central consertada.</div>
+
+<div class="card">
+  <button id="b1" onclick="baixar()">📦 Baixar dados-central.json</button>
+  <div id="res"></div>
+</div>
+
+<script>
+const NUVEM = {
+  url: 'https://isnczssssikqjukpecsf.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbmN6c3Nzc2lrcWp1a3BlY3NmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzQ0NDYsImV4cCI6MjEwNjk1MDQ0Nn0.k4VNcRSlP6rrhw22zgDnWbZkZw-eaTjt2iZccsC703E'
+};
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const kb = n => n >= 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1, Math.round(n/1024))+' KB';
+const H = {apikey:NUVEM.key, Authorization:'Bearer '+NUVEM.key};
+async function pega(rota){
+  for(let tent = 1; tent <= 4; tent++){
+    const ctl = new AbortController(), t = setTimeout(()=>ctl.abort(), 15000);
+    try{
+      const r = await fetch(NUVEM.url+'/rest/v1/'+rota, {headers:H, signal:ctl.signal, cache:'no-store'});
+      if(!r.ok) throw new Error('status '+r.status);
+      const tx = await r.text();
+      clearTimeout(t);
+      return JSON.parse(tx);
+    }catch(e){
+      clearTimeout(t);
+      if(tent === 4) throw e;
+      await new Promise(ok=>setTimeout(ok, 1000));
+    }
+  }
+}
+async function baixar(){
+  const res = document.getElementById('res');
+  document.getElementById('b1').disabled = true;
+  try{
+    res.innerHTML = '<div class="alert"><span class="spin"></span>Baixando os eventos…</div>';
+    const eventos = await pega('plan_eventos?select=id,dados');
+    res.innerHTML = '<div class="alert"><span class="spin"></span>Eventos ok ('+eventos.length+'). Baixando as chaves do config…</div>';
+    const chaves = await pega('plan_config?select=chave');
+    const config = [];
+    for(const c of chaves){
+      const ch = String(c.chave||'');
+      if(ch.startsWith('loc:') || ch.startsWith('msg:')) continue;   /* a Central também não lê esses */
+      res.innerHTML = '<div class="alert"><span class="spin"></span>Baixando config "'+esc(ch)+'"…</div>';
+      const r = await pega('plan_config?select=chave,dados&chave=eq.'+encodeURIComponent(ch));
+      if(r[0]) config.push(r[0]);
+    }
+    const pacote = JSON.stringify({quando:new Date().toISOString(), eventos, config});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([pacote], {type:'application/json'}));
+    a.download = 'dados-central.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    res.innerHTML = '<div class="alert green">✅ Arquivo <b>dados-central.json</b> ('+kb(pacote.length)+') salvo na pasta Downloads — '+eventos.length+' evento(s) e '+config.length+' config(s).'+
+      '<br><br><b>Agora anexe esse arquivo aqui na conversa do Claude</b> (clipe de papel 📎 ou arraste para a caixa de mensagem).</div>';
+  }catch(e){
+    res.innerHTML = '<div class="alert red">Falhou: '+esc(e.message||e)+' — toque de novo para tentar outra vez.</div>';
+    document.getElementById('b1').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
