@@ -9133,7 +9133,11 @@ function tvLogHtml(){
     '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+(r.volta?' · volta ≈'+esc(r.volta):'')+'</span>'+
     '<span style="font-size:17px">'+stViagem(r)+'</span>')).join('');
-  const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid); const ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
+  const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid);
+    let ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
+    /* o fica pode ser de UMA viagem (ficaV): mostra a data da que está valendo hoje, não a da viagem antiga */
+    try{ if(p.it.f !== 'desm') ficaVLista(p.it.ev, p.vid).forEach(x=>{ if(x.de <= HOJE && HOJE <= x.ate && (!ate || ate < HOJE || x.ate > ate)) ate = x.ate; }); }catch(e){}
+    if(ate && ate < HOJE) ate = null;   /* data velha: melhor "parado no local" do que data errada */
     return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
       '<span style="flex:1;font-size:18px">no local de '+esc(nomeTV(p.it.ev.nome))+'</span>'+
       '<span style="font-size:17px;color:#ffb25e">'+(ate?'fica até '+fmtD(ate).slice(0,5):'parado no local')+'</span>'); }).join('');
