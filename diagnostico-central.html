@@ -16080,5 +16080,48 @@ async function salvar(){
   <div class="tv-folgas" id="tv-basefx" style="display:none;background:#3a2c14;color:#f3dfb8;border-top:1px solid #6b5326;font-size:16.5px"></div>
   <div class="tv-rod" id="tv-rod"></div>
 </div>
+<script>
+/* ===== CAIXA-PRETA v2: marca as funções por onde a Central passa ===== */
+(function(){ if(!window.__diag) return;
+  var lista = ['migrarDoAntigoSeVazio','nuvemCarregar','fotografarTudo','dedupeEventos','mesclarLocal','marcarBase','marcarSync','nuvemEscutar','carregarRecados','enviarFilaRecados','renderQuadro','replanejar','novaAgenda','renderCadastros','corrigirAnosErrados','repararNomesDescricao','sincronizarAgenda','cadastrarNaEscala','sincronizarEscala','autoIA7','autoFinalizar','calcularKmEmLote','carregarFolgasEsc','renderTV','renderPorFase','renderMapa','padroesConfig','tentarReconectar','nuvemGravar'];
+  var fundo = {renderQuadro:1, replanejar:1, novaAgenda:1, marcarSync:1, renderCadastros:1};
+  lista.forEach(function(n){
+    var f = window[n];
+    if(typeof f !== 'function'){ return; }
+    window[n] = function(){
+      var t = Date.now();
+      if(!fundo[n]) __diag('▶ '+n);
+      var r;
+      try{ r = f.apply(this, arguments); }
+      catch(e){ __diag('💥 '+n+' QUEBROU: '+String(e && e.message).slice(0,110)); throw e; }
+      if(r && typeof r.then === 'function'){
+        return r.then(function(v){ __diag('✔ '+n+' ('+(Date.now()-t)+'ms)'); return v; },
+          function(e){ __diag('💥 '+n+' FALHOU: '+String(e && e.message).slice(0,110)); throw e; });
+      }
+      var ms = Date.now()-t;
+      if(!fundo[n] || ms > 400) __diag('✔ '+n+' ('+ms+'ms)');
+      return r;
+    };
+  });
+  /* tamanhos do que veio da nuvem */
+  var g = window.nuvemCarregar;
+  if(typeof g === 'function') window.nuvemCarregar = function(){
+    var p = g.apply(this, arguments);
+    return Promise.resolve(p).then(function(v){
+      try{
+        __diag('📦 eventos='+(window.eventos||[]).length+' · equipes='+(window.equipes||[]).length+' · veiculos='+(window.veiculos||[]).length+' · catalogo='+(window.catalogo||[]).length+' · motoristas='+(window.motoristas||[]).length);
+        var C = window.CONFIG || {};
+        __diag('📦 CONFIG '+Math.round(JSON.stringify(C).length/1024)+'KB: excluidos='+(C.excluidos||[]).length+' pracas='+(C.pracas||[]).length+' restricoes='+(C.restricoes||[]).length+' cavalos='+(C.cavalos||[]).length+' datasEspeciais='+(C.datasEspeciais||[]).length);
+        var A = window.APRENDA || {};
+        __diag('📦 APRENDA '+Math.round(JSON.stringify(A).length/1024)+'KB');
+        var ms = (window.eventos||[]).map(function(e){ return {n:(e.nome||'?'), t:JSON.stringify(e).length}; }).sort(function(a,b){ return b.t-a.t; }).slice(0,3);
+        __diag('📦 maiores eventos: '+ms.map(function(x){ return x.n.slice(0,18)+' '+Math.round(x.t/1024)+'KB'; }).join(' · '));
+      }catch(e){}
+      return v;
+    });
+  };
+  __diag('sondas instaladas em '+lista.filter(function(n){return typeof window[n]==='function';}).length+' funções');
+})();
+</script>
 </body>
 </html>
