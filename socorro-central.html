@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Socorro da Central</title>
+<style>
+:root{--ink:#17233f;--muted:#7a839e;--line:#e3e8f2;--pri:#1c4fa0;--ok:#0f8a4d;--bad:#c0392b;--amber:#9a6a00}
+*{box-sizing:border-box;margin:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#eef1f8;color:var(--ink);padding:16px;max-width:780px;margin:0 auto}
+h1{font-size:20px;margin:8px 0 4px}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+button{border:0;border-radius:11px;padding:13px 20px;font-weight:800;font-size:16px;cursor:pointer}
+.ok{background:var(--ok);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.alert{border-radius:10px;padding:10px 12px;font-size:13.5px;margin-top:10px;background:#fdf4df;color:var(--amber)}
+.alert.green{background:#e8f6ee;color:var(--ok)}
+.alert.red{background:#fdecea;color:var(--bad)}
+.lin{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.lin:last-child{border-bottom:0}
+.lin b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:11.5px;font-weight:800;border-radius:7px;padding:3px 8px;white-space:nowrap;background:#e3edfb;color:var(--pri)}
+.tag.bad{background:#fdecea;color:var(--bad)}
+h4{font-size:13.5px;margin:12px 0 2px}
+small{color:var(--muted)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #cdd6ea;border-top-color:var(--pri);border-radius:50%;animation:g .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<h1>🚑 Socorro da Central de Planejamento</h1>
+<div class="sub"><b>Antes de tocar no botão:</b> feche a Central em TODOS os aparelhos — computadores, celulares e principalmente a TV do galpão, se ela fica com a Central aberta. Aparelho com a Central aberta grava a bagunça de volta e desfaz o conserto. Com tudo fechado, toque no botão. Ele limpa a memória deste navegador, conserta a nuvem e mostra um raio-X no final.</div>
+
+<div class="card">
+  <button class="ok" id="b1" onclick="socorrer()">🚑 Arrumar tudo</button>
+  <div id="res"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const NUVEM = {
+  url: 'https://isnczssssikqjukpecsf.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzbmN6c3Nzc2lrcWp1a3BlY3NmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEzNzQ0NDYsImV4cCI6MjEwNjk1MDQ0Nn0.k4VNcRSlP6rrhw22zgDnWbZkZw-eaTjt2iZccsC703E'
+};
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const dia = s => String(s||'').slice(0,10);
+const ehData = s => /^\d{4}-\d{2}-\d{2}$/.test(dia(s));
+const kb = n => n >= 1048576 ? (n/1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n/1024)) + ' KB';
+let sb = null;
+const cliente = () => sb || (sb = window.supabase.createClient(NUVEM.url, NUVEM.key));
+const põe = h => { document.getElementById('res').innerHTML = h; };
+async function socorrer(){
+  document.getElementById('b1').disabled = true;
+  const feito = [];
+  try{
+    /* 1) memória local deste navegador */
+    let itensLocais = 0, tamLocal = 0, evCache = null;
+    try{
+      for(let i=0; i<localStorage.length; i++){ const v = localStorage.getItem(localStorage.key(i)) || ''; tamLocal += v.length; }
+      itensLocais = localStorage.length;
+      try{ const d = JSON.parse(localStorage.getItem('cpl:dados') || 'null'); evCache = d && d.eventos ? d.eventos.length : null; }catch(e){ evCache = 'corrompido'; }
+      localStorage.clear(); sessionStorage.clear();
+      if(indexedDB.databases){ const L = await indexedDB.databases(); await Promise.all(L.map(x=>new Promise(ok=>{ if(!x.name) return ok(); const r = indexedDB.deleteDatabase(x.name); r.onsuccess = r.onerror = r.onblocked = ()=>ok(); }))); }
+      if(navigator.serviceWorker){ (await navigator.serviceWorker.getRegistrations()).forEach(r=>r.unregister()); }
+    }catch(e){}
+    feito.push('🧽 Memória deste navegador limpa: ' + itensLocais + ' item(ns), ' + kb(tamLocal) + (evCache != null ? ' — a cópia local tinha <b>' + evCache + ' evento(s)</b>' : ''));
+    põe('<div class="alert"><span class="spin"></span>Memória limpa. Lendo a nuvem…</div>');
+
+    /* 2) nuvem: lê tudo */
+    const r = await cliente().from('plan_eventos').select('id,dados');
+    if(r.error) throw r.error;
+    const linhas = (r.data||[]).filter(x=>x && x.dados && x.dados.id);
+    const tam = x => JSON.stringify(x.dados).length;
+    let total = 0; linhas.forEach(x=>{ total += tam(x); });
+
+    /* 3) conserto: sai o que o Planejamento criou; card sem montagem ganha data; marcas somem */
+    const agora = new Date().toISOString();
+    const del = [], salvar = [];
+    linhas.forEach(x=>{
+      const d = x.dados;
+      if(d.origemPlaneq){ del.push(d.id); return; }
+      let mexeu = false;
+      if(!ehData(d.mont)){
+        d.mont = [d.evt, d.desm].map(dia).find(ehData) || new Date().toISOString().slice(0,10);
+        d.hist = [{q:agora, quem:'Socorro', o:['🚑 Estava sem data de montagem (travava a Central) — ganhou ' + d.mont]}, ...(d.hist||[])];
+        mexeu = true;
+      }
+      if(d.planeq || d.manutencao !== undefined || d.horaFim !== undefined){ delete d.planeq; delete d.manutencao; delete d.horaFim; mexeu = true; }
+      const h = (d.hist||[]).filter(y=>!(y && y.quem === 'Planejamento de Equipes'));
+      if(h.length !== (d.hist||[]).length){ d.hist = h; mexeu = true; }
+      if((d.hist||[]).length > 80){ d.hist = d.hist.slice(0,80); mexeu = true; }
+      if(mexeu) salvar.push({id:d.id, dados:d, atualizado_em:agora});
+    });
+    for(let i=0; i<del.length; i+=25){ const q = await cliente().from('plan_eventos').delete().in('id', del.slice(i, i+25)); if(q.error) throw q.error; }
+    for(let i=0; i<salvar.length; i+=15){ const q = await cliente().from('plan_eventos').upsert(salvar.slice(i, i+15)); if(q.error) throw q.error; }
+    feito.push('🛠 Nuvem conferida: ' + linhas.length + ' card(s)' + (del.length ? ' — <b>' + del.length + ' criado(s) pelo Planejamento saíram</b>' : '') + (salvar.length ? ' — ' + salvar.length + ' arrumado(s)' : ' — nada para arrumar'));
+
+    /* 4) raio-X do que ficou */
+    const vivos = linhas.filter(x=>!del.includes(x.dados.id));
+    const semMont = vivos.filter(x=>!ehData(x.dados.mont)).length;
+    const anoRuim = vivos.filter(x=>{ const a = +dia(x.dados.mont).slice(0,4); return a && (a < 2023 || a > 2028); });
+    const grandes = vivos.map(x=>({n:x.dados.nome, t:tam(x)})).sort((a,b)=>b.t-a.t).slice(0,5);
+    const raioX =
+      '<h4>📸 Raio-X da nuvem (me manda um print desta tela)</h4>'+
+      '<div class="lin"><b>Cards na Central</b><span class="tag">'+vivos.length+'</span></div>'+
+      '<div class="lin"><b>Tamanho total dos dados</b><span class="tag'+(total > 8388608 ? ' bad' : '')+'">'+kb(total)+'</span></div>'+
+      '<div class="lin"><b>Sem data de montagem (depois do conserto)</b><span class="tag'+(semMont ? ' bad' : '')+'">'+semMont+'</span></div>'+
+      '<div class="lin"><b>Com ano estranho na montagem (fora de 2023–2028)</b><span class="tag'+(anoRuim.length ? ' bad' : '')+'">'+anoRuim.length+'</span></div>'+
+      (anoRuim.length ? anoRuim.slice(0,5).map(x=>'<div class="lin"><b>'+esc(x.dados.nome)+'</b><small>montagem '+esc(dia(x.dados.mont))+'</small></div>').join('') : '')+
+      '<h4>Maiores cards</h4>'+grandes.map(g=>'<div class="lin"><b>'+esc(g.n||'(sem nome)')+'</b><span class="tag'+(g.t > 524288 ? ' bad' : '')+'">'+kb(g.t)+'</span></div>').join('');
+
+    põe('<div class="alert green">✅ Tudo feito:<br>'+feito.join('<br>')+
+      '<br><br><b>Agora abra a Central só neste computador primeiro.</b> A primeira abertura baixa tudo de novo e pode demorar 1 ou 2 minutos — se o Chrome perguntar, toque em Aguarde. Funcionou? Aí sim volte a abrir nos outros aparelhos (na TV por último), e em cada um abra esta página e toque no botão antes.</div>'+raioX);
+  }catch(e){
+    põe('<div class="alert red">Parou no meio: '+esc(e.message||e)+'<br>'+feito.join('<br>')+'<br>Pode tocar de novo no botão — repetir não estraga nada.</div>');
+    document.getElementById('b1').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
