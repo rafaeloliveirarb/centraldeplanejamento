@@ -13580,11 +13580,47 @@ function removerMotorista(i){
   });
 }
 
+/* excluir caminhão que está em eventos: oferece trocar por outro em todos de uma vez */
+function usosVeiculo(id){ return eventos.filter(e => !e.esp && ((e.veiculos||[]).includes(id) || (e.veiculosD||[]).includes(id))); }
+function abrirTrocaVeiculo(id){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const v = veiculos.find(x=>x.id===id); if(!v) return;
+  const usos = usosVeiculo(id);
+  if(!usos.length){ fechar('ov-lg'); removerVeiculoFrota(id); return; }
+  const opcoes = veiculos.filter(x=>x.id!==id).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.tipo+' '+x.placa)+(x.manut?' — ⚠ em manutenção':'')+(x.agregado?' · agregado'+(x.motoristaFixo?' ('+esc(x.motoristaFixo)+')':''):'')+'</option>').join('');
+  lgModal('🔁 Trocar ' + esc(v.tipo + ' ' + v.placa) + ' antes de excluir',
+    'Ele está nestes eventos — escolha quem entra no lugar e a troca vale para todos de uma vez',
+    usos.map(e=>'<div class="row" style="gap:10px"><b style="flex:1">'+esc(nomeTV(e.nome))+'</b><small style="color:var(--muted)">'+
+      ((e.veiculos||[]).includes(id) ? 'montagem' : '')+((e.veiculos||[]).includes(id) && (e.veiculosD||[]).includes(id) ? ' e ' : '')+((e.veiculosD||[]).includes(id) ? 'desmontagem' : '')+'</small></div>').join('')+
+    '<div class="row" style="gap:10px;margin-top:12px;align-items:center"><b>Entra no lugar:</b>'+
+      '<select id="tv-novo" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:9px 10px">'+opcoes+'</select></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button>'+
+      '<button class="mini" style="font-weight:800;border-color:var(--blue);color:var(--blue)" onclick="trocarVeiculoEmTudo(\''+esc(id)+'\', document.getElementById(\'tv-novo\').value, false)">Só trocar</button>'+
+      '<button class="mini danger" style="font-weight:800" onclick="trocarVeiculoEmTudo(\''+esc(id)+'\', document.getElementById(\'tv-novo\').value, true)">Trocar e excluir</button></div>');
+}
+function trocarVeiculoEmTudo(deId, paraId, excluirDepois){
+  const de = veiculos.find(x=>x.id===deId), para = veiculos.find(x=>x.id===paraId);
+  if(!de || !para || deId === paraId) return;
+  const usos = usosVeiculo(deId);
+  let n = 0;
+  usos.forEach(ev=>{
+    ['veiculos','veiculosD'].forEach(k=>{ if(Array.isArray(ev[k])) ev[k] = ev[k].map(x=>x===deId ? paraId : x); });
+    ['escala','escalaD'].forEach(k=>(ev[k]||[]).forEach(x=>{ if(x.v===deId){ x.v = paraId; if(para.agregado && para.motoristaFixo) x.motorista = para.motoristaFixo; else if(de.agregado) x.motorista = null; } }));
+    ['fica','ficaD','ficaV'].forEach(k=>{ const m = ev[k]; if(m && (deId in m)){ if(!(paraId in m)) m[paraId] = m[deId]; delete m[deId]; } });
+    ev.hist = [{q:new Date().toISOString(), quem:(localStorage.getItem('cpl:quem')||null), o:['🔁 Caminhão trocado: ' + de.tipo + ' ' + de.placa + ' → ' + para.tipo + ' ' + para.placa]}, ...(ev.hist||[])].slice(0,80);
+    n++;
+  });
+  fechar('ov-lg');
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); try{ renderCadastros(); }catch(e){}
+  toast('🔁 ' + de.tipo + ' ' + de.placa + ' → ' + para.tipo + ' ' + para.placa + ' em ' + n + ' evento(s).');
+  if(excluirDepois) setTimeout(()=>removerVeiculoFrota(deId), 150);
+}
 function removerVeiculoFrota(id){
   const i = veiculos.findIndex(v=>v.id===id); if(i<0) return;
   const v = veiculos[i];
-  const usos = eventos.filter(e => (e.veiculos||[]).includes(id));
-  if(usos.length) return toast(v.tipo + ' ' + v.placa + ' está em ' + usos.length + ' evento(s). Tire da operação antes de excluir.');
+  const usos = usosVeiculo(id);
+  if(usos.length){ abrirTrocaVeiculo(id); return; }
   if(!confirm('Excluir o veículo ' + v.tipo + ' ' + v.placa + ' da frota?')) return;
   const copia = {...v};
   veiculos.splice(i,1);
