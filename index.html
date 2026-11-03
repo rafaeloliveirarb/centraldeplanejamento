@@ -12028,12 +12028,29 @@ function parseOS(txt){
   const achados = [], ignoradas = [], sugestoes = [];
   const porTamanho = [...catalogo].sort((a,b)=>b.nome.length-a.nome.length);
 
+  /* OS Interna por AMBIENTE: um título (PISO DECK GALPÕES, COZINHA, POSTO MEDICO…)
+     seguido da tabelinha "Descrição | Qde". Cada ambiente vira uma estrutura. */
+  const ambSet = new Set();
+  {
+    const ls2 = String(txt||'').split(/\r?\n/).map(s=>s.replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim());
+    ls2.forEach((l, i)=>{
+      if(!l || l.length > 60) return;
+      let j = i + 1; while(j < ls2.length && !ls2[j]) j++;
+      if(!/^descricao\b/.test(semAcentoSimples(ls2[j]||''))) return;
+      if(/^(descricao|qde|qtd|total|valor|observa)/.test(semAcentoSimples(l))) return;
+      ambSet.add(semAcentoSimples(l));
+    });
+  }
+  let ambienteAtual = null;
+
   /* uma linha pode trazer mais de um material ("Tenda 5x5: 6; Piso 200"):
      acha onde cada um começa e corta ali. */
   const pedacos = [];
   String(txt||'').split(/\r?\n/).forEach(linha=>{
     const l0 = linha.trim(); if(!l0) return;
     const base = semAcentoSimples(l0);
+    /* título de ambiente nunca é fatiado em materiais */
+    if(ambSet.has(base.replace(/\s+/g,' ').trim())){ pedacos.push({t:l0, orig:l0}); return; }
     const marcas = [];
     porTamanho.forEach(c=>{
       const alvo = semAcentoSimples(c.nome).replace(/\s+/g,'\\s*');
@@ -12104,7 +12121,14 @@ function parseOS(txt){
     const qdeFim = qdeCol!=null ? qdeCol : (mFim ? +mFim[1] : null);
 
     if(numeroPuro){ fecharCom(+ls); return; } /* qde da coluna: o quadro continua */
-    if(secao){ fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null; return; }
+    /* título de ambiente da OS Interna: vira estrutura e abre o quadro dele */
+    if(ambSet.has(ls)){
+      fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null;
+      ambienteAtual = l.replace(/\s+/g,' ').trim();
+      pushEstr(ambienteAtual);
+      return;
+    }
+    if(secao){ fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null; ambienteAtual = null; return; }
     if(detalhe){
       if(cabecalho){ detalhando = false; tipoComp = null; if(qdeFim!=null) fecharCom(qdeFim); return; }
       detalhando = true;
