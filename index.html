@@ -9122,17 +9122,15 @@ function tvLogHtml(){
       if(l.chegou) return '<b style="color:#4cd98a">✅ NO LOCAL desde '+l.chegou+'</b>';
       return '<b style="color:#6fb3ff">📡 EM VIAGEM'+(l.vel!=null?' · '+l.vel+' km/h':'')+'</b>';
     }
-    const ag = new Date(); const agMin = ag.getHours()*60+ag.getMinutes();
-    const sm = minDe(r.saida);
-    return sm != null && agMin >= sm ? '<b style="color:#ffb25e">🚚 deve estar na rua (sem GPS)</b>' : '<b style="color:#aab4d4">sai às '+esc(r.saida)+'</b>';
+    return '';   /* sem GPS: só o horário de saída já diz tudo */
   };
   const cartao = (c) => '<div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px 18px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+c+'</div>';
   const sec = (t, corpo) => corpo ? '<div style="margin-bottom:18px"><div style="font-size:15px;font-weight:800;letter-spacing:.8px;color:#9fb0dd;margin-bottom:8px">'+t+'</div>'+corpo+'</div>' : '';
   const bSaem = saem.map(r=>cartao(
     '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
     '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
-    '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+(r.volta?' · volta ≈'+esc(r.volta):'')+'</span>'+
-    '<span style="font-size:17px">'+stViagem(r)+'</span>')).join('');
+    '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+'</span>'+
+    (stViagem(r) ? '<span style="font-size:17px">'+stViagem(r)+'</span>' : ''))).join('');
   const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid);
     let ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
     /* o fica pode ser de UMA viagem (ficaV): mostra a data da que está valendo hoje, não a da viagem antiga */
@@ -15547,7 +15545,16 @@ function calcRodTV(){
     const ops = opsDoDia(HOJE).ops;
     const onde = {};
     equipes.filter(e2=>e2.nome!==EQUIPE_TERC).forEach(e2=>onde[e2.nome] = null);
-    ops.forEach(o=>{ const eq = o.ev.equipe; if(eq && (eq in onde) && !onde[eq]) onde[eq] = (o.fase==='desm' ? '📤 ' : '🔨 ') + nomeTV(o.ev.nome) + (o.ev.cidade && o.ev.cidade!=='—' ? ' ('+o.ev.cidade+')' : ''); });
+    ops.forEach(o=>{
+      const rot = (o.fase==='desm' ? '📤 ' : '🔨 ') + nomeTV(o.ev.nome) + (o.ev.cidade && o.ev.cidade!=='—' ? ' ('+o.ev.cidade+')' : '');
+      const marca = nm => { if(nm && (nm in onde) && !onde[nm]) onde[nm] = rot; };
+      marca(o.equipe || o.ev.equipe);
+      /* troca de montador: gente de OUTRA equipe trabalhando no evento também conta — a equipe dela não está livre */
+      try{
+        const nomes = new Set((o.pessoas||[]).filter(pp=>!pp.prod).map(pp=>pp.nome));
+        if(nomes.size) equipes.forEach(e3=>{ if(e3.nome !== EQUIPE_TERC && (nomes.has(e3.nome) || (e3.membros||[]).some(m=>nomes.has(m)))) marca(e3.nome); });
+      }catch(e){}
+    });
     try{ baseDoDia(HOJE).forEach(s2=>{ if(s2.equipe && (s2.equipe in onde) && !onde[s2.equipe]) onde[s2.equipe] = '🏠 serviço na base'; }); }catch(e){}
     const txt = Object.keys(onde).map(n2=>'<b>'+esc2(n2)+'</b> → '+(onde[n2] ? esc2(onde[n2]) : 'galpão · livre')).join(' &nbsp;·&nbsp; ');
     if(txt) pags.push({cls:'eq', t:'👷 EQUIPES HOJE — ' + txt});
