@@ -1030,7 +1030,18 @@ details.lgbox[open] summary h3::before{content:'▾ '}
         <label style="font-size:12.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="crono-evento" checked style="width:15px;height:15px"> incluir dias do evento</label>
         <label style="font-size:12.5px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="crono-desm" style="width:15px;height:15px"> incluir desmontagem</label>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px">
+        <label style="font-size:12.5px;display:flex;gap:6px;align-items:center">👷 Equipe para as linhas vazias:
+          <input list="dl-crono-eq" id="crono-eq-todas" placeholder="ex.: Jardel ou Grupo Forte" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;width:190px;font:inherit;font-size:12.5px"></label>
+        <button class="mini" onclick="cronoEqTodas()">Aplicar</button>
+      </div>
+      <datalist id="dl-crono-eq"></datalist>
       <div id="crono-lista"></div>
+      <div class="sec" style="margin-top:14px"><h4>📎 Anexos do cronograma <small>PDF, Excel, imagem — ficam na nuvem, junto do evento (até 4 MB cada)</small></h4>
+        <div id="crono-anexos"><small style="color:var(--muted)">carregando…</small></div>
+        <div style="margin-top:8px"><input type="file" id="crono-file" style="display:none" onchange="anexarCrono(this.files[0]);this.value=''">
+        <button class="mini" onclick="document.getElementById('crono-file').click()">📎 Anexar arquivo</button></div>
+      </div>
     </div>
     <footer style="display:flex;justify-content:flex-end;gap:10px">
       <button class="mini" onclick="fechar('ov-crono')">Fechar</button>
@@ -1791,7 +1802,7 @@ async function nuvemCarregar(){
   if(!sb) return false;
   const [ev, cf] = await Promise.all([
     sb.from('plan_eventos').select('id,dados'),
-    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%')
+    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%').not('chave', 'like', 'anexo:%')
   ]);
   if(ev.error || cf.error) throw (ev.error || cf.error);
   if(ev.data) {
@@ -1980,6 +1991,7 @@ function nuvemEscutar(){
       if(Date.now() - ignorarRealtime < 2500) return;
       if(p.new && String(p.new.chave||'').startsWith('msg:')){ try{ recadoChegou(p.new.dados); }catch(e){} return; }
       if(p.new && String(p.new.chave||'').startsWith('loc:')){ LOCS[p.new.chave.slice(4)] = p.new.dados; try{ renderTV(); }catch(e){} return; }
+      if((p.new && String(p.new.chave||'').startsWith('anexo:')) || (p.old && String(p.old.chave||'').startsWith('anexo:'))) return;   /* anexos do cronograma: só quem abre o cronograma baixa */
       const d = p.new && p.new.dados; if(!d) return;
       if(cadSujo()) return;
       if(d.produtores) produtores = d.produtores;
@@ -9436,7 +9448,7 @@ function verEvento(id){
     '</div>'+
   
     '<div class="sec" id="sec-estruturas"><h4 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+dotSec(ev,'estruturas')+' 🏗 ESTRUTURAS DO EVENTO <span style="font-weight:500;color:var(--muted);font-size:12px;text-transform:none;letter-spacing:0">o que vai ser montado, como está na OS</span>'+
-      ((ev.estruturas||[]).length ? '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>' : '')+'</h4>'+
+      '<span style="flex:1"></span><button class="mini" style="font-weight:600" onclick="abrirCrono(\''+ev.id+'\')">📋 Cronograma de montagem</button>'+'</h4>'+
       ((ev.estruturas||[]).length
         ? (ev.estruturas||[]).map((e2,ix)=>'<div class="row"><span style="flex:1">'+String(e2).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>'+
             '<button class="mini danger" onclick="removerEstrutura(\''+ev.id+'\','+ix+')">✕</button></div>').join('')
@@ -14984,31 +14996,97 @@ function cronoDe(ev){
   ev.crono = ev.crono || {};
   return (ev.estruturas||[]).map(t => {
     const c = ev.crono[t] || {};
-    return {t, nome: limpaEstrutura(t), ini: c.ini || ini0, ent: c.ent || fim0};
+    return {t, nome: limpaEstrutura(t), ini: c.ini || ini0, ent: c.ent || fim0, eq: c.eq || ''};
   });
 }
 function abrirCrono(id){
   cronoEvId = id;
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
-  if(!(ev.estruturas||[]).length) return toast('Lance as estruturas do evento antes (📄 Ler material da OS).');
   document.getElementById('crono-ev').textContent = ev.nome + ' · montagem ' + fmtD(ev.mont) + (dia(ev.mont)!==dia(fimMont(ev)) ? ' a ' + fmtD(fimMont(ev)) : '');
+  const usados = new Set(equipes.filter(e2=>e2.nome!==EQUIPE_TERC).map(e2=>e2.nome));
+  eventos.forEach(e2=>Object.values(e2.crono||{}).forEach(c=>{ if(c && c.eq) usados.add(c.eq); }));
+  if(ev.tercEmpresa) usados.add(ev.tercEmpresa);
+  const dl = document.getElementById('dl-crono-eq'); if(dl) dl.innerHTML = [...usados].map(n=>'<option value="'+String(n).replace(/"/g,'&quot;')+'">').join('');
   renderCrono();
+  renderAnexosCrono();
   document.getElementById('ov-crono').classList.add('on');
+}
+function cronoEqTodas(){
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
+  const v = (document.getElementById('crono-eq-todas').value||'').trim(); if(!v) return;
+  cronoDe(ev).forEach(c=>{ if(!c.eq) ev.crono[c.t] = Object.assign({ini:c.ini, ent:c.ent}, ev.crono[c.t]||{}, {eq:v}); });
+  salvar(); renderCrono();
+}
+/* o que cada equipe monta no dia D (estruturas do cronograma ativas no dia) */
+function cronoDoDia(ev, D){
+  try{ if(!(ev.estruturas||[]).length || !ev.crono) return []; return cronoDe(ev).filter(c=>c.ini <= D && D <= c.ent); }catch(e){ return []; }
+}
+/* ===== anexos do cronograma: ficam em plan_config (anexo:<evento>:<id>) ===== */
+async function renderAnexosCrono(){
+  const box = document.getElementById('crono-anexos'); if(!box) return;
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  if(!sb || !nuvemOk){ box.innerHTML = '<small style="color:var(--muted)">anexos precisam da nuvem — sem internet agora.</small>'; return; }
+  try{
+    const r = await sb.from('plan_config').select('chave,nome:dados->>nome,tam:dados->>tam,quem:dados->>quem').like('chave', 'anexo:' + cronoEvId + ':%');
+    if(r.error) throw r.error;
+    const L = r.data || [];
+    box.innerHTML = L.length ? L.map(a=>'<div class="row" style="padding:7px 0"><a href="#" onclick="event.preventDefault();baixarAnexoCrono(\''+esc(a.chave)+'\',\''+esc(a.nome).replace(/'/g,'')+'\')" style="flex:1;font-weight:700">📎 '+esc(a.nome)+'</a><small style="color:var(--muted)">'+Math.max(1, Math.round((+a.tam||0)/1024))+' KB'+(a.quem?' · '+esc(a.quem):'')+'</small><button class="mini danger" onclick="rmAnexoCrono(\''+esc(a.chave)+'\')">✕</button></div>').join('')
+      : '<small style="color:var(--muted)">Nenhum anexo ainda.</small>';
+  }catch(e){ box.innerHTML = '<small style="color:var(--bad,#c0392b)">não consegui listar os anexos: '+esc(e.message||e)+'</small>'; }
+}
+function anexarCrono(f){
+  if(!f) return;
+  if(!sb || !nuvemOk) return toast('Sem nuvem agora — tenta de novo quando a internet voltar.');
+  if(f.size > 4*1024*1024) return toast('Arquivo grande demais ('+Math.round(f.size/1048576)+' MB) — o limite é 4 MB. Comprime ou manda só as páginas que importam.');
+  const rd = new FileReader();
+  rd.onload = async () => {
+    try{
+      const chave = 'anexo:' + cronoEvId + ':' + Date.now();
+      const dados = {nome: f.name, tipo: f.type || 'application/octet-stream', tam: f.size, b64: String(rd.result).split(',')[1] || '', quem: (function(){ try{ return localStorage.getItem('cpl:quem') || null; }catch(e){ return null; } })()};
+      const r = await sb.from('plan_config').upsert({chave, dados, atualizado_em: new Date().toISOString()});
+      if(r.error) throw r.error;
+      toast('📎 ' + f.name + ' anexado.');
+      renderAnexosCrono();
+    }catch(e){ toast('Não consegui anexar: ' + (e.message||e)); }
+  };
+  rd.readAsDataURL(f);
+}
+async function baixarAnexoCrono(chave, nome){
+  try{
+    const r = await sb.from('plan_config').select('dados').eq('chave', chave).limit(1);
+    if(r.error) throw r.error;
+    const d = (r.data && r.data[0] && r.data[0].dados) || {};
+    const bin = atob(d.b64||''), arr = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([arr], {type: d.tipo || 'application/octet-stream'}));
+    a.download = d.nome || nome || 'anexo';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  }catch(e){ toast('Não consegui baixar: ' + (e.message||e)); }
+}
+async function rmAnexoCrono(chave){
+  if(!confirm('Excluir este anexo?')) return;
+  try{ const r = await sb.from('plan_config').delete().eq('chave', chave); if(r.error) throw r.error; renderAnexosCrono(); }
+  catch(e){ toast('Não consegui excluir: ' + (e.message||e)); }
 }
 function renderCrono(){
   const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  document.getElementById('crono-lista').innerHTML = cronoDe(ev).map((c,i)=>
+  document.getElementById('crono-lista').innerHTML = !(ev.estruturas||[]).length
+    ? '<div class="alert">Sem estruturas lançadas — use o 📄 Ler material da OS para montar o cronograma aqui, ou só anexe o arquivo pronto (PDF/Excel) abaixo.</div>'
+    : cronoDe(ev).map((c,i)=>
     '<div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);flex-wrap:wrap">'+
       '<div style="flex:1;min-width:260px;font-size:13px"><b>'+esc(c.nome)+'</b></div>'+
+      '<label style="font-size:12px;color:var(--muted)">👷 <input list="dl-crono-eq" value="'+esc(c.eq)+'" placeholder="equipe (nossa ou terceirizada)" onchange="setCrono('+i+',\'eq\',this.value.trim())" style="border:1px solid var(--line);border-radius:7px;padding:5px 7px;width:170px;font:inherit;font-size:12.5px"></label>'+
       '<label style="font-size:12px;color:var(--muted)">começa <input type="date" value="'+c.ini+'" onchange="setCrono('+i+',\'ini\',this.value)" style="border:1px solid var(--line);border-radius:7px;padding:5px 7px;font-size:12px"></label>'+
       '<label style="font-size:12px;color:#c0620f;font-weight:700">ENTREGA <input type="date" value="'+c.ent+'" onchange="setCrono('+i+',\'ent\',this.value)" style="border:1px solid #f0c49a;border-radius:7px;padding:5px 7px;font-size:12px"></label>'+
     '</div>').join('');
 }
 function setCrono(i, campo, val){
-  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev || !val) return;
+  const ev = eventos.find(e=>e.id===cronoEvId); if(!ev || (campo !== 'eq' && !val)) return;
   const c = cronoDe(ev)[i]; if(!c) return;
-  const reg = Object.assign({ini:c.ini, ent:c.ent}, ev.crono[c.t] || {});
+  const reg = Object.assign({ini:c.ini, ent:c.ent, eq:c.eq}, ev.crono[c.t] || {});
   reg[campo] = val;
   if(reg.ent < reg.ini){ if(campo==='ini') reg.ent = reg.ini; else reg.ini = reg.ent; }
   ev.crono[c.t] = reg;
@@ -15031,10 +15109,11 @@ function linhaDoTempo(ev, comEvento, comDesm){
   const dias = {};  /* iso -> {topicos:[], entregas:[]} */
   const poe = (d, tipo, txt) => { (dias[d] = dias[d] || {topicos:[], entregas:[]})[tipo].push(txt); };
   cronoDe(ev).forEach(c=>{
+    const quem = c.eq ? c.eq.toUpperCase() + ' — ' : '';
     diasEntre(c.ini, c.ent).forEach(d=>{
-      if(d < c.ent) poe(d, 'topicos', 'MONTAGEM — ' + c.nome);
+      if(d < c.ent) poe(d, 'topicos', quem + 'MONTAGEM — ' + c.nome);
       else{
-        poe(d, 'topicos', (c.ini < c.ent ? 'ACABAMENTO — ' : 'MONTAGEM E ACABAMENTO — ') + c.nome);
+        poe(d, 'topicos', quem + (c.ini < c.ent ? 'ACABAMENTO — ' : 'MONTAGEM E ACABAMENTO — ') + c.nome);
         poe(d, 'entregas', c.nome);
       }
     });
@@ -15457,6 +15536,12 @@ function cardTV(o, D){
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
+    (function(){ if(o.fase === 'desm') return ''; try{
+      const por = {};
+      cronoDoDia(o.ev, D).filter(c=>c.eq).forEach(c=>{ (por[c.eq] = por[c.eq] || []).push(c.nome); });
+      const ks = Object.keys(por); if(!ks.length) return '';
+      return ks.slice(0,5).map(eq=>'<div class="tv-lin">📋 <b>'+esc(eq)+'</b>: '+esc(por[eq].slice(0,3).join(' · ')).slice(0,110)+(por[eq].length>3?' …':'')+'</div>').join('') + (ks.length>5 ? '<div class="tv-lin">📋 … e mais '+(ks.length-5)+' equipe(s)</div>' : '');
+    }catch(e){ return ''; } })()+
     tempo+
     cam.map(c=>'<div class="tv-lin" style="font-weight:800;color:'+(c.local?'#9be3b5':'#ffd88a')+'">'+esc(c.x.v.tipo+' '+c.x.v.placa)+' — '+esc(c.txt)+'</div>').join('')+
     (function(){ const b = resumoBloqueio(o.ev, o.fase, D); return b ? '<div class="tv-lin" style="font-weight:800;color:#ffb4a8">'+esc(b)+'</div>' : ''; })()+
@@ -15547,7 +15632,11 @@ function calcRodTV(){
     equipes.filter(e2=>e2.nome!==EQUIPE_TERC).forEach(e2=>onde[e2.nome] = null);
     ops.forEach(o=>{
       const rot = (o.fase==='desm' ? '📤 ' : '🔨 ') + nomeTV(o.ev.nome) + (o.ev.cidade && o.ev.cidade!=='—' ? ' ('+o.ev.cidade+')' : '');
-      const marca = nm => { if(nm && (nm in onde) && !onde[nm]) onde[nm] = rot; };
+      const marca = nm => { if(nm && (nm in onde) && !onde[nm]){
+        let extra = '';
+        try{ const n0 = semAcentoSimples(nm); const c = cronoDoDia(o.ev, HOJE).find(c2=>c2.eq && (semAcentoSimples(c2.eq).includes(n0) || n0.includes(semAcentoSimples(c2.eq)))); if(c) extra = ' — ' + c.nome.slice(0, 44); }catch(e){}
+        onde[nm] = rot + extra;
+      } };
       marca(o.equipe || o.ev.equipe);
       /* troca de montador: gente de OUTRA equipe trabalhando no evento também conta — a equipe dela não está livre */
       try{
