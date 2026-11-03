@@ -1024,6 +1024,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
     <div class="mbody">
       <div class="alert" style="margin-top:0">Para cada estrutura, o dia em que começa e o dia da <b>ENTREGA</b>. Os nomes seguem a OS; carpete e saia saem do texto porque o piso já inclui a forração.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+        <button class="mini" style="font-weight:800;border-color:#6b4fb5;color:#6b4fb5" onclick="cronoIA(cronoEvId, true); renderCrono(); toast('🤖 Cronograma refeito pela IA — com o que ela aprendeu dos seus cronogramas.')">🤖 IA montar</button>
         <button class="mini" onclick="cronoDistribuir()">Distribuir pelos dias de montagem</button>
         <button class="mini" onclick="cronoTudoJunto()">Tudo do primeiro ao último dia</button>
         <span style="flex:1"></span>
@@ -1044,7 +1045,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
       </div>
     </div>
     <footer style="display:flex;justify-content:flex-end;gap:10px">
-      <button class="mini" onclick="fechar('ov-crono')">Fechar</button>
+      <button class="mini" onclick="try{ aprenderCrono(eventos.find(e=>e.id===cronoEvId)); }catch(e){}; fechar('ov-crono')">Fechar</button>
       <button class="btn-orange" onclick="imprimirCrono()">🖨 Gerar cronograma</button>
     </footer>
   </div>
@@ -12251,8 +12252,10 @@ function aplicarOS(){
     else osEstruturas.forEach(e2=>{ if(!ev.estruturas.includes(e2)) ev.estruturas.push(e2); });
   }
   fechar('ov-os');
+  let cr = 0;
+  try{ if(osEstruturas.length && !Object.keys(ev.crono||{}).length) cr = cronoIA(ev.id); }catch(e){}
   salvar(); renderQuadro(); verEvento(ev.id);
-  toast('📄 OS lida: ' + osEstruturas.length + ' estrutura(s) e ' + achados.length + ' material(is) no evento.');
+  toast('📄 OS lida: ' + osEstruturas.length + ' estrutura(s) e ' + achados.length + ' material(is) no evento.' + (cr ? ' 🤖 A IA já montou o cronograma — veja no 📋 e ajuste.' : ''));
 }
 function removerEstrutura(id, ix){
   const ev = eventos.find(e=>e.id===id); if(!ev || !ev.estruturas) return;
@@ -14990,6 +14993,73 @@ function limpaEstrutura(t){
 }
 let cronoEvId = null;
 function diasMontagemEv(ev){ return diasEntre(ev.mont, fimMont(ev)); }
+/* ===== IA DO CRONOGRAMA =====
+   Aprende com os cronogramas que o gestor monta (quando cada tipo de estrutura começa,
+   quanto dura e qual equipe pega) e preenche sozinha nos próximos eventos. */
+const TIPOS_CRONO = [
+  ['galpao', /galp/], ['tenda', /tenda/], ['piso elevado', /piso\s*elevado/], ['piso praticavel', /pratic/],
+  ['piso', /piso|deck|tablado|forrac|easyfloor|carpete/], ['octanorm', /octanorm|stand|box|sala/],
+  ['trelica', /trelic|q[- ]?30|q[- ]?50|portico|torre/], ['palco', /palco|praticavel\s*2x1|camarote/],
+  ['arquibancada', /arquibanc/], ['iluminacao', /ilumin|aterr|hidraul|eletric|energia|gerador/],
+  ['fechamento', /fechamento|alambrado|grade/], ['lona', /lona|cobertura/]
+];
+/* padrões de fábrica: fração do período de montagem em que começa e em que entrega (0 = primeiro dia, 1 = último) */
+const CRONO_PADRAO = {
+  galpao:[0,.6], tenda:[0,.4], lona:[.1,.5], trelica:[.1,.6], arquibancada:[.2,.7], palco:[.3,.8],
+  'piso praticavel':[.3,.8], 'piso elevado':[.3,.85], piso:[.35,.85], octanorm:[.5,.95],
+  fechamento:[.5,.9], iluminacao:[0,1], outros:[.3,.9]
+};
+function tipoEstrutura(nome){
+  const n = semAcentoSimples(String(nome||''));
+  for(const [k, re] of TIPOS_CRONO) if(re.test(n)) return k;
+  return 'outros';
+}
+/* guarda o que o gestor fez: chamada quando ele fecha/imprime um cronograma preenchido */
+function aprenderCrono(ev){
+  try{
+    const dm = diasMontagemEv(ev); if(dm.length < 2 || !ev.crono) return;
+    const tot = dm.length - 1, d0 = dm[0];
+    let mexeu = false;
+    APRENDA.crono = APRENDA.crono || {};
+    cronoDe(ev).forEach(c=>{
+      if(!ev.crono[c.t]) return;                       /* só o que foi mexido de verdade */
+      const k = tipoEstrutura(c.nome);
+      const a = APRENDA.crono[k] = APRENDA.crono[k] || {n:0, ini:0, ent:0, eqs:{}};
+      const fi = Math.min(1, Math.max(0, difDias(d0, c.ini) / tot));
+      const fe = Math.min(1, Math.max(0, difDias(d0, c.ent) / tot));
+      a.n++; a.ini += fi; a.ent += fe;
+      if(c.eq) a.eqs[c.eq] = (a.eqs[c.eq] || 0) + 1;
+      mexeu = true;
+    });
+    if(mexeu) salvar();
+  }catch(e){}
+}
+/* preenche o cronograma do evento: aprendizado primeiro, padrão de fábrica depois */
+function cronoIA(id, forcar){
+  const ev = eventos.find(e=>e.id===id); if(!ev || !(ev.estruturas||[]).length) return 0;
+  const dm = diasMontagemEv(ev); if(!dm.length) return 0;
+  const tot = Math.max(1, dm.length - 1), d0 = dm[0];
+  const diaDe = f => dm[Math.min(dm.length - 1, Math.max(0, Math.round(f * tot)))];
+  ev.crono = ev.crono || {};
+  let n = 0;
+  (ev.estruturas||[]).forEach(t=>{
+    if(ev.crono[t] && !forcar) return;                 /* não passa por cima do que o gestor já mexeu */
+    const k = tipoEstrutura(t);
+    const ap = (APRENDA.crono||{})[k];
+    let fi, fe, eq = '';
+    if(ap && ap.n >= 2){
+      fi = ap.ini / ap.n; fe = ap.ent / ap.n;
+      const melhor = Object.entries(ap.eqs).sort((a,b)=>b[1]-a[1])[0];
+      if(melhor && melhor[1] >= 2) eq = melhor[0];
+    } else { const p = CRONO_PADRAO[k] || CRONO_PADRAO.outros; fi = p[0]; fe = p[1]; }
+    const reg = {ini: diaDe(fi), ent: diaDe(Math.max(fi, fe))};
+    if(eq) reg.eq = eq; else if(ev.crono[t] && ev.crono[t].eq) reg.eq = ev.crono[t].eq;
+    ev.crono[t] = Object.assign({}, ev.crono[t] || {}, reg);
+    n++;
+  });
+  if(n) salvar();
+  return n;
+}
 function cronoDe(ev){
   const dm = diasMontagemEv(ev);
   const ini0 = dm[0] || dia(ev.mont), fim0 = dm[dm.length-1] || ini0;
@@ -15007,6 +15077,7 @@ function abrirCrono(id){
   eventos.forEach(e2=>Object.values(e2.crono||{}).forEach(c=>{ if(c && c.eq) usados.add(c.eq); }));
   if(ev.tercEmpresa) usados.add(ev.tercEmpresa);
   const dl = document.getElementById('dl-crono-eq'); if(dl) dl.innerHTML = [...usados].map(n=>'<option value="'+String(n).replace(/"/g,'&quot;')+'">').join('');
+  if((ev.estruturas||[]).length && !Object.keys(ev.crono||{}).length){ const n = cronoIA(id); if(n) toast('🤖 A IA montou uma sugestão de cronograma ('+n+' estrutura(s)) — ajuste o que precisar. Quanto mais cronogramas você fizer, melhor ela acerta.'); }
   renderCrono();
   renderAnexosCrono();
   document.getElementById('ov-crono').classList.add('on');
@@ -15126,8 +15197,9 @@ function imprimirCrono(){
   const ev = eventos.find(e=>e.id===cronoEvId); if(!ev) return;
   const comEv = (document.getElementById('crono-evento')||{}).checked;
   const comDs = (document.getElementById('crono-desm')||{}).checked;
+  try{ aprenderCrono(ev); }catch(e){}
   const lt = linhaDoTempo(ev, comEv, comDs);
-  if(!lt.length) return toast('Nada para montar o cronograma.');
+  if(!lt.length) return toast('Nada para montar o cronograma'+((ev.estruturas||[]).length ? '.' : ' — lance as estruturas do evento primeiro (📄 Ler material da OS, na seção Checklist).'));
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const SEM = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
   const linhas = lt.map(x=>{
