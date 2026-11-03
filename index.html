@@ -4526,6 +4526,16 @@ function carregarNoDia(Dc){
         out.push({o, x, hs, D});
       });
     });
+    /* FRETE contratado também carrega no galpão: entra na lista do dia */
+    eventos.forEach(ev=>{
+      if(ev.esp || !(ev.fretes||[]).length || !ev.mont) return;
+      if(dia(ev.mont) !== D) return;
+      const hs = horariosSaida(ev, 'mont', D);
+      if(!hs || hs.carregarDia !== Dc) return;
+      ev.fretes.filter(f=>f.fase !== 'desm').forEach(f=>{
+        out.push({o:{ev, hora: String(ev.mont||'').slice(11,16), fase:'mont', viagens:[]}, x:{v:{tipo:'FRETE', placa: f.placa || (f.emp || '')}, frete:true, emp: f.emp || ''}, hs, D});
+      });
+    });
   });
   return out.sort((a,b)=> (a.hs.diaSaida + a.hs.saida).localeCompare(b.hs.diaSaida + b.hs.saida));
 }
@@ -9152,7 +9162,7 @@ function tvLogHtml(){
     return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
       '<span style="flex:1;font-size:18px">no local de '+esc(nomeTV(p.it.ev.nome))+'</span>'+
       '<span style="font-size:17px;color:#ffb25e">'+(ate?'fica até '+fmtD(ate).slice(0,5):'parado no local')+'</span>'); }).join('');
-  const bCar = carregar.map(c=>cartao('<b style="font-size:20px;min-width:210px">📦 '+esc(c.x.v.tipo+' '+c.x.v.placa)+'</b>'+
+  const bCar = carregar.map(c=>cartao('<b style="font-size:20px;min-width:210px">📦 '+esc(c.x.v.tipo+' '+c.x.v.placa)+(c.x.frete?' <span style="color:#ffd88a;font-size:15px">FRETE</span>':(c.x.v.agregado?' <span style="color:#9be3b5;font-size:15px">agregado</span>':''))+'</b>'+
     '<span style="flex:1;font-size:18px">'+esc(nomeTV(c.o.ev.nome))+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">carregar hoje · sai '+rotDia(c.hs.diaSaida).toLowerCase()+' às '+esc(c.hs.saida)+'</span>')).join('');
   return '<div style="font-size:26px;font-weight:800;margin-bottom:14px">🚚 LOGÍSTICA DE HOJE <span style="font-weight:500;color:#9fb0dd;font-size:19px">· '+fmtD(HOJE)+'</span></div>'+
@@ -12041,6 +12051,34 @@ function parseOS(txt){
       ambSet.add(semAcentoSimples(l));
     });
   }
+  /* monta a linha de cada ambiente com os materiais e as quantidades dele:
+     "COZINHA — Piso Elevado 186 m² · Decorflex 233 m²" */
+  const ambEstr = new Map();
+  {
+    const limpa = s => String(s||'').replace(/【[^】]*】/g,' ').replace(/\s+/g,' ').trim();
+    const unDe = s => { const m = String(s).match(/\(\s*(m²|m2|m|un|und|pç|pc|pcs)\s*\)/i); if(!m) return ''; const u = m[1].toLowerCase(); return (u==='m'||u==='m2'||u==='m²') ? ' m²' : ' un'; };
+    const tiraUn = s => String(s).replace(/\s*\(\s*(m²|m2|m|un|und|pç|pc|pcs)\s*\)\s*/ig,' ').replace(/\s+/g,' ').trim();
+    let amb = null, itens2 = [], descPend = '';
+    const flush = () => { if(amb && itens2.length) ambEstr.set(semAcentoSimples(amb), amb + ' — ' + itens2.join(' · ')); amb = null; itens2 = []; descPend = ''; };
+    String(txt||'').split(/\r?\n/).forEach(raw=>{
+      const bruto = String(raw).trim(); if(!bruto) return;
+      const l = limpa(bruto), n2 = semAcentoSimples(l);
+      if(!l) return;
+      if(ambSet.has(n2)){ flush(); amb = l; return; }
+      if(!amb) return;
+      if(/^(descricao|qde\b|qtd\b)/.test(n2)) return;
+      if(/^(observa|total\b|valor\b)/.test(n2) || (l === l.toUpperCase() && !/\d/.test(l) && l.length <= 45)){ flush(); return; }
+      const mq = bruto.match(/【\s*(\d{1,5}(?:[.,]\d{1,2})?)\s*】/) || l.match(/[\s:—–-]\s{0,2}(\d{1,5}(?:[.,]\d{1,2})?)\s*$/);
+      let desc = l; if(mq) desc = limpa(bruto.replace(mq[0], ' '));
+      desc = (descPend ? descPend + ' ' : '') + desc;
+      if(mq){
+        const d2 = tiraUn(desc).replace(/Retirada:.*$/i,'').trim();
+        if(d2) itens2.push(d2 + ' ' + mq[1] + unDe(desc));
+        descPend = '';
+      } else descPend = desc.slice(0, 120);
+    });
+    flush();
+  }
   let ambienteAtual = null;
 
   /* uma linha pode trazer mais de um material ("Tenda 5x5: 6; Piso 200"):
@@ -12125,7 +12163,7 @@ function parseOS(txt){
     if(ambSet.has(ls)){
       fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null;
       ambienteAtual = l.replace(/\s+/g,' ').trim();
-      pushEstr(ambienteAtual);
+      pushEstr(ambEstr.get(ls) || ambienteAtual);
       return;
     }
     if(secao){ fecharCom(null); detalhando = false; tipoComp = null; tituloAtual = null; ambienteAtual = null; return; }
@@ -15666,7 +15704,7 @@ function carregarTV(){
   if(!l.length) return '';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="tv-op" style="border-left-color:#17a05e;background:#15402c"><div class="tv-nome">📦 CARREGAR HOJE</div>'+
-    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span> '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+
+    l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span>'+(c.x.frete?' <b style="color:#ffd88a">FRETE'+(c.x.emp?' · '+esc(c.x.emp):'')+'</b>':(c.x.v.agregado?' <b style="color:#9be3b5">agregado'+(c.x.v.motoristaFixo?' · '+esc(c.x.v.motoristaFixo):'')+'</b>':''))+' '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+
       ' — monta <b style="color:#ffb25e">'+(c.D===HOJE?'hoje':rotDia(c.D).toLowerCase())+' às '+(c.o.hora||'—')+'</b></div>').join('')+'</div>';
 }
 function listaTV(D){
