@@ -2634,8 +2634,14 @@ function blocoAntes(ev){
    o motorista não — ele volta e fica livre */
 function ficaAte(e, vid){ const f = ((e && e.fica) || {})[vid]; if(!f) return null; if(f === 'desm') return dia(e.desm) || null; return f; }
 /* dia em que ESTE caminhão sai: a viagem com dia próprio conta no dia dela; sem dia próprio, acompanha a montagem */
+function viagensManuais(e, vid){
+  const base = dia(e.mont);
+  const ds = (e.escala||[]).filter(x=>x.v===vid).map(x=>x.dia || base).filter(Boolean);
+  if(!ds.length && (e.veiculos||[]).includes(vid) && base) ds.push(base);
+  return ds.sort();
+}
 function iniFica(e, vid, ate){
-  const ds = escalaDo(e, 'mont').filter(x=>x.v===vid).map(x=>x.dia || dia(e.mont)).filter(Boolean).sort();
+  const ds = viagensManuais(e, vid);
   if(!ds.length) return dia(e.mont) || null;
   if(ate){
     const antes = ds.filter(d=>d < ate); if(antes.length) return antes[antes.length-1];
@@ -2652,7 +2658,7 @@ function extraFicaPrinc(e, vid){
 /* "fica no local" de OUTRAS viagens do mesmo caminhão: ev.ficaV = { idVeiculo: { 'AAAA-MM-DD' (dia que a viagem sai): {ate, mot} } } */
 function ficaVLista(e, vid){
   const m = ((e && e.ficaV) || {})[vid]; if(!m) return [];
-  const saidas = new Set(escalaDo(e, 'mont').filter(x=>x.v===vid).map(x=>x.dia || dia(e.mont)).filter(Boolean));
+  const saidas = new Set(viagensManuais(e, vid));
   return Object.keys(m).filter(s=>saidas.has(s) && m[s] && m[s].ate && m[s].ate >= s).map(s=>({de:s, ate:m[s].ate, mot:!!m[s].mot}));
 }
 function extraFica(e, vid){
@@ -4346,10 +4352,18 @@ function janelaPonte(ev, fase, baseISO){
   const c = cfgSaida();
   if(c.ponteManual) return {ate: c.ponteAte, dep: c.ponteDepois, rot: 'horário manual: atravessa até ' + c.ponteAte + (c.ponteDepois ? ' ou depois das ' + c.ponteDepois : '')};
   const e = eixosPonte(ev, fase);
-  if(e >= 3) return {ate:'04:00', dep:'12:00', rot: e + ' eixos: proibido das 4h ao meio-dia, todos os dias'};
+  if(e >= 3) return {ate:'04:00', dep:'12:00', rot: e + ' eixos, sentido Rio: proibido das 4h ao meio-dia, todos os dias'};
   const dw = new Date((baseISO || HOJE) + 'T12:00').getDay();
-  if(dw >= 1 && dw <= 5) return {ate:'04:00', dep:'10:00', rot:'2 eixos: proibido das 4h às 10h em dia útil'};
-  return {livre:true, rot:'2 eixos: livre no fim de semana'};
+  if(dw >= 1 && dw <= 5) return {ate:'04:00', dep:'10:00', rot:'2 eixos, sentido Rio: proibido das 4h às 10h em dia útil'};
+  return {livre:true, rot:'2 eixos: sem restrição no fim de semana'};
+}
+/* a VOLTA é sentido Niterói: 3+ eixos proibido das 12h às 22h, todos os dias (2 eixos: livre) */
+function avisoVoltaPonte(ev, fase){
+  try{
+    if(!passaPonte(ev)) return '';
+    if(eixosPonte(ev, fase) < 3) return '';
+    return '🌉 Volta (sentido Niterói): 3+ eixos proibido das 12h às 22h — voltar antes do meio-dia ou depois das 22h.';
+  }catch(e){ return ''; }
 }
 const somaDiaISO = (iso, n) => { const d = new Date(iso+'T12:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 function minViagem(ev){
@@ -4468,6 +4482,7 @@ function blocoSaida(ev){
   const lin = [];
   const hM = horariosSaida(ev, 'mont');
   if(hM) lin.push('<b>🔨 Montagem</b> — ' + txtSaida(hM));
+  { const vp = avisoVoltaPonte(ev, 'mont'); if(vp) lin.push('<b style="color:#a86412">' + vp + '</b>'); }
   { const ad = alertaDescarga(ev, hM); if(ad) lin.push('<b style="color:#b0483c">' + ad.txt + '</b>'); }
   { const ar = alertaRestricao(ev, 'mont', dia(ev.mont), hM); if(ar) lin.push('<b style="color:#b0483c">' + ar.txt + '</b>'); }
   if(ev.desm){
@@ -8745,6 +8760,7 @@ function msgMotorista(nome, lista, D){
     L.push(...msgOperacao(o, D, {v: x.v, hSai: x.hSai || (hs && hs.saida) || null}));
     if(hs && o.fase !== 'desm' && hs.carregarDia) L.push('📦 Carregar ' + rotDia(hs.carregarDia).toLowerCase() + (hs.carregarDia !== D ? '' : ' (mesmo dia)'));
     if(hs) L.push('🕐 Chegar no local: ' + hs.chegada + (hs.ponte ? ' · 🌉 ponte ' + hs.ponte : ''));
+    { const vp = avisoVoltaPonte(o.ev, o.fase); if(vp) L.push(vp); }
     if(x.junto) L.push('🔗 Viagem junto com: ' + nomesJunto(o.ev.id, x.junto));
     try{ const u = linkMotorista(o.ev, o.fase, D, x.i); if(u) L.push('📡 Na hora de sair, abra e toque em INICIAR VIAGEM: ' + u); }catch(e){}
     try{ L.push('🗺 Waze: ' + linkWaze(o.ev)); }catch(e){}
@@ -11559,6 +11575,7 @@ function blocoFrota(ev, modo){
              '<input type="time" value="'+(x.hora||'')+'" style="border:1px solid '+(x.hora?'#1c4fa0':'var(--line)')+';border-radius:7px;padding:6px 8px;font-size:12px'+(x.hora?';color:#1c4fa0;font-weight:700':';color:var(--muted)')+'" title="Hora de saída DESTA viagem. Vazio = conta automática (estrada + margem)." onchange="setHoraViagem(\''+ev.id+'\','+x.i+',this.value,\''+fase+'\')">'+
              selCavaloHtml(ev, fase, v2)+
              sel+
+             '<button class="mini" style="border-color:#25d366;color:#128c4a" title="WhatsApp do motorista: saída, carregamento, montagem, endereço, equipe e produtor" onclick="zapViagem(\''+ev.id+'\',\''+fase+'\','+x.i+')">📲</button>'+
              '<button class="mini" title="Registrar ocorrência: quebrou, voltou no meio do caminho, trocou motorista" onclick="abrirOcorrencia(\''+ev.id+'\',\''+fase+'\',\''+x.v+'\')">⚠</button>'+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
              (fase==='mont' ? (function(){
@@ -13931,6 +13948,44 @@ function zap(tel){
   if(d.length <= 11) d = '55' + d;          /* faltou o país */
   return d.length >= 12 ? d : null;
 }
+/* logística da viagem para o MOTORISTA: saída, carregamento, montagem, endereço,
+   equipe que vai estar no local e produtor — sem data de desmontagem */
+function msgViagemMotorista(ev, fase, x){
+  x = x || {};
+  const L = [];
+  L.push('*' + ev.nome + '*');
+  L.push('');
+  let hs = null; try{ hs = horariosSaida(ev, fase); }catch(e){}
+  const saiDia = x.dia || (hs && hs.diaSaida) || dia(fase==='desm' ? ev.desm : ev.mont);
+  const saiHora = x.hora || (hs && hs.saida) || '';
+  L.push('⏰ *Saída:* ' + (saiDia ? rotDia(saiDia) : '') + (saiHora ? ' às ' + saiHora : '') + (hs && hs.vespera && !x.dia ? ' (véspera)' : ''));
+  if(fase !== 'desm' && hs && hs.carregarDia) L.push('📦 *Carregar:* ' + rotDia(hs.carregarDia));
+  if(fase === 'desm') L.push('📤 *Desmontagem:* ' + fmtDH(ev.desm));
+  else L.push('🔨 *Montagem:* ' + fmtDH(ev.mont));
+  L.push('');
+  const dest = destinoTexto(ev); if(dest) L.push('📍 ' + dest);
+  if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
+  try{ const w = linkWaze(ev); if(w) L.push('🗺 Waze: ' + w); }catch(e){}
+  L.push('');
+  const eq = ev.equipe || plano(ev).equipe;
+  const time = fase === 'desm' ? timeDesmOp(ev, eq) : montadoresOp(ev, eq);
+  L.push('👷 *Equipe no local — ' + (eq || 'a definir') + ':* ' + (time.length ? time.join(', ') : 'a definir'));
+  const pn = produtorDo(ev), pTel = pn ? (produtores.find(z=>z.nome===pn)||{}).tel : null;
+  if(pn) L.push('🎬 *No local — nosso produtor:* ' + pn + (pTel ? ' — ' + pTel : ''));
+  if(ev.respNome || ev.respTel) L.push('📞 *Contato do cliente:* ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
+  const vP = avisoVoltaPonte(ev, fase); if(vP) L.push(vP);
+  try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
+  return L.join('\n');
+}
+function zapViagem(evId, fase, i){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const x = escalaDo(ev, fase).find(y=>y.i===+i) || {i:+i};
+  const txt = msgViagemMotorista(ev, fase, x);
+  const m = motoristas.find(y=>y.nome===x.motorista) || {};
+  const n = zap(m.tel);
+  window.open(n ? 'https://wa.me/' + n + '?text=' + encodeURIComponent(txt) : 'https://wa.me/?text=' + encodeURIComponent(txt), '_blank');
+  if(!n) toast('Sem WhatsApp cadastrado para ' + (x.motorista || 'o motorista') + ' — abri para você escolher o contato. Cadastre o número no Painel Logística.');
+}
 function mensagemEscala(ev){
   const eq = ev.equipe || plano(ev).equipe;
   const a = plano(ev);
@@ -13966,9 +14021,11 @@ function mensagemEscala(ev){
   if(frTxt.length) L.push('🚚 ' + (frDTxt?'Montagem: ':'') + frTxt.join(' · '));
   if(frDTxt && frDTxt.length) L.push('🚚 Desmontagem: ' + frDTxt.join(' · '));
   if(mot.length) L.push('🧑‍✈️ Motorista: ' + mot.join(', '));
-  if(ev.respNome || ev.respTel){
+  const pn2 = produtorDo(ev), pTel2 = pn2 ? (produtores.find(z=>z.nome===pn2)||{}).tel : null;
+  if(pn2 || ev.respNome || ev.respTel){
     L.push('');
-    L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
+    if(pn2) L.push('🎬 *No local — nosso produtor:* ' + pn2 + (pTel2 ? ' — ' + pTel2 : ''));
+    if(ev.respNome || ev.respTel) L.push('📞 Contato do cliente: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   }
   return L.join('\n');
 }
