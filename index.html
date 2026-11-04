@@ -4450,6 +4450,18 @@ function horariosSaida(ev, fase, D){
     }
     ponte = hm(sai + mp);
   }
+  /* a saída é sempre em hora cheia ou meia hora: arredonda para TRÁS (sai um pouco antes, nunca depois).
+     Se descer meia hora jogar a travessia da ponte dentro do horário proibido, sobe meia hora. */
+  if(man == null && sai % 30 !== 0){
+    let s2 = Math.floor(sai/30)*30;
+    if(jp && !jp.livre){
+      const mp2 = minAtePonte(ev), ate = minDe(jp.ate), dep = minDe(jp.dep);
+      const proibido = v => { const c2 = ((v % 1440) + 1440) % 1440; return !(c2 <= ate || (dep != null && c2 >= dep)); };
+      if(mp2 != null && proibido(s2 + mp2) && !proibido(s2 + 30 + mp2)) s2 += 30;
+    }
+    sai = s2;
+    if(passaPonte(ev)) ponte = hm(sai + minAtePonte(ev));
+  }
   if(man != null && passaPonte(ev)) ponte = hm(sai + minAtePonte(ev));
   const chegaMin = sai + vi;
   const diaSai = sai < 0 ? somaDiaISO(base, -1) : base;
@@ -14053,6 +14065,7 @@ function msgViagemMotorista(ev, fase, x){
   x = x || {};
   const L = [];
   L.push('*' + ev.nome + '*');
+  if(x.motorista) L.push('🧑‍✈️ *' + String(x.motorista).toUpperCase() + '*');
   L.push('');
   let hs = null; try{ hs = horariosSaida(ev, fase); }catch(e){}
   const saiDia = x.dia || (hs && hs.diaSaida) || dia(fase==='desm' ? ev.desm : ev.mont);
