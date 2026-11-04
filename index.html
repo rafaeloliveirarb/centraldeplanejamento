@@ -3705,7 +3705,7 @@ function mensagemDia(o, D){
   { const f = fichaLocal(ev); if(f && resumoFicha(f)) L.push('🚧 Local: ' + resumoFicha(f)); }
   { const t = resumoTransito(ev, o.fase, D); if(t && t.nivel) L.push(t.txt); }
   { const b = resumoBloqueio(ev, o.fase, D); if(b) L.push(b); }
-  if(o.viagens.some(x=>!x.jaLocal) && destinoTexto(ev)) L.push('🗺 Rota: ' + linkWaze(ev));
+  if(o.viagens.some(x=>!x.jaLocal) && destinoTexto(ev)) L.push('🗺 Rota: ' + linkMapa(ev));
   if(ev.respNome || ev.respTel) L.push('📞 No local: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   const cc = cidadeClima(ev), w = cc && CLIMA[cc] && CLIMA[cc].dias && CLIMA[cc].dias[D];
   if(w && riscoClima(w)) L.push('🌦 Previsão: ' + txtClima(w));
@@ -3762,7 +3762,7 @@ function renderAmanha(){
             const r = resumoTransito(o.ev, o.fase, D);
             return '<div class="am-lin">'+(r ? '<b style="color:'+(r.nivel===2?'#b0483c':r.nivel?'#a86412':'#0f8a4d')+'">'+esc(r.txt)+'</b> ' : '')+
               '<button class="mini" onclick="event.stopPropagation();conferirTransitoEv(\''+o.ev.id+'\',\''+o.fase+'\',\''+D+'\')">🚦 '+(CONFIG.tomtomKey?'Conferir trânsito':'Ver trânsito')+'</button> '+
-              '<a class="mini" style="text-decoration:none" target="_blank" onclick="event.stopPropagation()" href="'+linkWaze(o.ev)+'">Waze</a> '+
+              '<a class="mini" style="text-decoration:none" target="_blank" onclick="event.stopPropagation()" href="'+linkMapa(o.ev)+'">🗺 Mapa</a> '+
               o.viagens.filter(x=>!x.jaLocal).map(x=>'<button class="mini" title="Manda pelo WhatsApp o link para o motorista compartilhar a localização" onclick="event.stopPropagation();enviarLinkMotorista(\''+o.ev.id+'\',\''+o.fase+'\',\''+D+'\','+x.i+')">📲 '+esc(x.motorista||x.v.placa)+'</button>').join(' ')+
               situacaoCaminhao(o, D).map(s=>' <b style="color:'+(s.local?'#0f8a4d':'#1c4fa0')+'">'+esc(s.x.v.placa)+': '+esc(s.txt)+'</b>').join('')+'</div>'; })()+
           (o.pessoas.length ? '<div class="am-lin">👷 <b style="color:'+corEquipe(eq)+'">'+esc(eq)+'</b>: '+o.pessoas.map(pp=>esc(pp.nome)+(pp.prod?' <small>(produtor)</small>':'')+(pp.mt?' <small style="color:#1c5fb8">(manutenção)</small>':'')).join(', ')+'</div>' : '')+
@@ -4677,6 +4677,14 @@ function linkGoogleRota(ev){
   const d = g ? g.lat + ',' + g.lon : destinoTexto(ev);
   return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=' + encodeURIComponent(o) + '&destination=' + encodeURIComponent(d) + (usaMage(ev) ? '&waypoints=' + encodeURIComponent(MAGE_PT.lat + ',' + MAGE_PT.lon) : '');
 }
+/* rota no Google Maps para quem está dirigindo: sem origem fixa (sai de onde o
+   celular estiver) e já com a passagem por Magé quando é a regra da casa */
+function linkMapa(ev){
+  const g = evGeo(ev);
+  const d = g ? g.lat + ',' + g.lon : destinoTexto(ev);
+  if(!d) return '';
+  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(d) + (usaMage(ev) ? '&waypoints=' + encodeURIComponent(MAGE_PT.lat + ',' + MAGE_PT.lon) : '');
+}
 function linkWaze(ev){
   const g = evGeo(ev);
   return g ? 'https://waze.com/ul?ll=' + g.lat + ',' + g.lon + '&navigate=yes' : 'https://waze.com/ul?q=' + encodeURIComponent(destinoTexto(ev)) + '&navigate=yes';
@@ -5248,7 +5256,7 @@ function paginaMotorista(){
     (hs ? '<div style="font-size:18px;margin-top:10px;color:#ffb25e;font-weight:700">Sair '+hs.saida+(hs.ponte?' · ponte até '+hs.ponte:'')+' · chegar '+hs.chegada+'</div>' : '')+
     '<button id="mot-ini" style="display:block;width:100%;margin-top:22px;padding:20px;font-size:21px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">▶ INICIAR VIAGEM</button>'+
     '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
-    '<a href="'+linkWaze(ev)+'" style="display:block;text-align:center;margin-top:12px;padding:14px;font-size:17px;border-radius:14px;background:#26356e;color:#fff;text-decoration:none">🚗 Abrir rota no Waze</a>'+
+    '<a href="'+linkMapa(ev)+'" style="display:block;text-align:center;margin-top:12px;padding:14px;font-size:17px;border-radius:14px;background:#26356e;color:#fff;text-decoration:none">🗺 Abrir rota no Google Maps</a>'+
     '<button id="mot-voltei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#1c4fa0;color:#fff">🏠 VOLTEI PARA O GALPÃO</button>'+
     '<div id="mot-st" style="margin-top:18px;font-size:15px;color:#aab4d4;line-height:1.5">Toque em INICIAR VIAGEM na hora de sair. A localização vai para a logística enquanto este link estiver aberto.</div>';
   document.body.appendChild(div);
@@ -8779,7 +8787,7 @@ function msgMotorista(nome, lista, D){
     { const vp = avisoVoltaPonte(o.ev, o.fase); if(vp) L.push(vp); }
     if(x.junto) L.push('🔗 Viagem junto com: ' + nomesJunto(o.ev.id, x.junto));
     try{ const u = linkMotorista(o.ev, o.fase, D, x.i); if(u) L.push('📡 Na hora de sair, abra e toque em INICIAR VIAGEM: ' + u); }catch(e){}
-    try{ L.push('🗺 Waze: ' + linkWaze(o.ev)); }catch(e){}
+    try{ L.push('🗺 Rota no Google Maps: ' + linkMapa(o.ev)); }catch(e){}
     if(k < lista.length - 1) L.push('');
   });
   return L.join('\n');
@@ -8798,7 +8806,7 @@ function msgEquipe(eq, ops, D){
   const L = [];
   ops.forEach((o, k)=>{
     L.push(...msgOperacao(o, D, null));
-    try{ L.push('🗺 Waze: ' + linkWaze(o.ev)); }catch(e){}
+    try{ L.push('🗺 Rota no Google Maps: ' + linkMapa(o.ev)); }catch(e){}
     if(k < ops.length - 1) L.push('');
   });
   return L.join('\n');
@@ -13990,7 +13998,7 @@ function msgViagemMotorista(ev, fase, x){
   L.push('');
   const dest = destinoTexto(ev); if(dest) L.push('📍 ' + dest);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
-  try{ const w = linkWaze(ev); if(w) L.push('🗺 Waze: ' + w); }catch(e){}
+  try{ const w = linkMapa(ev); if(w) L.push('🗺 Rota no Google Maps: ' + w); }catch(e){}
   L.push('');
   const eq = ev.equipe || plano(ev).equipe;
   const time = fase === 'desm' ? timeDesmOp(ev, eq) : montadoresOp(ev, eq);
