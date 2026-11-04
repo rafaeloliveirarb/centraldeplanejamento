@@ -14071,7 +14071,6 @@ function msgViagemMotorista(ev, fase, x){
   const saiDia = x.dia || (hs && hs.diaSaida) || dia(fase==='desm' ? ev.desm : ev.mont);
   const saiHora = x.hora || (hs && hs.saida) || '';
   L.push('⏰ *Saída:* ' + (saiDia ? rotDia(saiDia) : '') + (saiHora ? ' às ' + saiHora : '') + (hs && hs.vespera && !x.dia ? ' (véspera)' : ''));
-  if(fase !== 'desm' && hs && hs.carregarDia) L.push('📦 *Carregar:* ' + rotDia(hs.carregarDia));
   if(fase === 'desm') L.push('📤 *Desmontagem:* ' + fmtDH(ev.desm) + (dia(fimDesm(ev)) !== dia(ev.desm) ? ' a ' + fmtD(fimDesm(ev)) : ''));
   else L.push('🔨 *Montagem:* ' + fmtDH(ev.mont));
   L.push('');
