@@ -11576,6 +11576,7 @@ function blocoFrota(ev, modo){
              selCavaloHtml(ev, fase, v2)+
              sel+
              '<button class="mini" style="border-color:#25d366;color:#128c4a" title="WhatsApp do motorista: saída, carregamento, montagem, endereço, equipe e produtor" onclick="zapViagem(\''+ev.id+'\',\''+fase+'\','+x.i+')">📲</button>'+
+             '<button class="mini" title="Copiar o texto da logística para colar onde quiser" onclick="copiarViagem(\''+ev.id+'\',\''+fase+'\','+x.i+')">📋</button>'+
              '<button class="mini" title="Registrar ocorrência: quebrou, voltou no meio do caminho, trocou motorista" onclick="abrirOcorrencia(\''+ev.id+'\',\''+fase+'\',\''+x.v+'\')">⚠</button>'+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
              (fase==='mont' ? (function(){
@@ -11653,7 +11654,10 @@ function blocoDesmontagem(ev){
       return '<div class="row"><span><b>'+v2.tipo+' '+v2.placa+'</b>'+
         (x.motorista?' <span style="color:var(--muted);font-size:12px">'+x.motorista+'</span>':'')+
         (ficaAteDesm(ev, x.v) ? ' <span class="tag" style="color:#1c4fa0">📍 já está no local</span>' : '')+'</span>'+
-        '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">'+(ehCarreta(v2) && listaCavalos().length ? selCavaloHtml(ev, 'desm', v2) : '')+'volta em '+
+        '<span style="display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px">'+
+        '<button class="mini" style="border-color:#25d366;color:#128c4a" title="WhatsApp do motorista: saída, data da desmontagem, endereço, equipe e produtor" onclick="zapViagem(\''+ev.id+'\',\'desm\','+x.i+')">📲</button>'+
+        '<button class="mini" title="Copiar o texto da logística da desmontagem" onclick="copiarViagem(\''+ev.id+'\',\'desm\','+x.i+')">📋</button>'+
+        (ehCarreta(v2) && listaCavalos().length ? selCavaloHtml(ev, 'desm', v2) : '')+'volta em '+
         '<input type="date" value="'+padraoD+'" style="border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:var(--muted)" title="Se este caminhão volta em outro dia (dias alternados), troque aqui — a frota da desmontagem passa a ser própria" onchange="diaDesmViagem(\''+ev.id+'\','+x.i+',this.value)"></span></div>';
     }).join('');
     return cab + '<div class="row"><span style="color:var(--muted)">Volta com os mesmos da montagem'+
@@ -13960,7 +13964,7 @@ function msgViagemMotorista(ev, fase, x){
   const saiHora = x.hora || (hs && hs.saida) || '';
   L.push('⏰ *Saída:* ' + (saiDia ? rotDia(saiDia) : '') + (saiHora ? ' às ' + saiHora : '') + (hs && hs.vespera && !x.dia ? ' (véspera)' : ''));
   if(fase !== 'desm' && hs && hs.carregarDia) L.push('📦 *Carregar:* ' + rotDia(hs.carregarDia));
-  if(fase === 'desm') L.push('📤 *Desmontagem:* ' + fmtDH(ev.desm));
+  if(fase === 'desm') L.push('📤 *Desmontagem:* ' + fmtDH(ev.desm) + (dia(fimDesm(ev)) !== dia(ev.desm) ? ' a ' + fmtD(fimDesm(ev)) : ''));
   else L.push('🔨 *Montagem:* ' + fmtDH(ev.mont));
   L.push('');
   const dest = destinoTexto(ev); if(dest) L.push('📍 ' + dest);
@@ -13977,9 +13981,20 @@ function msgViagemMotorista(ev, fase, x){
   try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
   return L.join('\n');
 }
+/* a linha da viagem; na desmontagem sem frota própria a linha vem da montagem,
+   então o dia/hora dela não valem para a volta */
+function viagemDe(ev, fase, i){
+  const x = escalaDo(ev, fase).find(y=>y.i===+i) || {i:+i};
+  return (fase==='desm' && !temFrotaDesm(ev)) ? Object.assign({}, x, {dia:null, hora:null}) : x;
+}
+function copiarViagem(evId, fase, i){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const x = viagemDe(ev, fase, i);
+  copiarZap(encodeURIComponent(msgViagemMotorista(ev, fase, x)), (fase==='desm' ? 'desmontagem' : 'montagem') + ' de ' + (x.motorista || (veiculos.find(v=>v.id===x.v)||{}).placa || 'viagem'));
+}
 function zapViagem(evId, fase, i){
   const ev = eventos.find(e=>e.id===evId); if(!ev) return;
-  const x = escalaDo(ev, fase).find(y=>y.i===+i) || {i:+i};
+  const x = viagemDe(ev, fase, i);
   const txt = msgViagemMotorista(ev, fase, x);
   const m = motoristas.find(y=>y.nome===x.motorista) || {};
   const n = zap(m.tel);
