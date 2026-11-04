@@ -13971,7 +13971,7 @@ function msgViagemMotorista(ev, fase, x){
   const time = fase === 'desm' ? timeDesmOp(ev, eq) : montadoresOp(ev, eq);
   L.push('👷 *Equipe no local — ' + (eq || 'a definir') + ':* ' + (time.length ? time.join(', ') : 'a definir'));
   const pn = produtorDo(ev), pTel = pn ? (produtores.find(z=>z.nome===pn)||{}).tel : null;
-  if(pn) L.push('🎬 *No local — nosso produtor:* ' + pn + (pTel ? ' — ' + pTel : ''));
+  if(pn) L.push('🎬 *Produtor:* ' + pn + (pTel ? ' — ' + pTel : ''));
   if(ev.respNome || ev.respTel) L.push('📞 *Contato do cliente:* ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   const vP = avisoVoltaPonte(ev, fase); if(vP) L.push(vP);
   try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
@@ -14024,7 +14024,7 @@ function mensagemEscala(ev){
   const pn2 = produtorDo(ev), pTel2 = pn2 ? (produtores.find(z=>z.nome===pn2)||{}).tel : null;
   if(pn2 || ev.respNome || ev.respTel){
     L.push('');
-    if(pn2) L.push('🎬 *No local — nosso produtor:* ' + pn2 + (pTel2 ? ' — ' + pTel2 : ''));
+    if(pn2) L.push('🎬 *Produtor:* ' + pn2 + (pTel2 ? ' — ' + pTel2 : ''));
     if(ev.respNome || ev.respTel) L.push('📞 Contato do cliente: ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   }
   return L.join('\n');
