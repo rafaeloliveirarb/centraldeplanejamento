@@ -869,8 +869,10 @@ details.lgbox[open] summary h3::before{content:'▾ '}
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <b>📲 Link do motorista</b>
-        <input id="cfg-url" placeholder="Endereço da Central na internet (ex.: https://…/central-planejamento.html)" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.urlCentral=this.value.trim();salvar()">
-        <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a tela de Operações externas mostra onde está o caminhão e quando chega. Precisa ser o endereço onde a Central fica publicada (um arquivo aberto só no computador não abre no celular).</small>
+        <input id="cfg-url" placeholder="Só para a Central aberta de um arquivo no computador" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px" onchange="CONFIG.urlCentral=this.value.trim();salvar();renderCadastros()">
+        <button class="mini" onclick="testarLinkMotorista()">🔎 Testar o link</button>
+        <div id="cfg-url-uso" style="width:100%;font-size:12px;color:var(--muted)"></div>
+        <small style="color:var(--muted);width:100%">O motorista abre esse link no celular e compartilha a localização; a tela de Operações externas mostra onde está o caminhão e quando chega. O link sai com <b>o endereço em que esta Central está aberta</b> — se você abre pelo site, é esse site que vai no WhatsApp. O campo acima só é usado quando a Central é aberta de um arquivo do computador.</small>
       </div>
       <div id="tr-status" style="font-size:11.5px;color:var(--muted);margin-top:6px">Com o Google ligado, o TomTom fica só para o que o Google não dá: o detalhe dos acidentes e interdições na rota, o mapa da TV e a ordem das paradas na viagem combinada. Pode deixar as duas chaves.</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:13px">
@@ -2443,7 +2445,10 @@ function padroesConfig(c){
     {nome:'Zona de restrição do Rio (Zona Sul, Tijuca, Centro)', cidade:'Rio de Janeiro', bairros:'Copacabana, Ipanema, Leblon, Leme, Botafogo, Flamengo, Glória, Catete, Laranjeiras, Cosme Velho, Humaitá, Urca, Lagoa, Gávea, Jardim Botânico, Tijuca, Maracanã, Vila Isabel, Grajaú, Andaraí, Rio Comprido, Santa Teresa, São Cristóvão', dias:'uteis', faixas:'06:00-10:00, 17:00-21:00', vucLivre:true, ativo:false}];
   if(!Array.isArray(c.datasEspeciais)) c.datasEspeciais = [];
   if(!Array.isArray(c.excluidos)) c.excluidos = [];   /* eventos excluídos: não voltam pela planilha nem pelo Pipefy */
-  if(!c.urlCentral) c.urlCentral = 'https://conferenciagtp.vercel.app/central-planejamento.html';   /* mesmo site da Conferência — só funciona depois de subir o arquivo lá */
+  /* o link do motorista usa o endereço em que a Central está aberta; este campo é só
+     para quando ela é aberta de um arquivo no computador (file://) */
+  if(c.urlCentral === 'https://conferenciagtp.vercel.app/central-planejamento.html') c.urlCentral = '';   /* endereço de fábrica antigo: dava "página não encontrada" */
+  if(typeof c.urlCentral !== 'string') c.urlCentral = '';
   if(!Array.isArray(c.pracas)) c.pracas = [];
   if(!Array.isArray(c.cavalos)) c.cavalos = [];   /* cavalos mecânicos que puxam as carretas */
   /* praças conhecidas da região, já com ponto no mapa e valor de REFERÊNCIA (confira e ajuste) */
@@ -5149,13 +5154,23 @@ function importarQuant(){
    (plan_config, chave loc:<evento>|<fase>|<dia>|<vaga>). A Tela do galpão mostra onde está e quando chega. */
 let LOCS = {}, ETA = {};
 function baseCentral(){
-  if(CONFIG.urlCentral) return CONFIG.urlCentral.replace(/#.*$/,'');
+  /* o link tem que abrir a MESMA Central que você está usando: o endereço desta página */
   if(typeof location !== 'undefined' && /^https?:/.test(location.protocol)) return location.origin + location.pathname;
+  if(CONFIG.urlCentral) return CONFIG.urlCentral.replace(/#.*$/,'');
   return null;
 }
 function linkMotorista(ev, fase, D, i){
   const b = baseCentral(); if(!b) return null;
   return b + '#motorista=' + encodeURIComponent([ev.id, fase, D, i].join('|'));
+}
+function testarLinkMotorista(){
+  const b = baseCentral();
+  if(!b) return toast('Sem endereço: abra a Central pelo site, ou escreva o endereço no campo ao lado.');
+  const ev = eventos.find(e=>!e.esp && (e.veiculos||[]).length) || eventos[0];
+  if(!ev) return toast('Sem evento para testar.');
+  const u = linkMotorista(ev, 'mont', dia(ev.mont) || HOJE, 0);
+  toast('Abrindo o link numa aba nova — é a tela que o motorista vê. Se aparecer "página não encontrada", o endereço está errado.');
+  window.open(u, '_blank');
 }
 function enviarLinkMotorista(evId, fase, D, i){
   const ev = eventos.find(e=>e.id===evId); if(!ev) return;
@@ -5224,7 +5239,8 @@ function paginaMotorista(){
   div.id = 'mot-page';
   div.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0f1733;color:#fff;font-family:Segoe UI,Arial,sans-serif;overflow:auto;padding:22px 18px';
   const hs = ev ? horariosSaida(ev, fase, D) : null;
-  div.innerHTML = !ev ? '<h2>Viagem não encontrada</h2><p>Peça um link novo para a logística.</p>' :
+  div.innerHTML = !ev ? '<h2>Viagem não encontrada</h2><p>Pode ser a internet do celular. Toque em tentar de novo; se continuar assim, peça um link novo para a logística.</p>'+
+      '<button onclick="location.reload()" style="display:block;width:100%;margin-top:18px;padding:18px;font-size:19px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">🔄 TENTAR DE NOVO</button>' :
     '<div style="font-size:14px;color:#aab4d4">'+(fase==='desm'?'📤 DESMONTAGEM':'🔨 MONTAGEM')+' · '+rotDia(D)+'</div>'+
     '<h1 style="font-size:26px;margin:6px 0 4px">'+esc(ev.nome)+'</h1>'+
     '<div style="font-size:16px;color:#dfe6ff">📍 '+esc(destinoTexto(ev) || '—')+'</div>'+
@@ -13394,6 +13410,11 @@ function renderCadastros(){
   { const di = document.getElementById('cfg-diesel'); if(di && document.activeElement !== di) di.value = CONFIG.precoDiesel || ''; }
   { const M = CONFIG.metas || {}; [['mt-km',M.kmEvento],['mt-custo',M.custoEvento],['mt-faltas',M.faltasMes],['mt-diarias',M.diariasEvento]].forEach(([i,v])=>{ const e2 = document.getElementById(i); if(e2 && document.activeElement !== e2) e2.value = v || ''; }); }
   { const ur = document.getElementById('cfg-url'); if(ur && document.activeElement !== ur) ur.value = CONFIG.urlCentral || ''; }
+  { const uu = document.getElementById('cfg-url-uso');
+    if(uu){ const b = baseCentral();
+      uu.innerHTML = b
+        ? 'Hoje o link sai assim: <b style="color:var(--ink2)">' + _lgEsc(b) + '#motorista=…</b>' + (/^https?:/.test(location.protocol) ? ' <span style="color:#0f8a4d">(endereço desta página)</span>' : ' <span style="color:#a86412">(do campo acima — a Central está aberta de um arquivo)</span>')
+        : '<span style="color:#b0483c">⚠ A Central está aberta de um arquivo do computador e não tem endereço no campo acima — o link do motorista não vai sair nas mensagens.</span>'; } }
   { const pb = document.getElementById('cfg-pracas'); if(pb) pb.innerHTML = htmlPracas(); }
   { const rb = document.getElementById('cfg-restr'); if(rb) rb.innerHTML = htmlRestricoes(); }
   { const db = document.getElementById('cfg-datas'); if(db) db.innerHTML = htmlDatasEspeciais(); }
@@ -16316,6 +16337,8 @@ async function salvar(){
   }catch(e){
     falhaNuvem(e, 'abrir');
   }
+  /* celular do motorista: mostra a tela dele mesmo se a nuvem falhou (em vez da Central inteira) */
+  if(typeof window !== 'undefined' && window.__modoMotorista){ try{ paginaMotorista(); }catch(e){} return; }
   equipes.forEach(e=>{ if(!e.membros) e.membros = MEMBROS_PADRAO[e.nome] ? [...MEMBROS_PADRAO[e.nome]] : []; if(e.membros.length) e.montadores = e.membros.length; if(e.carro===undefined) e.carro = CARROS_PADRAO[e.nome] || ''; });
   /* dado antigo: o "contato do cliente" podia ser o nome OU o telefone */
   eventos.forEach(e=>{
