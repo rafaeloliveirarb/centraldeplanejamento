@@ -5251,8 +5251,9 @@ function paginaMotorista(){
       '<button onclick="location.reload()" style="display:block;width:100%;margin-top:18px;padding:18px;font-size:19px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">🔄 TENTAR DE NOVO</button>' :
     '<div style="font-size:14px;color:#aab4d4">'+(fase==='desm'?'📤 DESMONTAGEM':'🔨 MONTAGEM')+' · '+rotDia(D)+'</div>'+
     '<h1 style="font-size:26px;margin:6px 0 4px">'+esc(ev.nome)+'</h1>'+
+    (x.motorista ? '<div style="font-size:30px;font-weight:800;color:#ffd79a;margin:2px 0 8px;line-height:1.1">🧑‍✈️ '+esc(x.motorista)+'</div>' : '')+
     '<div style="font-size:16px;color:#dfe6ff">📍 '+esc(destinoTexto(ev) || '—')+'</div>'+
-    '<div style="font-size:16px;margin-top:8px">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+(x.motorista ? ' · '+esc(x.motorista) : '')+'</div>'+
+    '<div style="font-size:16px;margin-top:8px">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+'</div>'+
     (hs ? '<div style="font-size:18px;margin-top:10px;color:#ffb25e;font-weight:700">Sair '+hs.saida+(hs.ponte?' · ponte até '+hs.ponte:'')+' · chegar '+hs.chegada+'</div>' : '')+
     '<button id="mot-ini" style="display:block;width:100%;margin-top:22px;padding:20px;font-size:21px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">▶ INICIAR VIAGEM</button>'+
     '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
@@ -5273,7 +5274,7 @@ function paginaMotorista(){
     if(dados.lat == null && LOCS[chave]){ dados.lat = LOCS[chave].lat; dados.lon = LOCS[chave].lon; }
     LOCS[chave] = dados;
     try{ const r = await sb.from('plan_config').upsert({chave:'loc:' + chave, dados, atualizado_em: new Date().toISOString()}); if(r.error) throw r.error;
-      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='local' ? '✅ Chegada avisada às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + '. Mantenha este link aberto.'); }
+      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='local' ? '✅ Chegada avisada às ' : status==='abriu' ? '👋 A logística já sabe que você abriu, às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + '. Mantenha este link aberto.'); }
     catch(e){ st('⚠ Sem internet agora — tento de novo sozinho.'); }
     /* chegou perto do local: avisa sozinho */
     const dest = evGeo(ev);
@@ -5297,6 +5298,8 @@ function paginaMotorista(){
     if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'local'), ()=>enviar(null, 'local'), {timeout:10000});
     else enviar(null, 'local');
   };
+  /* a logística já vê que o motorista recebeu e abriu o link */
+  carregarLocs().then(()=>{ if(!(LOCS[chave]||{}).status) enviar(null, 'abriu'); }).catch(()=>{});
 }
 
 /* ================= ROTA BLOQUEADA NOS PRÓXIMOS DIAS =================
@@ -6069,6 +6072,8 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMoto
   setTimeout(()=>{ try{ if(window.__abrirEvHash && eventos.some(e=>e.id===window.__abrirEvHash)){ verEvento(window.__abrirEvHash); window.__abrirEvHash = null; } }catch(e){} }, 3000);
   setTimeout(()=>{ try{ puxarPipefy(false); }catch(e){} }, 30000);
   setInterval(()=>{ try{ renderAlertaHoje(); }catch(e){} }, 5*60*1000);
+  /* viagens ao vivo: o painel de logística se atualiza sozinho de minuto em minuto */
+  setInterval(()=>{ try{ const s2 = document.getElementById('v-logistica'); if(s2 && !s2.classList.contains('hide') && !LG_DRAG) renderLogistica(); }catch(e){} }, 60000);
   setTimeout(()=>{ try{ avisoPrevisao(); }catch(e){} }, 25000);
   setTimeout(()=>{ try{ checarRetornos(); }catch(e){}
     try{ const A = alertasFrota().filter(a=>a.sev===3); if(A.length && localStorage.getItem('cpl:avisoFrota') !== HOJE){ localStorage.setItem('cpl:avisoFrota', HOJE); toast('🔧 Frota: ' + A.slice(0,2).map(a=>a.txt).join(' · ') + (A.length>2 ? ' e mais ' + (A.length-2) : '') + '.', 'Ver', ()=>irPara('logistica')); } }catch(e){} }, 20000);
@@ -8638,9 +8643,70 @@ function renderLogistica(){
     '</tbody></table></div>'+
     (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc([x.placa, x.emp].filter(Boolean).join(' · ')||'frete')).join(' | ')+'</div>').join('')+'</details>' : '')+
     '<div style="margin-top:12px">'+htmlFrota()+htmlCusto()+'</div>';
-  box.innerHTML = topo + cockpit + corpo;
+  box.innerHTML = topo + cockpit + htmlViagensVivas() + corpo;
+  /* posições novas de 45 em 45 segundos enquanto o painel estiver aberto */
+  if(Date.now() - LG_LOCS_T > 45000){
+    LG_LOCS_T = Date.now();
+    carregarLocs().then(()=>{ try{ const s2 = document.getElementById('v-logistica'); if(s2 && !s2.classList.contains('hide') && !LG_DRAG) renderLogistica(); }catch(e){} }).catch(()=>{});
+  }
 }
 
+/* ---------- 📡 viagens ao vivo: o que o motorista está fazendo agora ---------- */
+let LG_LOCS_T = 0;
+function vivoDaViagem(evId, D, i){
+  let b = null;
+  ['mont','desm'].forEach(f=>{ const l = LOCS[[evId, f, D, i].join('|')]; if(l && (!b || (l.t||0) > (b.t||0))) b = l; });
+  return (b && Date.now() - (b.t||0) < 30*3600*1000) ? b : null;
+}
+function hamin(t){
+  const m = Math.round((Date.now() - (t||0))/60000);
+  return m < 1 ? 'agora' : m < 60 ? 'há ' + m + ' min' : 'há ' + Math.floor(m/60) + 'h' + String(m%60).padStart(2,'0');
+}
+function statusVivo(ev, x, D, l){
+  if(!l) return {cor:'#7a839e', txt:'⚪ ainda não abriu o link'};
+  const hh = new Date(l.t||0).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  if(l.status === 'galpao') return {cor:'#1c4fa0', txt:'🏠 voltou para o galpão' + (l.voltou ? ' às ' + l.voltou : '')};
+  if(l.status === 'local' || l.chegou) return {cor:'#0f8a4d', txt:'✅ no local' + (l.chegou ? ' desde ' + l.chegou : '')};
+  if(l.status === 'abriu') return {cor:'#a86412', txt:'👀 abriu o link ' + hh + ' — ainda não tocou em INICIAR VIAGEM'};
+  const e = ETA[[ev.id, x.fase||'mont', D, x.i].join('|')] || ETA[[ev.id, 'desm', D, x.i].join('|')];
+  return {cor:'#b0483c', txt:'🚚 em viagem · posição ' + hamin(l.t) + (l.vel != null ? ' · ' + l.vel + ' km/h' : '') + (e ? ' · chega ≈ ' + e.hora : '')};
+}
+function htmlViagensVivas(){
+  const linhas = [];
+  [somaDiaISO(HOJE,-1), HOJE, somaDiaISO(HOJE,1)].forEach(D=>{
+    let ops = []; try{ ops = (opsDoDia(D)||{}).ops || []; }catch(e){}
+    ops.forEach(o=>{
+      (o.viagens||[]).forEach(x=>{
+        if(x.jaLocal) return;
+        const l = vivoDaViagem(o.ev.id, D, x.i);
+        if(D !== HOJE && !l) return;                 /* ontem/amanhã só aparecem se tiver notícia */
+        linhas.push({D, o, x, l, st: statusVivo(o.ev, x, D, l)});
+      });
+    });
+  });
+  const peso = t => /🚚/.test(t) ? 0 : /👀/.test(t) ? 1 : /⚪/.test(t) ? 2 : /✅/.test(t) ? 3 : 4;
+  linhas.sort((a,b)=>peso(a.st.txt) - peso(b.st.txt) || a.D.localeCompare(b.D));
+  const andando = linhas.filter(z=>/🚚/.test(z.st.txt)).length;
+  const corpo = linhas.length ? linhas.map(z=>{
+    const fz = z.x.fase || z.o.fase;
+    let hs = null; try{ hs = horariosSaida(z.o.ev, fz, z.D); }catch(e){}
+    const quando = z.D === HOJE ? 'hoje' : (z.D === somaDiaISO(HOJE,1) ? 'amanhã' : rotDia(z.D));
+    return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)">'+
+      '<span style="min-width:116px;font-size:20px;font-weight:800;color:var(--ink2)">🧑‍✈️ '+_lgEsc(z.x.motorista || 'sem motorista')+'</span>'+
+      '<span style="flex:1;min-width:210px;font-size:12.5px"><a href="#" onclick="event.preventDefault();verEvento(\''+z.o.ev.id+'\')" style="font-weight:700;color:var(--ink2)">'+_lgEsc(z.o.ev.nome)+'</a>'+
+        '<small style="color:var(--muted);display:block">'+(fz==='desm'?'📤 desmontagem':'🔨 montagem')+' '+quando+' · '+_lgEsc(z.x.v.tipo+' '+z.x.v.placa)+(hs?' · sai '+hs.saida:'')+'</small></span>'+
+      '<b style="font-size:12.5px;color:'+z.st.cor+';min-width:230px">'+z.st.txt+'</b>'+
+      '<span style="display:flex;gap:6px">'+
+        (z.l && z.l.lat != null ? '<a class="mini" style="text-decoration:none" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+z.l.lat+','+z.l.lon+'">🗺 onde está</a>' : '')+
+        '<button class="mini" title="Mandar de novo o link do motorista" onclick="enviarLinkMotorista(\''+z.o.ev.id+'\',\''+fz+'\',\''+z.D+'\','+z.x.i+')">📲 link</button>'+
+        '<button class="mini" title="Copiar a logística desta viagem" onclick="copiarViagem(\''+z.o.ev.id+'\',\''+fz+'\','+z.x.i+')">📋</button>'+
+      '</span></div>';
+  }).join('') : '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Nenhuma viagem hoje.</div>';
+  return '<details class="lgbox" open><summary><h3 style="display:inline">📡 Viagens ao vivo</h3>'+
+    (andando ? ' <b style="color:#b0483c">· '+andando+' na estrada</b>' : (linhas.length ? ' <b style="color:var(--muted)">· '+linhas.length+'</b>' : ' <small style="color:var(--muted)">· nada agora</small>'))+
+    ' <small style="color:var(--muted)">— a mesma tela que o motorista tem no celular</small></summary>'+corpo+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">⚪ não abriu · 👀 abriu mas não saiu · 🚚 na estrada (atualiza sozinho) · ✅ no local · 🏠 voltou. A posição só chega enquanto o motorista estiver com o link aberto no celular.</div></details>';
+}
 /* ---------- janela genérica do painel de logística ---------- */
 function lgModal(titulo, sub, corpo){
   let o = document.getElementById('ov-lg');
