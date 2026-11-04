@@ -14005,7 +14005,6 @@ function msgViagemMotorista(ev, fase, x){
   L.push('👷 *Equipe no local — ' + (eq || 'a definir') + ':* ' + (time.length ? time.join(', ') : 'a definir'));
   const pn = produtorDo(ev), pTel = pn ? (produtores.find(z=>z.nome===pn)||{}).tel : null;
   if(pn) L.push('🎬 *Produtor:* ' + pn + (pTel ? ' — ' + pTel : ''));
-  if(ev.respNome || ev.respTel) L.push('📞 *Contato do cliente:* ' + [ev.respNome, ev.respTel].filter(Boolean).join(' — '));
   const vP = avisoVoltaPonte(ev, fase); if(vP) L.push(vP);
   try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
   return L.join('\n');
