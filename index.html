@@ -1068,7 +1068,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
         <button class="mini" onclick="imprimirDiarias()">🖨 Imprimir</button>
         <button class="mini" onclick="excelDiarias()">⬇ Excel</button>
       </div>
-      <div class="alert" style="margin-top:0">Conta pelo que está na Central: dias de cada pessoa em cada evento, com folgas, faltas e manutenção. Eventos cancelados e terceirizados ficam de fora; finalizados entram. Pessoa em dois eventos no mesmo dia conta uma diária, com aviso.</div>
+      <div class="alert" style="margin-top:0">Conta pelo que está na Central: dias de cada pessoa em cada evento, com folgas, faltas e manutenção. <b>Conta só até o dia de hoje</b> — o que está marcado para os próximos dias entra quando o dia chegar. Eventos cancelados e terceirizados ficam de fora; finalizados entram. Pessoa em dois eventos no mesmo dia conta uma diária, com aviso.</div>
       <div id="dia-corpo" style="margin-top:12px"></div>
     </div>
   </div>
@@ -1268,7 +1268,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
 
 <div class="overlay" id="ov-terc" onclick="if(event.target===this)fechar('ov-terc')">
   <div class="modal" style="max-width:900px">
-    <header><div><h2>🤝 Terceirizados do mês</h2><div class="os">equipe de fora, frete e locação/compra — por evento e por fornecedor</div></div><button class="x" onclick="fechar('ov-terc')">✕</button></header>
+    <header><div><h2>🤝 Terceirizados do mês</h2><div class="os">equipe de fora (onde trabalhou e quantos dias), frete e locação/compra</div></div><button class="x" onclick="fechar('ov-terc')">✕</button></header>
     <div class="mbody">
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
         <label style="font-size:13px">Mês <input type="month" id="tc-mes" onchange="renderTerc()" style="border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit"></label>
@@ -11162,13 +11162,29 @@ function renderRisco(){
 /* ===== TERCEIRIZADOS DO MÊS ===== */
 function abrirTerc(){ const m = document.getElementById('tc-mes'); if(m && !m.value) m.value = HOJE.slice(0,7); renderTerc(); document.getElementById('ov-terc').classList.add('on'); }
 function dadosTerc(mes){
-  const linhas = [], porForn = {};
+  const linhas = [], porForn = {}, porEq = {};
   const soma = (f, tipo, v) => { const k = (f||'(sem fornecedor)').trim(); const o = porForn[k] = porForn[k] || {forn:k, tipos:new Set(), val:0, n:0}; o.tipos.add(tipo); o.val += (+v||0); o.n++; };
+  /* equipe de fora: não interessa o gasto, e sim ONDE trabalhou e QUANTOS DIAS */
+  const somaEq = (f, ev, fase, ds) => {
+    const k = (f||'(sem empresa)').trim();
+    const o = porEq[k] = porEq[k] || {forn:k, dias:0, trab:[]};
+    o.dias += ds.length;
+    o.trab.push({ev, fase, dias:ds.length, ini:ds[0], fim:ds[ds.length-1]});
+  };
   eventos.forEach(ev=>{
     if(ev.esp==='cancelado' || !ev.mont || dia(ev.mont).slice(0,7) !== mes) return;
     const eq = ev.equipe || plano(ev).equipe;
     const L = [];
-    if(eq === EQUIPE_TERC || ev.esp === 'terceirizado'){ L.push({tipo:'EQUIPE', o:'montagem', forn:ev.tercEmpresa||'', val:+ev.tercValor||0}); }
+    if(eq === EQUIPE_TERC || ev.esp === 'terceirizado'){
+      const dM = diasEntre(ev.mont, fimMont(ev)) || [];
+      if(dM.length){ L.push({tipo:'EQUIPE', o:'montagem', forn:ev.tercEmpresa||'', dias:dM.length, ini:dM[0], fim:dM[dM.length-1], semValor:true});
+        somaEq(ev.tercEmpresa, ev, 'montagem', dM); }
+      if(ev.desm){
+        const dD = diasEntre(ev.desm, fimDesm(ev)) || [];
+        if(dD.length){ L.push({tipo:'EQUIPE', o:'desmontagem', forn:ev.tercEmpresa||'', dias:dD.length, ini:dD[0], fim:dD[dD.length-1], semValor:true});
+          somaEq(ev.tercEmpresa, ev, 'desmontagem', dD); }
+      }
+    }
     (ev.fretes||[]).forEach(f=>L.push({tipo:'FRETE', o:(f.fase==='desm'?'desmontagem':'montagem'), forn:f.emp, val:+f.val||0}));
     (ev.compras||[]).forEach(c=>L.push({tipo:c.tipo==='compra'?'COMPRA':'LOCAÇÃO', o:c.oque, forn:c.forn||'', val:+c.val||0, ok:c.ok}));
     (ev.itens||[]).filter(i=>i.terc).forEach(i=>L.push({tipo:'MATERIAL', o:i.nome + ' (' + num(i.qtd) + ' ' + (i.un||'un') + ')', forn:'', val:0, semValor:true}));
@@ -11179,21 +11195,34 @@ function dadosTerc(mes){
   linhas.sort((a,b)=>dia(a.ev.mont).localeCompare(dia(b.ev.mont)));
   const forn = Object.values(porForn).sort((a,b)=>b.val-a.val);
   const tot = {}; linhas.forEach(l=>l.L.forEach(x=>{ tot[x.tipo] = (tot[x.tipo]||0) + (+x.val||0); }));
-  return {linhas, forn, tot, geral: linhas.reduce((t,l)=>t+l.total,0)};
+  const eqs = Object.values(porEq).sort((a,b)=>b.dias-a.dias);
+  const diasEq = eqs.reduce((t,e)=>t+e.dias, 0);
+  return {linhas, forn, tot, eqs, diasEq, geral: linhas.reduce((t,l)=>t+l.total,0)};
 }
 function htmlTerc(mes, imprimir){
   const d = dadosTerc(mes);
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   if(!d.linhas.length) return '<div class="panel empty" style="margin:0"><b>Nada terceirizado em '+nomeMes(mes)+'</b>Equipe de fora, frete, locação e material 🤝 lançados nos eventos aparecem aqui.</div>';
-  const box = (rot, v) => '<div style="flex:1;min-width:130px;border:1px solid #e3e8f0;border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:#6b7690;text-transform:uppercase;letter-spacing:.5px">'+rot+'</div><div style="font-size:19px;font-weight:800;color:#1c4fa0">'+reais(v||0)+'</div></div>';
-  return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+box('Total do mês', d.geral)+box('Equipe de fora', d.tot['EQUIPE'])+box('Frete', d.tot['FRETE'])+box('Locação', d.tot['LOCAÇÃO'])+box('Compra', d.tot['COMPRA'])+'</div>'+
+  const box = (rot, v, txt) => '<div style="flex:1;min-width:130px;border:1px solid #e3e8f0;border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:#6b7690;text-transform:uppercase;letter-spacing:.5px">'+rot+'</div><div style="font-size:19px;font-weight:800;color:#1c4fa0">'+(txt != null ? txt : reais(v||0))+'</div></div>';
+  const diaTxt = n => n + (n === 1 ? ' dia' : ' dias');
+  return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+box('Total do mês', d.geral)+
+      box('Equipe de fora', 0, d.eqs.length ? diaTxt(d.diasEq) + ' <small style="font-size:11px;color:#6b7690;font-weight:600">· ' + d.eqs.length + ' empresa(s)</small>' : '—')+
+      box('Frete', d.tot['FRETE'])+box('Locação', d.tot['LOCAÇÃO'])+box('Compra', d.tot['COMPRA'])+'</div>'+
+    (d.eqs.length ? '<h3 style="font-size:14px;margin:14px 0 6px;color:#f0851e">🤝 EQUIPE DE FORA — ONDE TRABALHOU E QUANTOS DIAS</h3>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b7690;font-size:11.5px;text-transform:uppercase"><th style="padding:6px">Empresa</th><th style="padding:6px">Onde trabalhou</th><th style="padding:6px;text-align:right">Dias</th></tr></thead><tbody>'+
+      d.eqs.map(e=>e.trab.map((t,ix)=>'<tr style="border-top:1px solid #e3e8f0">'+
+        (ix===0 ? '<td style="padding:6px;vertical-align:top" rowspan="'+e.trab.length+'"><b>'+esc(e.forn)+'</b><br><small style="color:#6b7690">'+diaTxt(e.dias)+' no mês · '+e.trab.length+' serviço(s)</small></td>' : '')+
+        '<td style="padding:6px"><b>'+esc(t.ev.nome)+'</b>'+(t.ev.cidade && t.ev.cidade!=='—' ? ' <small style="color:#6b7690">· '+esc(t.ev.cidade)+'</small>' : '')+
+          '<br><small style="color:#6b7690">'+(t.fase==='desmontagem'?'📤 desmontagem ':'🔨 montagem ')+(t.ini===t.fim ? fmtD(t.ini).slice(0,5) : fmtD(t.ini).slice(0,5)+' a '+fmtD(t.fim).slice(0,5))+'</small></td>'+
+        '<td style="padding:6px;text-align:right"><b>'+t.dias+'</b></td></tr>').join('')).join('')+
+      '</tbody></table>' : '')+
     '<h3 style="font-size:14px;margin:14px 0 6px;color:#f0851e">POR EVENTO</h3>'+
-    '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b7690;font-size:11.5px;text-transform:uppercase"><th style="padding:6px">Evento</th><th style="padding:6px">O quê</th><th style="padding:6px">Fornecedor</th><th style="padding:6px;text-align:right">Valor</th></tr></thead><tbody>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#6b7690;font-size:11.5px;text-transform:uppercase"><th style="padding:6px">Evento</th><th style="padding:6px">O quê</th><th style="padding:6px">Fornecedor</th><th style="padding:6px;text-align:right">Valor / dias</th></tr></thead><tbody>'+
       d.linhas.map(l=>l.L.map((x,ix)=>'<tr style="border-top:1px solid #e3e8f0">'+
-        (ix===0 ? '<td style="padding:6px;vertical-align:top" rowspan="'+l.L.length+'"><b>'+esc(l.ev.nome)+'</b><br><small style="color:#6b7690">'+fmtD(l.ev.mont).slice(0,5)+(l.ev.cidade&&l.ev.cidade!=='—'?' · '+esc(l.ev.cidade):'')+'</small><br><small><b>'+reais(l.total)+'</b></small></td>' : '')+
+        (ix===0 ? '<td style="padding:6px;vertical-align:top" rowspan="'+l.L.length+'"><b>'+esc(l.ev.nome)+'</b><br><small style="color:#6b7690">'+fmtD(l.ev.mont).slice(0,5)+(l.ev.cidade&&l.ev.cidade!=='—'?' · '+esc(l.ev.cidade):'')+'</small><br><small><b>'+(l.total ? reais(l.total) : (l.L.some(x=>x.tipo==='EQUIPE') ? diaTxt(l.L.filter(x=>x.tipo==='EQUIPE').reduce((t,x)=>t+(x.dias||0),0)) + ' de equipe de fora' : reais(0)))+'</b></small></td>' : '')+
         '<td style="padding:6px"><b style="font-size:11px;color:#1c4fa0">'+x.tipo+'</b> '+esc(x.o)+(x.ok?' <small style="color:#0f8a4d">✓ resolvido</small>':'')+'</td>'+
         '<td style="padding:6px">'+(x.forn ? esc(x.forn) : (x.semValor ? '<small style="color:#6b7690">—</small>' : '<small style="color:#b47f08">definir</small>'))+'</td>'+
-        '<td style="padding:6px;text-align:right">'+(x.semValor ? '<small style="color:#6b7690">—</small>' : (+x.val ? reais(+x.val) : '<small style="color:#b47f08">sem valor</small>'))+'</td></tr>').join('')).join('')+
+        '<td style="padding:6px;text-align:right">'+(x.tipo === 'EQUIPE' ? '<b>'+diaTxt(x.dias||0)+'</b>' : (x.semValor ? '<small style="color:#6b7690">—</small>' : (+x.val ? reais(+x.val) : '<small style="color:#b47f08">sem valor</small>')))+'</td></tr>').join('')).join('')+
     '</tbody></table>'+
     '<h3 style="font-size:14px;margin:18px 0 6px;color:#f0851e">POR FORNECEDOR</h3>'+
     '<table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>'+
@@ -16144,7 +16173,8 @@ function calcularDiarias(mes){
     if(ev.esp === 'cancelado' || ev.esp === 'terceirizado') return;
     if(!ev.mont) return;
     pessoasNaEscala(ev).forEach(p=>{
-      diasDe(ev, p.nome).filter(d=>d.slice(0,7)===mes).forEach(d=>{
+      /* o mês vai fechando dia a dia: nada depois de hoje entra na conta */
+      diasDe(ev, p.nome).filter(d=>d.slice(0,7)===mes && d <= HOJE).forEach(d=>{
         const st = faltouDia(ev, p.nome, d) ? 'FA' : (manutDia(ev, p.nome, d) ? 'MT' : 'T');
         const chave = p.nome + (p.prod ? '#produtor' : '');
         const reg = pess[chave] = pess[chave] || {nome:p.nome, papel:p.papel, prod:!!p.prod, dias:{}};
@@ -16182,7 +16212,9 @@ function renderDiarias(){
   const mes = mesDiarias();
   const l = filtroDiarias(calcularDiarias(mes));
   const tot = l.reduce((s,p)=>({T:s.T+p.T, MT:s.MT+p.MT, FA:s.FA+p.FA}), {T:0,MT:0,FA:0});
-  document.getElementById('dia-resumo').textContent = nomeMes(mes) + ' · ' + l.length + ' pessoa(s) · ' + tot.T + ' diária(s) trabalhadas · ' + tot.MT + ' de manutenção · ' + tot.FA + ' falta(s)';
+  const mAtual = HOJE.slice(0,7);
+  const ate = mes === mAtual ? ' (do dia 1 até hoje, ' + fmtD(HOJE).slice(0,5) + ')' : (mes > mAtual ? ' (mês ainda não começou)' : ' (mês fechado)');
+  document.getElementById('dia-resumo').textContent = nomeMes(mes) + ate + ' · ' + l.length + ' pessoa(s) · ' + tot.T + ' diária(s) trabalhadas · ' + tot.MT + ' de manutenção · ' + tot.FA + ' falta(s)';
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   document.getElementById('dia-corpo').innerHTML = !l.length
     ? '<div class="panel empty"><b>Nada neste mês</b>Nenhuma pessoa com dia de trabalho lançado em ' + nomeMes(mes) + '.</div>'
@@ -16225,7 +16257,7 @@ function imprimirDiarias(){
     '.ass{margin-top:10px;color:#777;font-size:11.5px}'+
     '@media print{body{margin:10mm}}'+
   '</style></head><body>'+
-    '<h1>Fechamento de diárias — '+nomeMes(mes)+'</h1>'+
+    '<h1>Fechamento de diárias — '+nomeMes(mes)+(mes === HOJE.slice(0,7) ? ' (até '+fmtD(HOJE).slice(0,5)+')' : '')+'</h1>'+
     '<p class="sub">'+l.length+' pessoa(s) · gerado em '+new Date().toLocaleDateString('pt-BR')+' · Central de Planejamento</p>'+
     corpo+
   '<'+'script>window.onload=function(){window.print()}<\/script></body></html>');
