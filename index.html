@@ -8739,7 +8739,7 @@ function blocoManutEv(ev){
         '<a href="#" onclick="event.preventDefault();verEvento(\''+m.id+'\')" style="font-weight:700;color:var(--ink2);flex:1;min-width:170px">🔧 '+_lgEsc(m.nome)+'</a>'+
         '<span style="color:var(--muted)">📅 '+fmtD(m.mont).slice(0,5)+(dia(m.mont)!==dia(fimMont(m)) ? ' a '+fmtD(fimMont(m)).slice(0,5) : '')+
           (horaManut(m) ? ' · 🕐 '+horaManut(m)+(m.manutHFim ? ' às '+m.manutHFim : '') : '')+'</span>'+
-        '<span class="tag">👷 '+_lgEsc(m.equipe || 'sem equipe')+'</span>'+
+        '<span class="tag" title="'+_lgEsc((m.montOp||[]).join(', '))+'">👷 '+_lgEsc((m.montOp && m.montOp.length) ? m.montOp.slice(0,3).join(', ') + (m.montOp.length>3 ? ' +'+(m.montOp.length-3) : '') : (m.equipe || 'sem equipe'))+'</span>'+
         '<button class="mini danger" onclick="excluirManut(\''+m.id+'\')">Excluir</button></div>').join('')+'</div>' : '')+
   '</div>';
 }
@@ -8757,23 +8757,42 @@ function abrirNovaManut(evId){
       '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Termina no dia</label><input type="date" id="mn-d2" value="'+d1+'" style="'+inp+'"></div>'+
       '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">às</label><input type="time" id="mn-h2" value="18:00" style="'+inp+'"></div>'+
     '</div>'+
-    '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Equipe</label>'+
+    '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Equipe responsável</label>'+
       '<select id="mn-eq" style="'+inp+';min-width:230px">'+
         '<option value="">— a definir —</option>'+
         equipes.map(e=>'<option '+(e.nome===eqAtual?'selected':'')+'>'+_lgEsc(e.nome)+'</option>').join('')+
         '<option '+(eqAtual===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option>'+
       '</select></div>'+
+    (function(){   /* manutenção quase nunca leva a equipe inteira: dá pra misturar montadores de várias */
+      const tods = todosMontadores(), gr = {}, ordem = [];
+      tods.forEach(t=>{ const g = t.equipe === 'piloto' ? 'Piloto' : t.equipe; if(!gr[g]){ gr[g] = []; ordem.push(g); } gr[g].push(t); });
+      if(!ordem.length) return '';
+      return '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Quem vai — <b>pode misturar montadores de várias equipes</b></label>'+
+        '<div id="mn-pessoas" style="max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px">'+
+        ordem.map(g=>'<div style="margin-bottom:7px"><div style="display:flex;gap:8px;align-items:center;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">'+_lgEsc(g)+
+            ' <a href="#" onclick="event.preventDefault();mnMarcarEq(\''+_lgEsc(g).replace(/'/g,"\\'")+'\',true)" style="font-weight:700;text-transform:none;letter-spacing:0">todos</a>'+
+            ' <a href="#" onclick="event.preventDefault();mnMarcarEq(\''+_lgEsc(g).replace(/'/g,"\\'")+'\',false)" style="font-weight:700;text-transform:none;letter-spacing:0;color:var(--muted)">nenhum</a></div>'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:3px">'+
+          gr[g].map(t=>'<label data-eq="'+_lgEsc(g)+'" style="display:flex;gap:5px;align-items:center;font-size:13px;cursor:pointer;background:#f4f6fb;border-radius:7px;padding:4px 9px">'+
+            '<input type="checkbox" value="'+_lgEsc(t.nome).replace(/"/g,'&quot;')+'">'+_lgEsc(t.nome)+(t.lider?' <small style="color:var(--muted)">líder</small>':'')+'</label>').join('')+
+          '</div></div>').join('')+
+        '</div><small style="color:var(--muted);font-size:11.5px">Sem marcar ninguém, vai a equipe inteira escolhida acima.</small></div>';
+    })()+
     '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="criarManut(\''+ev.id+'\')">🔧 Criar card</button>'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">O card novo entra no quadro como qualquer outro evento, já com o local, a cidade, o km e o produtor deste aqui. A equipe escolhida entra na escala nos dias da manutenção.</div>';
   lgModal('🔧 Novo card de manutenção', _lgEsc(ev.nome), corpo);
 }
+function mnMarcarEq(eq, val){
+  document.querySelectorAll('#mn-pessoas label[data-eq="' + eq.replace(/"/g,'') + '"] input').forEach(i=>{ i.checked = !!val; });
+}
 function criarManut(evId){
   const ev = eventos.find(e=>e.id===evId); if(!ev) return;
   const g = i => String((document.getElementById(i)||{}).value || '').trim();
   const nome = g('mn-nome') || (ev.nome + ' - Manutenção');
   const d1 = g('mn-d1'), h1 = g('mn-h1') || '08:00', d2 = g('mn-d2'), h2 = g('mn-h2') || '';
+  const pessoas = [...document.querySelectorAll('#mn-pessoas input:checked')].map(x=>x.value);
   if(!d1) return toast('Escolha o dia em que a manutenção começa.');
   const fim = d2 && d2 > d1 ? d2 : null;
   const id = 'e' + Date.now();
@@ -8782,8 +8801,10 @@ function criarManut(evId){
     produtor: ev.produtor || null, respNome: ev.respNome || null, respTel: ev.respTel || null,
     cidade: ev.cidade || '—', local: ev.local || '—', km: +ev.km || 0,
     mont: d1 + 'T' + h1, montFim: fim, evt: fim || d1, evtFim: null, desm: '', desmFim: null,
-    equipe: g('mn-eq') || null, estado: 'alinhamento', aprovado: false, permanece: false, itens: [],
-    hist: [{q: new Date().toISOString(), quem: 'Central', o: ['🔧 Card de manutenção criado a partir de ' + ev.nome]}]
+    equipe: g('mn-eq') || (pessoas.length ? (todosMontadores().find(t=>t.nome===pessoas[0])||{}).equipe || null : null),
+    montOp: pessoas.length ? pessoas : null,
+    estado: 'alinhamento', aprovado: false, permanece: false, itens: [],
+    hist: [{q: new Date().toISOString(), quem: 'Central', o: ['🔧 Card de manutenção criado a partir de ' + ev.nome + (pessoas.length ? ' — ' + pessoas.join(', ') : '')]}]
   });
   try{ marcarVisto(id); }catch(e){}
   marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
