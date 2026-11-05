@@ -15866,9 +15866,12 @@ async function tvAlternar(){
   cols.style.display = prox === 'cards' ? '' : 'none';
   if(lg) lg.style.display = prox === 'log' ? '' : 'none';
   box.style.display = prox === 'mapa' ? '' : 'none';
-  if(prox === 'log'){ try{ lg.innerHTML = tvLogHtml(); }catch(e){ tvMostrarCards(); } }
+  if(prox === 'log'){ try{ lg.innerHTML = tvLogHtml(); lg.scrollTop = 0; lg._pos = null; lg._pausa = 0; lg._volta = false; }catch(e){ tvMostrarCards(); } }
   if(prox === 'mapa'){ try{ await desenharMapaTV(dest); }catch(e){ tvMostrarCards(); } }
-  tvCarrossel = setTimeout(tvAlternar, 40000);
+  /* a logística fica o tempo de rolar a lista inteira (≈15 px por segundo) e ainda sobra para ler o fim */
+  let espera = 40000;
+  if(prox === 'log' && lg){ const sobra = Math.max(0, lg.scrollHeight - lg.clientHeight); espera = Math.min(150000, 40000 + Math.round(sobra/15)*1000); }
+  tvCarrossel = setTimeout(tvAlternar, espera);
 }
 /* frentes de trabalho da operação: líderes das equipes + quantas pessoas no local */
 function frentesTV(o){
@@ -15953,7 +15956,7 @@ function relogioTV(){
 function rolarTV(){
   /* desce devagar; no fim para uns segundos e volta para o começo */
   const agora = Date.now();
-  document.querySelectorAll('#tv .tv-lista').forEach(el2=>{
+  document.querySelectorAll('#tv .tv-lista, #tv #tv-log').forEach(el2=>{
     const max = el2.scrollHeight - el2.clientHeight;
     if(max <= 4){ el2.scrollTop = 0; return; }
     if(el2._pausa && agora < el2._pausa) return;
@@ -16000,11 +16003,7 @@ function cardTV(o, D){
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
-    (function(){   /* produtor do evento */
-      const pn = produtorDo(o.ev);
-      if(!pn || pn === SEM_PRODUTOR) return '';
-      return '<div class="tv-lin">🎬 <b>'+esc(pn)+'</b></div>';
-    })()+
+    produtorTV(o)+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
     (function(){ if(o.fase === 'desm') return ''; try{
       const por = {};
@@ -16180,7 +16179,14 @@ function mudouTV(ev){
 function contTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+'↻ <b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+
-    equipesTV(o, true) + climaTV(o, D, true) + '</div>';
+    equipesTV(o, true) + produtorTV(o, true) + climaTV(o, D, true) + '</div>';
+}
+/* produtor do evento — aparece em todos os dias, igual à equipe */
+function produtorTV(o, curto){
+  let pn = null; try{ pn = produtorDo(o.ev); }catch(e){}
+  if(!pn || pn === SEM_PRODUTOR) return '';
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  return '<div class="tv-lin"'+(curto?' style="font-size:13.5px;margin-top:4px"':'')+'>🎬 <b>'+esc(pn)+'</b></div>';
 }
 /* pessoas do dia separadas pela equipe de cada uma (quando o evento junta mais de uma equipe) */
 function equipesTV(o, curto){
