@@ -1973,9 +1973,39 @@ async function testarNuvem(){
   put();
   if(L.every(x=>!/❌/.test(x))){ L.push('➡ Conexão ok. Toque em <b>Enviar agora</b>.'); put(); }
 }
+/* redesenha na hora tudo o que estiver aberto na tela deste aparelho */
+function atualizarTelas(){
+  const on = id => { const e = document.getElementById(id); return e && e.classList.contains('on'); };
+  try{ renderQuadro(); }catch(e){}
+  try{ if(on('tv')) renderTV(); }catch(e){}
+  try{ const s = document.getElementById('v-logistica'); if(s && !s.classList.contains('hide') && !LG_DRAG) renderLogistica(); }catch(e){}
+  try{ if(['v-equipes','v-produtores','v-veiculos','v-materiais','v-integracoes'].some(k=>{ const s = document.getElementById(k); return s && !s.classList.contains('hide'); })) renderCadastros(); }catch(e){}
+  try{ if(evAberto && on('ov-ev')) verEvento(evAberto); }catch(e){}
+  try{ if(on('ov-hoje')) abrirHoje(); }catch(e){}
+  try{ if(on('ov-amanha')) renderAmanha(); }catch(e){}
+  try{ if(on('ov-pend')) renderPendencias(); }catch(e){}
+  try{ renderAlertaHoje(); }catch(e){}
+}
+/* conexão ao vivo: se cair, volta sozinha e traz o que perdeu */
+let RT_ESTADO = 'ligando', RT_TENTA = 0, RT_CANAL = null, RT_VOLTA = null;
+function rtEstado(st){
+  RT_ESTADO = st;
+  if(st === 'SUBSCRIBED'){
+    RT_TENTA = 0;
+    try{ buscarNuvemLeve(); }catch(e){}            /* pode ter perdido coisa enquanto esteve fora */
+    try{ if(nuvemOk) marcarSync(true, '⚡ ao vivo'); }catch(e){}
+    return;
+  }
+  if(['CLOSED','TIMED_OUT','CHANNEL_ERROR'].includes(st)){
+    try{ if(nuvemOk) marcarSync(true, '☁ compartilhado'); }catch(e){}
+    clearTimeout(RT_VOLTA);
+    const espera = Math.min(60000, 1500 * Math.pow(2, Math.min(6, RT_TENTA++)));
+    RT_VOLTA = setTimeout(()=>{ try{ if(RT_CANAL && sb) sb.removeChannel(RT_CANAL); }catch(e){} RT_CANAL = null; try{ nuvemEscutar(); }catch(e){} }, espera);
+  }
+}
 function nuvemEscutar(){
   if(!sb) return;
-  sb.channel('plan-sync')
+  RT_CANAL = sb.channel('plan-sync')
     .on('postgres_changes', {event:'*', schema:'public', table:'plan_eventos'}, p=>{
       if(Date.now() - ignorarRealtime < 2500) return; /* eco da própria gravação */
       if(p.eventType==='DELETE'){
@@ -1988,7 +2018,8 @@ function nuvemEscutar(){
         idsConhecidos.add(d.id);
         fotografar(d); /* mudança de outro aparelho: já vem com o histórico de lá */
       }
-      renderQuadro();
+      marcarPlanoSujo(); limparSecCache();
+      atualizarTelas();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'plan_config'}, p=>{
       if(Date.now() - ignorarRealtime < 2500) return;
@@ -2005,9 +2036,10 @@ function nuvemEscutar(){
       if(d.CONFIG) CONFIG = padroesConfig(Object.assign({kmAgregado:70, piloto:'Pedro Henrique', galpao:'Av. Antonio Carlos de Souza Guadalupe, s/n, Lt 1, Qd 3 - Condomínio Industrial, Rio Bonito - RJ, 28800-000'}, d.CONFIG));
       if(d.APRENDA) APRENDA = d.APRENDA;
       SYNC_BASE.cad = digital(cadastrosAtuais());
-      renderQuadro(); renderCadastros();
+      marcarPlanoSujo(); limparSecCache();
+      atualizarTelas();
     })
-    .subscribe();
+    .subscribe(st=>{ try{ rtEstado(st); }catch(e){} });
 }
 
 /* =========================================================
@@ -2676,6 +2708,59 @@ function rotFicaDias(ini, ate){
   if(!ini || !ate) return '';
   const n = Math.max(0, difDias(ini, ate));
   return n ? 'fica ' + n + ' dia' + (n > 1 ? 's' : '') + ' · ' + fmtD(ini).slice(0,5) + ' a ' + fmtD(ate).slice(0,5) : 'volta no mesmo dia';
+}
+/* 🚛 CAVALO QUE FICA NO LOCAL
+   Quando a carreta fica, o cavalo normalmente deixa ela lá e volta pro galpão.
+   ev.ficaCav / ev.ficaCavD = { idCarreta: 'tudo' | 'AAAA-MM-DD' } — até quando o cavalo fica. */
+function ficaCavAte(e, vid, f){
+  const m = ((e && (f==='desm' ? e.ficaCavD : e.ficaCav)) || {})[vid];
+  if(!m) return null;
+  const ate = f==='desm' ? ficaAteD(e, vid) : ficaAte(e, vid);
+  if(!ate) return null;                       /* a carreta não fica: o cavalo também não */
+  if(m === 'tudo') return ate;
+  return m > ate ? ate : m;
+}
+function extraFicaCav(e, vid, f){
+  const ate = ficaCavAte(e, vid, f); if(!ate) return [];
+  const ini = f==='desm' ? iniFicaD(e, vid, ate) : iniFica(e, vid, ate);
+  if(!ini || ate < ini) return [];
+  return diasEntre(ini, ate);
+}
+function setFicaCav(id, vid, f, val){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const k = f==='desm' ? 'ficaCavD' : 'ficaCav';
+  const m = Object.assign({}, ev[k] || {});
+  const ate = f==='desm' ? ficaAteD(ev, vid) : ficaAte(ev, vid);
+  const ini = f==='desm' ? iniFicaD(ev, vid, ate) : iniFica(ev, vid, ate);
+  if(!val || val === 'volta') delete m[vid];
+  else if(val === 'tudo') m[vid] = 'tudo';
+  else if(val === 'data') m[vid] = (ini && ate && somaDiaISO(ini, 1) <= ate) ? somaDiaISO(ini, 1) : (ate || ini);
+  else if(/^20\d\d-\d\d-\d\d$/.test(val)) m[vid] = val < ini ? ini : (ate && val > ate ? ate : val);
+  else return;
+  if(Object.keys(m).length) ev[k] = m; else delete ev[k];
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id);
+  const c = cavaloObj(cavaloDe(ev, f, vid));
+  const novo = ficaCavAte(ev, vid, f);
+  toast(novo ? '🚛 ' + (c ? c.placa : 'Cavalo') + ' fica no local até ' + fmtD(novo).slice(0,5) + '.'
+             : '🚛 ' + (c ? c.placa : 'O cavalo') + ' deixa a carreta no local e volta pro galpão.');
+}
+function blocoCavFica(ev, v2, f, ate){
+  if(!ate || !ehCarreta(v2)) return '';
+  const cid = cavaloDe(ev, f, v2.id); if(!cid) return '';
+  const c = cavaloObj(cid); if(!c) return '';
+  const cAte = ficaCavAte(ev, v2.id, f);
+  const ini = f==='desm' ? iniFicaD(ev, v2.id, ate) : iniFica(ev, v2.id, ate);
+  const val = !cAte ? 'volta' : (cAte === ate ? 'tudo' : 'data');
+  return '<span style="display:flex;gap:6px;align-items:center;font-size:12px;color:'+(cAte?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="O cavalo pode deixar a carreta no local e voltar, ou ficar junto alguns dias">'+
+    '🚛 '+_lgEsc(c.placa)+
+    '<select style="border:1px solid '+(cAte?'#1c4fa0':'var(--line)')+';border-radius:7px;padding:5px 7px;font-size:12px'+(cAte?';color:#1c4fa0;font-weight:600':'')+'" onchange="setFicaCav(\''+ev.id+'\',\''+v2.id+'\',\''+f+'\',this.value)">'+
+      '<option value="volta"'+(val==='volta'?' selected':'')+'>deixa a carreta e volta</option>'+
+      '<option value="data"'+(val==='data'?' selected':'')+'>fica alguns dias…</option>'+
+      '<option value="tudo"'+(val==='tudo'?' selected':'')+'>fica junto até '+fmtD(ate).slice(0,5)+'</option>'+
+    '</select>'+
+    (val==='data' ? '<input type="date" value="'+cAte+'" min="'+(ini||'')+'" max="'+ate+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:5px 7px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFicaCav(\''+ev.id+'\',\''+v2.id+'\',\''+f+'\',this.value)">' : '')+
+    (cAte ? '<span class="tag" style="color:#1c4fa0">'+rotFicaDias(ini, cAte)+'</span>' : '')+
+  '</span>';
 }
 /* motorista que fica junto com o caminhão no local: preso nos mesmos dias */
 function motFica(e, vid){ return !!(((e && e.ficaMot) || {})[vid] && ficaAte(e, vid)); }
@@ -8388,8 +8473,9 @@ function logItensDia(D){
         const cid = cavaloDe(e, f, x.v);
         if(cid){
           const buscar = tipo === 'local' && f === 'desm' && dFase[0] === D;
+          const diasCav = extraFicaCav(e, x.v, f);
           if(tipo === 'viagem' || buscar) put(cs, cid, Object.assign({}, it, {tipo:'viagem'}));
-          else if(tipo && ficaM.includes(D)) put(cs, cid, Object.assign({}, it, {tipo:'fica'}));
+          else if(tipo && diasCav.includes(D)) put(cs, cid, Object.assign({}, it, {tipo:'fica'}));
         }
         /* motorista: só no dia da viagem, ou se ficou junto com o caminhão no local */
         if(x.motorista && (tipo === 'viagem' || ficaM.includes(D))) put(ms, x.motorista, Object.assign({}, it, {tipo: tipo === 'viagem' ? 'viagem' : 'fica'}));
@@ -9408,13 +9494,29 @@ function tvLogDados(){
     Object.keys(ev.fica||{}).forEach(vid=>{ const ate = ficaAte(ev, vid); if(ate && HOJE <= ate && dia(ev.mont) <= HOJE && !pvistos.has(vid+'|'+ev.id)){ parados.push({vid, it:{ev, f:'mont'}}); pvistos.add(vid+'|'+ev.id); } });
     Object.keys(ev.ficaD||{}).forEach(vid=>{ const ate = ficaAteD(ev, vid); if(ate && HOJE <= ate && dia(ev.desm) <= HOJE && !pvistos.has(vid+'|'+ev.id)){ parados.push({vid, it:{ev, f:'desm'}}); pvistos.add(vid+'|'+ev.id); } });
   });
+  /* 🚛 cavalo que ficou no local com a carreta (quando não voltou pro galpão) */
+  const cavs = [], cvistos = new Set();
+  eventos.forEach(ev=>{
+    if(ev.esp || !ev.mont) return;
+    ['mont','desm'].forEach(f=>{
+      const mapa = (f==='desm' ? ev.ficaCavD : ev.ficaCav) || {};
+      Object.keys(mapa).forEach(vid=>{
+        const ate = ficaCavAte(ev, vid, f); if(!ate || HOJE > ate) return;
+        const ini = f==='desm' ? iniFicaD(ev, vid, ate) : iniFica(ev, vid, ate);
+        if(!ini || HOJE < ini) return;
+        const cid = cavaloDe(ev, f, vid); if(!cid) return;
+        const k = cid + '|' + ev.id; if(cvistos.has(k)) return; cvistos.add(k);
+        cavs.push({cid, vid, ev, f, ate});
+      });
+    });
+  });
   let carregar = []; try{ carregar = carregarNoDia(HOJE).filter(c=>c.hs.diaSaida !== HOJE); }catch(e){}
-  return {saem, parados, carregar};
+  return {saem, parados, carregar, cavs};
 }
-function temLogTV(){ const d = tvLogDados(); return !!(d.saem.length || d.parados.length || d.carregar.length); }
+function temLogTV(){ const d = tvLogDados(); return !!(d.saem.length || d.parados.length || d.carregar.length || (d.cavs||[]).length); }
 function tvLogHtml(){
   const esc = _lgEsc;
-  const {saem, parados, carregar} = tvLogDados();
+  const {saem, parados, carregar, cavs} = tvLogDados();
   const stViagem = r => {
     const l = LOCS[r.key];
     if(l && Date.now() - (l.t||0) < 8*3600*1000){
@@ -9426,7 +9528,8 @@ function tvLogHtml(){
   const cartao = (c) => '<div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px 18px;margin-bottom:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+c+'</div>';
   const sec = (t, corpo) => corpo ? '<div style="margin-bottom:18px"><div style="font-size:15px;font-weight:800;letter-spacing:.8px;color:#9fb0dd;margin-bottom:8px">'+t+'</div>'+corpo+'</div>' : '';
   const bSaem = saem.map(r=>cartao(
-    '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
+    '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+
+      (function(){ try{ if(!ehCarreta(r.x.v)) return ''; const c = cavaloObj(cavaloDe(r.o.ev, r.o.fase, r.x.v.id)); return c ? ' <span style="font-size:16px;color:#9fb0dd">🚛 '+esc(c.placa)+'</span>' : ''; }catch(e){ return ''; } })()+'</b>'+
     '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+'</span>'+
     (r.fica ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local'+(r.fica !== true ? ' até '+fmtD(r.fica).slice(0,5) : '')+'</span>' : (r.permanece ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local</span>' : ''))+
@@ -9438,12 +9541,28 @@ function tvLogHtml(){
     if(ate && ate < HOJE) ate = null;   /* data velha: melhor "parado no local" do que data errada */
     return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
       '<span style="flex:1;font-size:18px">no local de '+esc(nomeTV(p.it.ev.nome))+'</span>'+
-      '<span style="font-size:17px;color:#ffb25e">'+(ate?'fica até '+fmtD(ate).slice(0,5):'parado no local')+'</span>'); }).join('');
+      '<span style="font-size:17px;color:#ffb25e">'+(ate?'fica até '+fmtD(ate).slice(0,5):'parado no local')+'</span>'+
+      (function(){   /* a carreta ficou: o cavalo está junto ou voltou pro galpão? */
+        try{
+          if(!ehCarreta(v)) return '';
+          const cid = cavaloDe(p.it.ev, p.it.f, p.vid); if(!cid) return '';
+          const c = cavaloObj(cid); if(!c) return '';
+          const cAte = ficaCavAte(p.it.ev, p.vid, p.it.f);
+          return cAte && HOJE <= cAte
+            ? '<span style="font-size:16px;color:#ffd88a">🚛 '+esc(c.placa)+' junto até '+fmtD(cAte).slice(0,5)+'</span>'
+            : '<span style="font-size:16px;color:#9be3b5">🚛 '+esc(c.placa)+' voltou pro galpão</span>';
+        }catch(e){ return ''; }
+      })()); }).join('');
+  const bCav = (cavs||[]).map(c=>{ const cv = cavaloObj(c.cid), v2 = veiculos.find(x=>x.id===c.vid);
+    return cartao('<b style="font-size:20px;min-width:210px">🅿 🚛 '+esc(cv?cv.placa:'')+'</b>'+
+      '<span style="flex:1;font-size:18px">no local de '+esc(nomeTV(c.ev.nome))+(v2?' <span style="color:#9fb0dd">com a '+esc(v2.tipo+' '+v2.placa)+'</span>':'')+'</span>'+
+      '<span style="font-size:17px;color:#ffb25e">fica até '+fmtD(c.ate).slice(0,5)+'</span>'); }).join('');
   const bCar = carregar.map(c=>cartao('<b style="font-size:20px;min-width:210px">📦 '+esc(c.x.v.tipo+' '+c.x.v.placa)+(c.x.frete?' <span style="color:#ffd88a;font-size:15px">FRETE</span>':(c.x.v.agregado?' <span style="color:#9be3b5;font-size:15px">agregado</span>':''))+'</b>'+
     '<span style="flex:1;font-size:18px">'+esc(nomeTV(c.o.ev.nome))+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">carregar hoje · sai '+rotDia(c.hs.diaSaida).toLowerCase()+' às '+esc(c.hs.saida)+'</span>')).join('');
   return '<div style="font-size:26px;font-weight:800;margin-bottom:14px">🚚 LOGÍSTICA DE HOJE <span style="font-weight:500;color:#9fb0dd;font-size:19px">· '+fmtD(HOJE)+'</span></div>'+
     sec('SAEM HOJE — ' + saem.length, bSaem)+
+    sec('🚛 CAVALOS NO LOCAL — ' + (cavs||[]).length, bCav)+
     sec('FICARAM NO LOCAL — ' + parados.length, bPar)+
     sec('CARREGAR HOJE PARA SAIR DEPOIS — ' + carregar.length, bCar)+
     (!saem.length && !parados.length && !carregar.length ? '<div style="font-size:20px;color:#9fb0dd">Nenhum caminhão na rua hoje.</div>' : '');
@@ -11949,6 +12068,7 @@ function blocoFrota(ev, modo){
                  (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFica(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
                  (minha && ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFica(ev, x.v, ate))+' até '+fmtD(ate)+' (não sai pra outro evento nesses dias)">'+rotFicaDias(iniFica(ev, x.v, ate), ate)+'</span>' : '')+
                  (minha && ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFica(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão — ele fica preso para outras viagens nesses dias"><input type="checkbox" '+(motFica(ev, x.v)?'checked':'')+' onchange="setFicaMot(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
+                 (minha && ate ? blocoCavFica(ev, v2, 'mont', ate) : '')+
                  '</span></div>';
              })() : '')+
              (fase==='desm' && conta[x.v]===total[x.v] ? (function(){
@@ -11965,6 +12085,7 @@ function blocoFrota(ev, modo){
                  (val==='data' ? '<span style="font-size:12px;color:var(--muted)">volta em</span><input type="date" value="'+(f||'')+'" style="border:1px solid #1c4fa0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1c4fa0" onchange="if(/^20\\d\\d-/.test(this.value))setFicaD(\''+ev.id+'\',\''+x.v+'\',this.value)">' : '')+
                  (ate ? '<span class="tag" style="color:#1c4fa0" title="O caminhão fica preso de '+fmtD(iniFicaD(ev, x.v, ate))+' até '+fmtD(ate)+'">'+rotFicaDias(iniFicaD(ev, x.v, ate), ate)+'</span>' : '')+
                  (ate ? '<label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:'+(motFicaD(ev, x.v)?'#1c4fa0;font-weight:600':'var(--muted)')+'" title="Marque se o motorista também fica no local com o caminhão"><input type="checkbox" '+(motFicaD(ev, x.v)?'checked':'')+' onchange="setFicaMotD(\''+ev.id+'\',\''+x.v+'\',this.checked)">🧑‍✈️ '+(x.motorista ? x.motorista.split(' ')[0] : 'motorista')+' fica junto</label>' : '')+
+                 (ate ? blocoCavFica(ev, v2, 'desm', ate) : '')+
                  '</span></div>';
              })() : '');
     }).join('') : '<div class="row"><span style="color:var(--muted)">Nenhum veículo alocado.</span></div>') +
@@ -15869,13 +15990,54 @@ function abrirAgendaNome(el){ abrirAgenda(el.dataset.t, el.dataset.n); }
 /* ================= TELA DO GALPÃO (MODO TV) =================
    Sem botões: mostra o que sai hoje e amanhã, com hora de carregar e sair.
    Atualiza sozinha; se a lista não couber, rola devagar. Abre direto com #tv no endereço. */
-let tvTimer = null, tvRelogio = null, tvRola = null, tvWake = null;
+let tvTimer = null, tvRelogio = null, tvRola = null, tvWake = null, tvNuvem = null;
+/* busca leve do quadro na nuvem: traz o que é novo e o que mudou em outro aparelho,
+   sem atropelar mudança local que ainda não subiu. É a rede de segurança do tempo real. */
+let BUSCA_NUVEM = 0;
+async function buscarNuvemLeve(forcar){
+  if(!sb) return 0;
+  if(!forcar && Date.now() - BUSCA_NUVEM < 4000) return 0;   /* não repete em rajada */
+  BUSCA_NUVEM = Date.now();
+  try{
+    const r = await sb.from('plan_eventos').select('id,dados');
+    if(r.error || !r.data) return 0;
+    const daNuvem = r.data.map(x=>x.dados).filter(d=>d && d.id);
+    const ids = new Set(daNuvem.map(d=>d.id));
+    let mudou = 0;
+    daNuvem.forEach(d=>{
+      const i2 = eventos.findIndex(e=>e.id===d.id);
+      if(i2 < 0){ eventos.push(d); SYNC_BASE.ev[d.id] = digital(d); mudou++; }
+      else if(!evSujo(eventos[i2]) && digital(eventos[i2]) !== digital(d)){ eventos[i2] = d; SYNC_BASE.ev[d.id] = digital(d); mudou++; }
+    });
+    /* apagado em outro aparelho (e não é coisa nossa que ainda não subiu) */
+    const fora = eventos.filter(e=>!ids.has(e.id) && SYNC_BASE.ev[e.id] !== undefined);
+    if(fora.length){ eventos = eventos.filter(e=>ids.has(e.id) || SYNC_BASE.ev[e.id] === undefined); mudou += fora.length; }
+    if(mudou){
+      idsConhecidos = new Set(eventos.map(e=>e.id));
+      marcarPlanoSujo(); limparSecCache();
+      try{ fotografarTudo(); }catch(e){}
+      atualizarTelas();
+    } else { try{ const t2 = document.getElementById('tv'); if(t2 && t2.classList.contains('on')) renderTV(); }catch(e){} }
+    return mudou;
+  }catch(e){ return 0; }
+}
+const tvBuscarNuvem = () => buscarNuvemLeve();
+/* volta do descanso, da aba escondida ou da internet: confere a nuvem na hora */
+if(typeof window !== 'undefined'){
+  window.addEventListener('online', ()=>{ try{ buscarNuvemLeve(true); }catch(e){} });
+  window.addEventListener('focus', ()=>{ try{ buscarNuvemLeve(); }catch(e){} });
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ try{ buscarNuvemLeve(); }catch(e){} } });
+  /* rede de segurança: mesmo fora da TV, confere a nuvem de 2 em 2 minutos */
+  setInterval(()=>{ try{ if(!window.__modoMotorista && RT_ESTADO !== 'SUBSCRIBED') buscarNuvemLeve(); }catch(e){} }, 60000);
+  setInterval(()=>{ try{ if(!window.__modoMotorista) buscarNuvemLeve(); }catch(e){} }, 120000);
+}
 function abrirTV(){
   document.getElementById('tv').classList.add('on');
   try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){}
   try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ tvWake = w; }).catch(()=>{}); }catch(e){}
   renderTV();
   clearInterval(tvTimer); tvTimer = setInterval(renderTV, 60*1000);
+  clearInterval(tvNuvem); tvNuvem = setInterval(()=>buscarNuvemLeve(true), 45*1000);   /* TV: confere a nuvem bem de perto */
   clearInterval(tvRelogio); tvRelogio = setInterval(relogioTV, 1000); relogioTV();
   clearInterval(tvRola); tvRola = setInterval(rolarTV, 40);
   tvMostrarCards(); clearTimeout(tvCarrossel); tvCarrossel = setTimeout(tvAlternar, 40000);
@@ -15886,7 +16048,7 @@ function abrirTV(){
 function fecharTV(){
   const t = document.getElementById('tv'); if(!t || !t.classList.contains('on')) return;
   t.classList.remove('on');
-  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola); clearTimeout(tvCarrossel); clearTimeout(TV_AL_T);
+  clearInterval(tvTimer); clearInterval(tvRelogio); clearInterval(tvRola); clearInterval(tvNuvem); clearTimeout(tvCarrossel); clearTimeout(TV_AL_T);
   try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
   try{ if(tvWake) tvWake.release(); }catch(e){}
   try{ if(location.hash === '#tv') history.replaceState(null, '', location.pathname + location.search); }catch(e){}
@@ -16083,7 +16245,7 @@ function cardTV(o, D){
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
-    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
+    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+(function(){ try{ if(!ehCarreta(x.v)) return ''; const c = cavaloObj(cavaloDe(o.ev, x.fase||o.fase, x.v.id)); return c ? ' 🚛 '+esc(c.placa) : ''; }catch(e){ return ''; } })()+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
     produtorTV(o)+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
