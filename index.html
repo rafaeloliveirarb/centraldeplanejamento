@@ -16286,6 +16286,25 @@ function carregarTV(){
     l.map(c=>'<div class="tv-lin"><span class="tv-cam">'+esc(c.x.v.tipo+' '+c.x.v.placa)+'</span>'+(c.x.frete?' <b style="color:#ffd88a">FRETE'+(c.x.emp?' · '+esc(c.x.emp):'')+'</b>':(c.x.v.agregado?' <b style="color:#9be3b5">agregado'+(c.x.v.motoristaFixo?' · '+esc(c.x.v.motoristaFixo):'')+'</b>':''))+' '+esc(c.o.ev.nome)+(c.x.junto?' + '+esc(nomesJunto(c.o.ev.id, c.x.junto)):'')+
       ' — monta <b style="color:#ffb25e">'+(c.D===HOJE?'hoje':rotDia(c.D).toLowerCase())+' às '+(c.o.hora||'—')+'</b></div>').join('')+'</div>';
 }
+/* 🔧 manutenções do dia: caixa própria no topo da coluna, para não se perder no meio */
+function manutTV(D){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = eventos.filter(e=>{
+    if(!e.manutPai || e.esp || !e.mont) return false;
+    try{ return diasEntre(e.mont, fimMont(e)).includes(D); }catch(err){ return dia(e.mont) === D; }
+  }).sort((a,b)=>String(a.mont||'').slice(11,16).localeCompare(String(b.mont||'').slice(11,16)));
+  if(!L.length) return '';
+  return '<div class="tv-op" style="border-left-color:#f0a93c;background:#4a3414"><div class="tv-nome">🔧 MANUTENÇÃO '+(D===HOJE?'HOJE':rotDia(D).toUpperCase())+'</div>'+
+    L.map(m=>{
+      const pes = (function(){ try{ return montadoresOp(m, m.equipe || plano(m).equipe); }catch(e){ return m.montOp || []; } })();
+      const dias = (function(){ try{ return diasEntre(m.mont, fimMont(m)); }catch(e){ return [D]; } })();
+      const qual = dias.length > 1 ? ' <span style="color:#ffd8a8">dia '+(dias.indexOf(D)+1)+' de '+dias.length+'</span>' : '';
+      return '<div class="tv-lin"><b>'+esc(nomeTV(m.nome))+'</b>'+qual+
+        ' — <b style="color:#ffb25e">'+String(m.mont||'').slice(11,16)+(m.manutHFim ? ' às '+m.manutHFim : '')+'</b>'+
+        (pes.length ? '<div class="tv-lin" style="margin-top:2px">👷 '+esc(pes.join(', '))+'</div>' : (m.equipe ? '<div class="tv-lin" style="margin-top:2px">👷 '+esc(m.equipe)+'</div>' : ''))+
+      '</div>';
+    }).join('')+'</div>';
+}
 function listaTV(D){
   const r = opsDoDia(D);
   /* em ordem de saída do caminhão; sem caminhão, pela hora de início */
@@ -16326,7 +16345,7 @@ function renderTV(){
     corpo = (corpo || '') + baseTV(D, i > 0);
     return '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
-      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+(r.ops.length || baseDoDia(D).length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+manutTV(D)+(r.ops.length || baseDoDia(D).length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
   };
   document.getElementById('tv-cols').innerHTML = listas.map(colHtml).join('');
   contagemTV(listas[0].r);
