@@ -8787,6 +8787,7 @@ function abrirNovaManut(evId){
         '</div><small style="color:var(--muted);font-size:11.5px">Sem marcar ninguém, vai a equipe inteira escolhida acima.</small></div>';
     })()+
     '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;margin-top:12px"><input type="checkbox" id="mn-cam">🚚 Vai precisar de caminhão <small style="color:var(--muted)">(a manutenção quase sempre é só os montadores)</small></label>'+
+    '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;margin-top:6px"><input type="checkbox" id="mn-prod">🎬 Vai ter produtor acompanhando <small style="color:var(--muted)">(quase sempre não tem)</small></label>'+
     '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="criarManut(\''+ev.id+'\')">🔧 Criar card</button>'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
@@ -8807,7 +8808,8 @@ function criarManut(evId){
   const id = 'e' + Date.now();
   eventos.push({
     id, nome, os: '—', manutPai: ev.id, manutHFim: h2 || null,   /* sem OS: não se mistura com o card do evento nas importações */
-    produtor: ev.produtor || null, respNome: ev.respNome || null, respTel: ev.respTel || null,
+    produtor: (document.getElementById('mn-prod')||{}).checked ? (ev.produtor || null) : SEM_PRODUTOR,
+    respNome: ev.respNome || null, respTel: ev.respTel || null,
     cidade: ev.cidade || '—', local: ev.local || '—', km: +ev.km || 0,
     mont: d1 + 'T' + h1, montFim: fim, evt: fim || d1, evtFim: null, desm: '', desmFim: null,
     equipe: g('mn-eq') || (pessoas.length ? (todosMontadores().find(t=>t.nome===pessoas[0])||{}).equipe || null : null),
@@ -9967,6 +9969,7 @@ function secoesStatusCalc(ev){
   if(nfPend.length) put('nf', nfPend.some(t=>true) && ((ev.mont && !ev.nfM && difDias(HOJE, dia(ev.mont)) <= 1 && dia(ev.mont) >= HOJE) || (ev.desm && !ev.nfD && difDias(HOJE, dia(ev.desm)) <= 1 && dia(ev.desm) >= HOJE)) ? 'verm' : 'amar', '🧾 emitir nota fiscal de ' + nfPend.join(' e '));
   else put('nf','verde', terceiro ? 'evento todo terceirizado' : 'nenhuma nota para os próximos 2 dias');
   if(nfPend.length) put('producao','verm','🧾 emitir nota fiscal de ' + nfPend.join(' e '));
+  else if(ev.manutPai && (ev.produtor===SEM_PRODUTOR || !produtorDo(ev))) put('producao','verde','manutenção — sem produtor');
   else if(!produtorDo(ev) || ev.produtor===SEM_PRODUTOR) put('producao','verm','sem produtor');
   else if(!ev.produtor) put('producao','amar','produtor sugerido pela IA — falta confirmar');
   else if(!ev.respNome || !ev.respTel) put('producao','amar','falta o responsável no local (nome e telefone)');
