@@ -8719,6 +8719,89 @@ function htmlViagensVivas(){
     ' <small style="color:var(--muted)">— a mesma tela que o motorista tem no celular</small></summary>'+corpo+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:6px">⚪ não abriu · 👀 abriu mas não saiu · 🚚 na estrada (atualiza sozinho) · ✅ no local · 🏠 voltou. A posição só chega enquanto o motorista estiver com o link aberto no celular.</div></details>';
 }
+/* ---------- 🔧 cards de manutenção criados a partir de um evento ---------- */
+function manutsDe(evId){ return eventos.filter(e=>e.manutPai === evId).sort((a,b)=>String(a.mont||'').localeCompare(String(b.mont||''))); }
+function horaManut(ev){ return String(ev.mont||'').slice(11,16); }
+function blocoManutEv(ev){
+  if(ev.manutPai){
+    const pai = eventos.find(e=>e.id===ev.manutPai);
+    return '<div style="grid-column:1/-1"><div class="alert" style="margin:0">🔧 <b>Card de manutenção</b>'+
+      (pai ? ' de <a href="#" onclick="event.preventDefault();verEvento(\''+pai.id+'\')"><b>'+_lgEsc(pai.nome)+'</b></a>' : '')+
+      (horaManut(ev) ? ' · começa às <b>'+horaManut(ev)+'</b>'+(ev.manutHFim ? ' e vai até <b>'+ev.manutHFim+'</b>' : '') : '')+'</div></div>';
+  }
+  const L = manutsDe(ev.id);
+  return '<div style="grid-column:1/-1;border:1px dashed var(--line);border-radius:9px;padding:10px 12px">'+
+    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+      '<b style="font-size:13px">🔧 Manutenção</b>'+
+      '<small style="color:var(--muted);flex:1;min-width:190px">um card separado para a manutenção deste evento — nome, data, horário e equipe</small>'+
+      '<button class="mini" style="font-weight:800" onclick="abrirNovaManut(\''+ev.id+'\')">+ Criar card de manutenção</button></div>'+
+    (L.length ? '<div style="margin-top:6px">'+L.map(m=>'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;padding:6px 0;border-top:1px solid var(--line)">'+
+        '<a href="#" onclick="event.preventDefault();verEvento(\''+m.id+'\')" style="font-weight:700;color:var(--ink2);flex:1;min-width:170px">🔧 '+_lgEsc(m.nome)+'</a>'+
+        '<span style="color:var(--muted)">📅 '+fmtD(m.mont).slice(0,5)+(dia(m.mont)!==dia(fimMont(m)) ? ' a '+fmtD(fimMont(m)).slice(0,5) : '')+
+          (horaManut(m) ? ' · 🕐 '+horaManut(m)+(m.manutHFim ? ' às '+m.manutHFim : '') : '')+'</span>'+
+        '<span class="tag">👷 '+_lgEsc(m.equipe || 'sem equipe')+'</span>'+
+        '<button class="mini danger" onclick="excluirManut(\''+m.id+'\')">Excluir</button></div>').join('')+'</div>' : '')+
+  '</div>';
+}
+function abrirNovaManut(evId){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const d1 = dia(ev.evt) || dia(ev.mont) || HOJE;
+  const eqAtual = ev.equipe || plano(ev).equipe || '';
+  const inp = 'border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:13px';
+  const corpo =
+    '<label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Nome do card</label>'+
+    '<input id="mn-nome" value="'+_lgEsc(ev.nome + ' - Manutenção').replace(/"/g,'&quot;')+'" style="width:100%;'+inp+'">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Começa no dia</label><input type="date" id="mn-d1" value="'+d1+'" style="'+inp+'"></div>'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">às</label><input type="time" id="mn-h1" value="08:00" style="'+inp+'"></div>'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Termina no dia</label><input type="date" id="mn-d2" value="'+d1+'" style="'+inp+'"></div>'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">às</label><input type="time" id="mn-h2" value="18:00" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Equipe</label>'+
+      '<select id="mn-eq" style="'+inp+';min-width:230px">'+
+        '<option value="">— a definir —</option>'+
+        equipes.map(e=>'<option '+(e.nome===eqAtual?'selected':'')+'>'+_lgEsc(e.nome)+'</option>').join('')+
+        '<option '+(eqAtual===EQUIPE_TERC?'selected':'')+'>'+EQUIPE_TERC+'</option>'+
+      '</select></div>'+
+    '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="criarManut(\''+ev.id+'\')">🔧 Criar card</button>'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">O card novo entra no quadro como qualquer outro evento, já com o local, a cidade, o km e o produtor deste aqui. A equipe escolhida entra na escala nos dias da manutenção.</div>';
+  lgModal('🔧 Novo card de manutenção', _lgEsc(ev.nome), corpo);
+}
+function criarManut(evId){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  const g = i => String((document.getElementById(i)||{}).value || '').trim();
+  const nome = g('mn-nome') || (ev.nome + ' - Manutenção');
+  const d1 = g('mn-d1'), h1 = g('mn-h1') || '08:00', d2 = g('mn-d2'), h2 = g('mn-h2') || '';
+  if(!d1) return toast('Escolha o dia em que a manutenção começa.');
+  const fim = d2 && d2 > d1 ? d2 : null;
+  const id = 'e' + Date.now();
+  eventos.push({
+    id, nome, os: '—', manutPai: ev.id, manutHFim: h2 || null,   /* sem OS: não se mistura com o card do evento nas importações */
+    produtor: ev.produtor || null, respNome: ev.respNome || null, respTel: ev.respTel || null,
+    cidade: ev.cidade || '—', local: ev.local || '—', km: +ev.km || 0,
+    mont: d1 + 'T' + h1, montFim: fim, evt: fim || d1, evtFim: null, desm: '', desmFim: null,
+    equipe: g('mn-eq') || null, estado: 'alinhamento', aprovado: false, permanece: false, itens: [],
+    hist: [{q: new Date().toISOString(), quem: 'Central', o: ['🔧 Card de manutenção criado a partir de ' + ev.nome]}]
+  });
+  try{ marcarVisto(id); }catch(e){}
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  fechar('ov-lg');
+  verEvento(ev.id);
+  toast('🔧 Card de manutenção criado: ' + nome + ' — ' + fmtD(d1).slice(0,5) + ' às ' + h1 + '.', 'Abrir', ()=>verEvento(id));
+}
+function excluirManut(id){
+  const m = eventos.find(e=>e.id===id); if(!m) return;
+  if(!confirm('Excluir o card de manutenção "' + m.nome + '"?')) return;
+  const pai = m.manutPai;
+  const copia = JSON.parse(JSON.stringify(m));
+  const i = eventos.findIndex(e=>e.id===id);
+  eventos.splice(i, 1);
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  if(pai) verEvento(pai);
+  toast('🔧 Card de manutenção excluído.', 'Desfazer', ()=>{ eventos.splice(Math.min(i, eventos.length), 0, copia); marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); if(pai) verEvento(pai); });
+}
 /* ---------- janela genérica do painel de logística ---------- */
 function lgModal(titulo, sub, corpo){
   let o = document.getElementById('ov-lg');
@@ -9240,10 +9323,28 @@ function avisoPrevisao(){
   }catch(e){}
 }
 /* ===== 5) TELA DE LOGÍSTICA NA TV ===== */
+/* todo caminhão que PARTE do galpão hoje — inclusive os que vão ficar no local depois
+   (o painel de retornos esconde esses, mas na TV eles precisam aparecer) */
+function saemHoje(){
+  const out = [], vistos = new Set(), D = HOJE;
+  opsDoDia(D).ops.forEach(o=>o.viagens.forEach(x=>{
+    if(x.jaLocal) return;                       /* já está no local: não sai de novo */
+    const grupo = x.junto ? membrosJunto(o.ev.id, x.junto).slice().sort().join('+') : o.ev.id;
+    const k0 = x.v.id + '|' + grupo + '|' + o.fase; if(vistos.has(k0)) return; vistos.add(k0);
+    let hs = null; try{ hs = horariosSaida(o.ev, o.fase, D); }catch(e){}
+    let ate = null;
+    try{ ate = o.fase === 'desm' ? ficaAteD(o.ev, x.v.id) : ficaAte(o.ev, x.v.id); }catch(e){}
+    try{ if(o.fase !== 'desm') ficaVLista(o.ev, x.v.id).forEach(y=>{ if(y.de === (x.dia || dia(o.ev.mont))) ate = y.ate; }); }catch(e){}
+    out.push({o, x, D, key: [o.ev.id, o.fase, D, x.i].join('|'), saida: hs ? (x.hSai || hs.saida) : '',
+      fica: (o.ev.permanece || (ate && ate >= D)) ? (ate || null) : null, permanece: !!o.ev.permanece});
+  }));
+  return out.sort((a,b)=>String(a.saida).localeCompare(String(b.saida)));
+}
 function tvLogDados(){
-  let saem = []; try{ saem = retornosCaminhoes(); }catch(e){}
-  const parados = [], pvistos = new Set();
-  try{ const d = logItensDia(HOJE); Object.keys(d.vs).forEach(vid=>d.vs[vid].forEach(it=>{ if(it.tipo==='fica' || it.tipo==='local'){ parados.push({vid, it}); pvistos.add(vid+'|'+it.ev.id); } })); }catch(e){}
+  let saem = []; try{ saem = saemHoje(); }catch(e){ try{ saem = retornosCaminhoes(); }catch(e2){} }
+  const jaSai = new Set(saem.map(r=>r.x.v.id + '|' + r.o.ev.id));
+  const parados = [], pvistos = new Set(jaSai);
+  try{ const d = logItensDia(HOJE); Object.keys(d.vs).forEach(vid=>d.vs[vid].forEach(it=>{ if((it.tipo==='fica' || it.tipo==='local') && !pvistos.has(vid+'|'+it.ev.id)){ parados.push({vid, it}); pvistos.add(vid+'|'+it.ev.id); } })); }catch(e){}
   /* marcado "ficou no local" hoje: aparece como parado mesmo no dia da viagem */
   eventos.forEach(ev=>{
     if(ev.esp || !ev.mont) return;
@@ -9271,6 +9372,7 @@ function tvLogHtml(){
     '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+'</b>'+
     '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+'</span>'+
+    (r.fica ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local'+(r.fica !== true ? ' até '+fmtD(r.fica).slice(0,5) : '')+'</span>' : (r.permanece ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local</span>' : ''))+
     (stViagem(r) ? '<span style="font-size:17px">'+stViagem(r)+'</span>' : ''))).join('');
   const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid);
     let ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
@@ -9478,6 +9580,7 @@ function verEvento(id){
         'onchange="setKmEvento(\''+ev.id+'\',this.value)"><b>km</b>'+
         '<button class="mini" onclick="calcularKm(\''+ev.id+'\')" title="Distância por estrada do galpão até o local do evento">📍 Calcular</button></div>'+
         (ev.kmFonte ? '<small style="color:var(--muted);font-size:11px">calculado pelo '+(ev.kmFonte==='cidade'?'centro da cidade — confira':'endereço do local')+(ev.rotaCaminhao?' · rota de caminhão ('+ev.rotaCaminhao+')':'')+'</small>' : '')+'</div>'+
+      blocoManutEv(ev)+
       '</div></div>'+
 
     '<div class="sec" id="sec-equipes"><h4>'+dotSec(ev,'equipes')+' 👥 EQUIPES</h4>'+
@@ -15876,6 +15979,11 @@ function cardTV(o, D){
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
     (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
+    (function(){   /* produtor do evento */
+      const pn = produtorDo(o.ev);
+      if(!pn || pn === SEM_PRODUTOR) return '';
+      return '<div class="tv-lin">🎬 <b>'+esc(pn)+'</b></div>';
+    })()+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
     (function(){ if(o.fase === 'desm') return ''; try{
       const por = {};
@@ -16481,7 +16589,7 @@ async function salvar(){
     dedupeEventos();   /* mesmo id duas vezes: fica uma cópia (antes as duas sumiam) */
     if(!nuvemOk && ERRO_NUVEM) marcarSync(false, textoOff());
     const porBase = {};
-    eventos.forEach(e=>{ const nb = nomeBase(e.nome); if(nb) (porBase[nb]=porBase[nb]||[]).push(e); });
+    eventos.forEach(e=>{ if(e.manutPai) return; const nb = nomeBase(e.nome); if(nb) (porBase[nb]=porBase[nb]||[]).push(e); });
     const remover = new Set();
     Object.values(porBase).forEach(g=>{
       if(g.length < 2) return;
