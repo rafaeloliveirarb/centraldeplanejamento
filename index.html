@@ -2054,7 +2054,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '05/11 15:35';
+const VERSAO = '05/11 18:30';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -16476,7 +16476,18 @@ function equipesTV(o, curto){
     grupos[g].push(esc(pp.nome) + (pp.mt ? ' (manut.)' : ''));
   });
   ordem.sort((a,b)=>(a===o.equipe?-1:0) - (b===o.equipe?-1:0));
-  return ordem.map(g=>'<div class="tv-lin"'+(curto?' style="font-size:13.5px;margin-top:4px"':'')+'>👷 <b>'+esc(g)+'</b>'+(ordem.length>1?' <small style="opacity:.75">('+grupos[g].length+')</small>':'')+': '+grupos[g].join(', ')+'</div>').join('');
+  const nomesDoDia = new Set(pess.map(pp=>pp.nome));
+  /* o nome do líder só entra se ele estiver no evento; senão vão só os montadores */
+  const temLider = g => {
+    const e2 = equipes.find(x=>x.nome === g);
+    const lid = e2 ? (e2.lider || e2.nome) : g;
+    return nomesDoDia.has(lid);
+  };
+  return ordem.map(g=>{
+    const n = ordem.length > 1 ? ' <small style="opacity:.75">('+grupos[g].length+')</small>' : '';
+    return '<div class="tv-lin"'+(curto?' style="font-size:13.5px;margin-top:4px"':'')+'>👷 '+
+      (temLider(g) ? '<b>'+esc(g)+'</b>'+n+': '+grupos[g].join(', ') : '<b>'+grupos[g].join(', ')+'</b>'+n)+'</div>';
+  }).join('');
 }
 /* previsão do dia no card (pede a previsão se ainda não tiver) */
 function climaTV(o, D, curto){
@@ -16513,7 +16524,6 @@ function contagemTV(r){
   box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span>'+
     '<span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+
     '<span title="'+tt(todos.filter(n2=>trab.has(n2)))+'">🧑‍🔧 <b>'+nTrab+'</b>trabalhando</span>'+
-    '<span title="'+tt(livres)+'">🏠 <b>'+livres.length+'</b>livre'+(livres.length===1?'':'s')+'</span>'+
     (nFolga ? '<span title="'+tt(todos.filter(n2=>folga.has(n2) && !trab.has(n2)))+'">💤 <b>'+nFolga+'</b>de folga</span>' : '')+
     (pessBase.size?'<span title="'+tt([...pessBase])+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'');
 }
