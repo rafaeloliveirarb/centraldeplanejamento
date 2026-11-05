@@ -2054,7 +2054,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '05/11 15:10';
+const VERSAO = '05/11 15:20';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -16507,8 +16507,7 @@ function contagemTV(r){
     '<span title="'+tt(todos.filter(n2=>trab.has(n2)))+'">🧑‍🔧 <b>'+nTrab+'</b>trabalhando</span>'+
     '<span title="'+tt(livres)+'">🏠 <b>'+livres.length+'</b>livre'+(livres.length===1?'':'s')+'</span>'+
     (nFolga ? '<span title="'+tt(todos.filter(n2=>folga.has(n2) && !trab.has(n2)))+'">💤 <b>'+nFolga+'</b>de folga</span>' : '')+
-    (pessBase.size?'<span title="'+tt([...pessBase])+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'')+
-    '<span>🏭 <b>'+liv+'</b>equipe'+(liv===1?'':'s')+' livre'+(liv===1?'':'s')+'</span>';
+    (pessBase.size?'<span title="'+tt([...pessBase])+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'');
 }
 /* folgas e férias de hoje e amanhã, pela Escala de Montadores */
 let TV_FOLGAS = {t:0, html:''};
