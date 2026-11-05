@@ -2054,7 +2054,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '05/11 15:20';
+const VERSAO = '05/11 15:35';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -16124,7 +16124,7 @@ async function tvAlternar(){
 /* frentes de trabalho da operação: líderes das equipes + quantas pessoas no local */
 function frentesTV(o){
   const tods = todosMontadores();
-  const pess = (o.pessoas||[]).filter(pp=>!pp.prod).map(pp=>pp.nome);
+  const pess = pessoasTrabalhando(o).map(pp=>pp.nome);
   const principal = (o.equipe && o.equipe !== EQUIPE_TERC) ? o.equipe : null;
   const grupos = {}, ordem = [];
   const add = (q, n2) => { if(!grupos[q]){ grupos[q] = []; ordem.push(q); } if(n2) grupos[q].push(n2); };
@@ -16233,7 +16233,7 @@ function cardTV(o, D){
   const hs = saidaDaOp(o, D);
   const cam = situacaoCaminhao(o, D);
   const st = cam.length ? {cls: cam.every(c=>c.local) ? '' : 'agora', txt: cam.every(c=>c.local) ? 'NO LOCAL' : 'A CAMINHO'} : statusTV(hs, D, o);
-  const semLider = o.pessoas.filter(pp=>!pp.prod);
+  const semLider = pessoasTrabalhando(o, D);
   const local = localCurtoTV(o.ev);
   const al = [];
   const tempo = climaTV(o, D);
@@ -16300,7 +16300,7 @@ function manutTV(D){
   if(!L.length) return '';
   return '<div class="tv-op" style="border-left-color:#f0a93c;background:#4a3414"><div class="tv-nome">🔧 MANUTENÇÃO '+(D===HOJE?'HOJE':rotDia(D).toUpperCase())+'</div>'+
     L.map(m=>{
-      const pes = (function(){ try{ return montadoresOp(m, m.equipe || plano(m).equipe); }catch(e){ return m.montOp || []; } })();
+      const pes = (function(){ try{ return montadoresOp(m, m.equipe || plano(m).equipe).filter(n2=>!folgaDe(n2, D)); }catch(e){ return m.montOp || []; } })();
       const dias = (function(){ try{ return diasEntre(m.mont, fimMont(m)); }catch(e){ return [D]; } })();
       const qual = dias.length > 1 ? ' <span style="color:#ffd8a8">dia '+(dias.indexOf(D)+1)+' de '+dias.length+'</span>' : '';
       return '<div class="tv-lin"><b>'+esc(nomeTV(m.nome))+'</b>'+qual+
@@ -16376,7 +16376,7 @@ function calcRodTV(){
       marca(o.equipe || o.ev.equipe);
       /* troca de montador: gente de OUTRA equipe trabalhando no evento também conta — a equipe dela não está livre */
       try{
-        const nomes = new Set((o.pessoas||[]).filter(pp=>!pp.prod).map(pp=>pp.nome));
+        const nomes = new Set(pessoasTrabalhando(o, HOJE).map(pp=>pp.nome));
         if(nomes.size) equipes.forEach(e3=>{ if(e3.nome !== EQUIPE_TERC && (nomes.has(e3.nome) || (e3.membros||[]).some(m=>nomes.has(m)))) marca(e3.nome); });
       }catch(e){}
     });
@@ -16455,10 +16455,18 @@ function produtorTV(o, curto){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
   return '<div class="tv-lin"'+(curto?' style="font-size:13.5px;margin-top:4px"':'')+'>🎬 <b>'+esc(pn)+'</b></div>';
 }
+/* quem realmente trabalha no dia: sem produtor e sem quem está de folga ou férias */
+function pessoasTrabalhando(o, D){
+  const dia2 = D || o.dia || HOJE;
+  return (o.pessoas||[]).filter(pp=>{
+    if(pp.prod) return false;
+    try{ return !folgaDe(pp.nome, dia2); }catch(e){ return true; }
+  });
+}
 /* pessoas do dia separadas pela equipe de cada uma (quando o evento junta mais de uma equipe) */
 function equipesTV(o, curto){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const pess = (o.pessoas||[]).filter(pp=>!pp.prod);
+  const pess = pessoasTrabalhando(o);
   if(!pess.length) return '';
   const tods = todosMontadores(), grupos = {}, ordem = [];
   pess.forEach(pp=>{
@@ -16485,14 +16493,14 @@ function contagemTV(r){
   const cam = new Set(), eqs = new Set();
   const tods = todosMontadores();
   r.ops.forEach(o=>{ o.viagens.forEach(x=>cam.add(x.v.id)); if(o.equipe && o.equipe !== EQUIPE_TERC) eqs.add(o.equipe);
-    (o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>{ const t = tods.find(x=>x.nome===pp.nome); if(t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC) eqs.add(t.equipe); }); });
+    pessoasTrabalhando(o, HOJE).forEach(pp=>{ const t = tods.find(x=>x.nome===pp.nome); if(t && t.equipe && t.equipe !== 'piloto' && t.equipe !== EQUIPE_TERC) eqs.add(t.equipe); }); });
   const tot = equipes.filter(e=>e.nome !== EQUIPE_TERC).length;
   const eqBase = new Set(baseDoDia(HOJE).map(s=>s.equipe).filter(q=>q && !eqs.has(q)));
   const pessBase = new Set(); baseDoDia(HOJE).forEach(s=>{ pessoasBase(s).forEach(p2=>pessBase.add(p2)); motoristasBase(s).forEach(m=>pessBase.add(m)); });
   const liv = Math.max(0, tot - eqs.size - eqBase.size);
   /* pessoas: quem está trabalhando hoje e quem está livre no galpão */
   const trab = new Set();
-  r.ops.forEach(o=>(o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>trab.add(pp.nome)));
+  r.ops.forEach(o=>pessoasTrabalhando(o, HOJE).forEach(pp=>trab.add(pp.nome)));
   pessBase.forEach(n2=>trab.add(n2));
   const todos = [...new Set(todosMontadores().map(t=>t.nome))];
   const folga = new Set();
