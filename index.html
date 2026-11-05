@@ -3200,6 +3200,12 @@ function analisar(ev, ag){
     }
   }
 
+  /* marcado como "sem caminhão" (manutenção, serviço só com montadores): nada de frota */
+  if(ev.semCaminhao){
+    r.frota = []; r.escala = []; r.motorista = null;
+    r.just.frota = 'Marcado como serviço sem caminhão — só a equipe.';
+    return r;
+  }
   /* 3, 4 e 5 — peso, volume e veículo */
   let f = escolherFrota(c, ag, dVe, ev);
   let esc = montarEscala(f.ids, ag, ev, dEq);
@@ -8740,12 +8746,14 @@ function blocoManutEv(ev){
         '<span style="color:var(--muted)">📅 '+fmtD(m.mont).slice(0,5)+(dia(m.mont)!==dia(fimMont(m)) ? ' a '+fmtD(fimMont(m)).slice(0,5) : '')+
           (horaManut(m) ? ' · 🕐 '+horaManut(m)+(m.manutHFim ? ' às '+m.manutHFim : '') : '')+'</span>'+
         '<span class="tag" title="'+_lgEsc((m.montOp||[]).join(', '))+'">👷 '+_lgEsc((m.montOp && m.montOp.length) ? m.montOp.slice(0,3).join(', ') + (m.montOp.length>3 ? ' +'+(m.montOp.length-3) : '') : (m.equipe || 'sem equipe'))+'</span>'+
+        (dia(fimMont(m)) < HOJE ? '<span class="tag" style="color:#b0483c" title="esse dia já passou, por isso o card não aparece na TV">⚠ já passou <a href="#" onclick="event.preventDefault();manutParaHoje(\''+m.id+'\')" style="color:#1c4fa0">trazer para hoje</a></span>' : '')+
         '<button class="mini danger" onclick="excluirManut(\''+m.id+'\')">Excluir</button></div>').join('')+'</div>' : '')+
   '</div>';
 }
 function abrirNovaManut(evId){
   const ev = eventos.find(e=>e.id===evId); if(!ev) return;
-  const d1 = dia(ev.evt) || dia(ev.mont) || HOJE;
+  let d1 = dia(ev.evt) || dia(ev.mont) || HOJE;
+  if(d1 < HOJE) d1 = HOJE;            /* evento que já passou: a manutenção é de hoje em diante */
   const eqAtual = ev.equipe || plano(ev).equipe || '';
   const inp = 'border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:13px';
   const corpo =
@@ -8778,6 +8786,7 @@ function abrirNovaManut(evId){
           '</div></div>').join('')+
         '</div><small style="color:var(--muted);font-size:11.5px">Sem marcar ninguém, vai a equipe inteira escolhida acima.</small></div>';
     })()+
+    '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;margin-top:12px"><input type="checkbox" id="mn-cam">🚚 Vai precisar de caminhão <small style="color:var(--muted)">(a manutenção quase sempre é só os montadores)</small></label>'+
     '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="criarManut(\''+ev.id+'\')">🔧 Criar card</button>'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
@@ -8803,6 +8812,7 @@ function criarManut(evId){
     mont: d1 + 'T' + h1, montFim: fim, evt: fim || d1, evtFim: null, desm: '', desmFim: null,
     equipe: g('mn-eq') || (pessoas.length ? (todosMontadores().find(t=>t.nome===pessoas[0])||{}).equipe || null : null),
     montOp: pessoas.length ? pessoas : null,
+    semCaminhao: (document.getElementById('mn-cam')||{}).checked ? undefined : true,
     estado: 'alinhamento', aprovado: false, permanece: false, itens: [],
     hist: [{q: new Date().toISOString(), quem: 'Central', o: ['🔧 Card de manutenção criado a partir de ' + ev.nome + (pessoas.length ? ' — ' + pessoas.join(', ') : '')]}]
   });
@@ -8810,7 +8820,31 @@ function criarManut(evId){
   marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
   fechar('ov-lg');
   verEvento(ev.id);
-  toast('🔧 Card de manutenção criado: ' + nome + ' — ' + fmtD(d1).slice(0,5) + ' às ' + h1 + '.', 'Abrir', ()=>verEvento(id));
+  toast('🔧 Card de manutenção criado: ' + nome + ' — ' + fmtD(d1).slice(0,5) + ' às ' + h1 + '.' +
+    (d1 < HOJE ? ' ⚠ Esse dia já passou, por isso ele NÃO aparece na TV — mude a data dentro do card.' : ''), 'Abrir', ()=>verEvento(id));
+}
+/* manutenção marcada num dia que já passou: puxa para hoje mantendo a duração e o horário */
+function manutParaHoje(id){
+  const m = eventos.find(e=>e.id===id); if(!m) return;
+  const dur = Math.max(0, difDias(dia(m.mont), dia(fimMont(m))));
+  const hora = String(m.mont||'').slice(11,16) || '08:00';
+  m.mont = HOJE + 'T' + hora;
+  m.montFim = dur ? somaDiaISO(HOJE, dur) : null;
+  m.evt = m.montFim || HOJE; m.evtFim = null;
+  m.hist = [{q:new Date().toISOString(), quem:'Central', o:['🔧 Manutenção trazida para ' + fmtD(HOJE).slice(0,5)]}, ...(m.hist||[])];
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
+  if(m.manutPai) verEvento(m.manutPai);
+  toast('🔧 ' + m.nome + ' agora começa hoje às ' + hora + ' — já entra na TV.');
+}
+function setSemCaminhao(id, v){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  if(v){
+    ev.semCaminhao = true;
+    ev.veiculos = []; ev.escala = []; ev.veiculosD = null; ev.escalaD = null;
+    ev.fica = null; ev.ficaD = null; ev.ficaV = null;
+  } else delete ev.semCaminhao;
+  marcarPlanoSujo(); limparSecCache(); salvar(); replanejar(true); renderQuadro(); verEvento(id);
+  toast(v ? '🚫 ' + ev.nome + ' vai sem caminhão — só a equipe.' : '🚚 ' + ev.nome + ' voltou a pedir caminhão.');
 }
 function excluirManut(id){
   const m = eventos.find(e=>e.id===id); if(!m) return;
@@ -9468,23 +9502,28 @@ function cardEvento(ev, soSetorJC, papel){
         '</select>'+' · '+ev.cidade+((+ev.km||0) ? ' · '+ev.km+' km' : '')+'</div>'+
       '<div class="dates">'+
         ((ev.antes||[]).length ? '<div class="dchip" style="background:#eaf1fc" title="'+String(ev.antes.map(s=>s.oque).join(' · ')).replace(/"/g,'&quot;')+'"><i>🔧 ANTES</i><b>'+(function(){ const ds = diasAntes(ev); return ds.length===1 ? fmtD(ds[0]).slice(0,5) : fmtD(ds[0]).slice(0,5)+' a '+fmtD(ds[ds.length-1]).slice(0,5); })()+'</b></div><span class="arrow">→</span>' : '')+
-        '<div class="dchip"><i>MONTAGEM</i><b>'+(!ev.mont ? 'A definir' : (dia(ev.mont)===dia(fimMont(ev)) ? fmtDH(ev.mont) : periodo2(ev.mont, fimMont(ev))))+'</b></div><span class="arrow">→</span>'+
-        '<div class="dchip"><i>EVENTO</i><b>'+periodo2(ev.evt, ev.evtFim||ev.evt)+'</b></div><span class="arrow">→</span>'+
-        '<div class="dchip"><i>DESMONT.</i><b>'+periodo2(ev.desm, fimDesm(ev))+'</b></div>'+
+        (ev.manutPai
+          ? '<div class="dchip" style="background:#fdf1e2"><i>🔧 MANUTENÇÃO</i><b>'+(!ev.mont ? 'A definir' : (dia(ev.mont)===dia(fimMont(ev)) ? fmtDH(ev.mont) : periodo2(ev.mont, fimMont(ev))))+(ev.manutHFim ? ' até '+ev.manutHFim : '')+'</b></div>'
+          : '<div class="dchip"><i>MONTAGEM</i><b>'+(!ev.mont ? 'A definir' : (dia(ev.mont)===dia(fimMont(ev)) ? fmtDH(ev.mont) : periodo2(ev.mont, fimMont(ev))))+'</b></div><span class="arrow">→</span>'+
+            '<div class="dchip"><i>EVENTO</i><b>'+periodo2(ev.evt, ev.evtFim||ev.evt)+'</b></div><span class="arrow">→</span>'+
+            '<div class="dchip"><i>DESMONT.</i><b>'+periodo2(ev.desm, fimDesm(ev))+'</b></div>')+
       '</div>'+
       progressoHtml(ev)+
       (soSetorJC ? '' : proxHtml(ev))+
       '<div class="rows">'+
+        (ev.manutPai ? (function(){ const p = eventos.find(x=>x.id===ev.manutPai);
+          return '<div class="row"><span>Manutenção de</span><b>'+(p ? '<a href="#" title="Abrir o evento principal" onclick="event.stopPropagation();event.preventDefault();verEvento(\''+p.id+'\')">'+String(p.nome).replace(/</g,'&lt;')+'</a>' : '—')+'</b></div>'; })() : '')+
         '<div class="row"><span>Equipe</span><b style="color:'+cor+'">'+(soSetorJC ? (eq===EQUIPE_TERC ? '🤝 '+(ev.tercEmpresa ? String(ev.tercEmpresa).replace(/</g,'&lt;') : 'Terceirizada') : '🏠 '+eq) : selEquipe(ev, 'prodsel'))+
           (eq===EQUIPE_TERC ? (montadoresOp(ev, eq).length ? ' + '+montadoresOp(ev, eq).length+' da casa' : '') : ' + '+montadoresOp(ev, eq).length)+
           (ev.montOp?' <span style="color:var(--blue);font-weight:500">com troca</span>':'')+'</b></div>'+
         (seloConfianca(ev, s.a) ? '<div class="row" style="border:none;padding-top:0"><span></span><b style="font-weight:500">'+seloConfianca(ev, s.a)+'</b></div>' : '')+
         (soSetorJC ? '' : contatosCard(ev))+
-        '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (v ? v.tipo+' '+v.placa : 'A definir') : selCaminhao(ev, 'prodsel') + (v ? ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' : '')) + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
+        (ev.semCaminhao ? '<div class="row"><span>Caminhão</span><b style="color:var(--muted)">🚫 sem caminhão — só a equipe</b></div>' : '')+
+        (ev.semCaminhao ? '' : '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (v ? v.tipo+' '+v.placa : 'A definir') : selCaminhao(ev, 'prodsel') + (v ? ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' : '')) + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
           ((ev.fretes||[]).length ? (v?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
           ((soSetorJC && v && mot.length) ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+
-          (txtFica(ev) ? '<br><span style="color:#1c4fa0;font-weight:600;font-size:12px">'+txtFica(ev)+'</span>' : '')+'</b></div>'+
-        (soSetorJC ? '' : logisticaCard(ev, mot))+
+          (txtFica(ev) ? '<br><span style="color:#1c4fa0;font-weight:600;font-size:12px">'+txtFica(ev)+'</span>' : '')+'</b></div>')+
+        (soSetorJC || ev.semCaminhao ? '' : logisticaCard(ev, mot))+
         '<div class="row"><span>Produtor</span><b>'+(produtorDo(ev)||'A definir')+(ev.produtor?'':' <span style="color:var(--amber);font-weight:500">sugerido</span>')+'</b></div>'+
       '</div>'+
       (soSetorJC ? '' : semaforoCard(ev))+
@@ -9699,7 +9738,9 @@ function verEventoCompleto(id){
     '</div></div>'+
 
     '<div class="sec" id="sec-caminhoes"><h4>'+dotSec(ev,'caminhoes')+' 🚚 CAMINHÕES</h4>'+
-      '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Caminhão de fora (frete fechado por viagem): escolha 🚛 FRETE na lista de veículos e coloque a placa e o freteiro.</div>'+
+      '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin-bottom:10px;'+(ev.semCaminhao?'border-color:#1c4fa0;color:#1c4fa0;font-weight:700':'')+'" title="Serviço que vai só com os montadores — a Central para de cobrar caminhão e não reserva nenhum">'+
+        '<input type="checkbox" '+(ev.semCaminhao?'checked':'')+' onchange="setSemCaminhao(\''+ev.id+'\',this.checked)">🚫 Sem caminhão — vai só a equipe</label>'+
+      (ev.semCaminhao ? '' : '<div style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Próprio ou agregado: escolha na frota (o agregado já vem marcado no cadastro). Caminhão de fora (frete fechado por viagem): escolha 🚛 FRETE na lista de veículos e coloque a placa e o freteiro.</div>')+
       '<div class="info">'+
       '<div><i>Veículo no local</i><b>'+(ev.permanece?'Permanece até a desmontagem':(txtFica(ev) ? '<span style="color:#1c4fa0">'+txtFica(ev)+'</span>' : 'Retorna ao galpão'))+'</b></div>'+
       '<div style="grid-column:1/-1"><i>🕐 Hora de saída do galpão</i>'+blocoSaida(ev)+'</div>'+
@@ -9872,7 +9913,7 @@ function secoesStatusCalc(ev){
   const confl = (a.conflitos||[]).filter(c=>!/peso e volume/i.test(c.msg||''));
   /* DATAS */
   if(ev.divDatas && Object.keys(ev.divDatas).length) put('datas','verm','a planilha trouxe outra data — decidir qual fica');
-  else if(!ev.mont || !ev.desm) put('datas','verm','falta a data de montagem ou de desmontagem');
+  else if(!ev.mont || (!ev.desm && !ev.manutPai)) put('datas','verm','falta a data de montagem ou de desmontagem');
   else if(fimMontInvalido(ev) || fimDesmInvalido(ev)) put('datas','verm','o "até" de uma data está errado');
   else if(!ev.local || ev.local==='—' || !(+ev.km)) put('datas','amar', !ev.local || ev.local==='—' ? 'falta o local do evento' : 'falta a distância (km)');
   else put('datas','verde','datas, local e distância ok');
@@ -9889,6 +9930,7 @@ function secoesStatusCalc(ev){
   /* CAMINHÕES */
   const fr = frotaDo(ev) || [], fretes = ev.fretes || [];
   if(terceiro) put('caminhoes','verde','evento todo terceirizado');
+  else if(ev.semCaminhao) put('caminhoes','verde','sem caminhão — só a equipe');
   else if(!fr.length && !fretes.length && a.aguardaIA) put('caminhoes','amar','a IA sugere o caminhão em ' + fmtD(a.aguardaIA).slice(0,5));
   else if(!fr.length && !fretes.length) put('caminhoes','verm','sem caminhão nem frete');
   else if(confl.some(c=>/caminh|ve[ií]culo|motorista|placa|carreta|frota/i.test(c.msg||''))) put('caminhoes','verm','caminhão ou motorista em conflito');
@@ -9898,7 +9940,7 @@ function secoesStatusCalc(ev){
   put('estruturas', (ev.estruturas||[]).length ? 'verde' : 'amar', (ev.estruturas||[]).length ? (ev.estruturas.length + ' estrutura(s)') : 'nada lançado da OS');
   /* CHECKLIST */
   const its = ev.itens || [];
-  if(!its.length) put('checklist', terceiro ? 'verde' : 'verm', terceiro ? 'evento todo terceirizado' : 'sem material lançado');
+  if(!its.length) put('checklist', (terceiro || ev.manutPai) ? 'verde' : 'verm', terceiro ? 'evento todo terceirizado' : ev.manutPai ? 'manutenção — sem material' : 'sem material lançado');
   else if(its.some(i=>i.presumido)) put('checklist','amar','tem quantidade presumida para conferir');
   else if(semPesoC.length) put('checklist','amar','material sem peso/volume no catálogo — o caminhão pode ficar pequeno');
   else put('checklist','verde', its.length + ' item(ns)');
@@ -10813,6 +10855,13 @@ function progressoEv(ev){
   const tot = difDias(m0, d1 || m1) + 1, feito = Math.max(0, Math.min(tot, difDias(m0, HOJE) + 1));
   const pct = HOJE < m0 ? 0 : HOJE > (d1||m1) ? 100 : Math.round(feito / tot * 100);
   const nd = (a, b) => difDias(a, b) + 1;
+  if(ev.manutPai){   /* card de manutenção: só tem a faixa da manutenção */
+    const t = nd(m0, m1);
+    if(HOJE < m0){ const x = difDias(HOJE, m0); return {txt: x===1 ? '🔧 manutenção amanhã' : '🔧 manutenção em ' + x + ' dias', cor:'#a86412', pct:0, fase:'antes', andamento:false}; }
+    if(HOJE <= m1) return {txt:'🔧 manutenção: dia ' + nd(m0, HOJE) + ' de ' + t, cor:'#a86412', pct: Math.round(nd(m0, HOJE) / t * 100), fase:'mont', andamento:true};
+    const x = difDias(m1, HOJE);
+    return {txt: x===0 ? '🔧 manutenção feita hoje' : '🔧 manutenção feita há ' + x + ' dia' + (x>1?'s':''), cor:'#6b7690', pct:100, fase:'fim', andamento:false};
+  }
   let txt, cor, fase;
   if(HOJE < m0){ const x = difDias(HOJE, m0); txt = x===1 ? 'monta amanhã' : 'monta em ' + x + ' dias'; cor = '#6b7690'; fase = 'antes'; }
   else if(HOJE <= m1){ txt = '🔨 montando: dia ' + nd(m0, HOJE) + ' de ' + nd(m0, m1); cor = '#1c4fa0'; fase = 'mont'; }
@@ -16025,7 +16074,7 @@ function cardTV(o, D){
   datasEspeciais(D, o.ev.cidade).forEach(x=>al.push((x.tipo==='feriado'?'📅 ':'🏟 ') + x.nome));
   return '<div class="tv-op'+(o.fase==='desm'?' d':'')+(st?' '+st.cls:'')+'">'+
     (st ? '<span class="tv-st '+st.cls+'">'+st.txt+'</span>' : '')+
-    '<div class="tv-nome">'+(mudouTV(o.ev)?'<span class="tv-mud" title="'+esc(mudouTV(o.ev))+'">MUDOU</span>':'')+(o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(o.ev.nome))+'</div>'+
+    '<div class="tv-nome">'+(mudouTV(o.ev)?'<span class="tv-mud" title="'+esc(mudouTV(o.ev))+'">MUDOU</span>':'')+(o.ev.manutPai ? '🔧 ' : (o.fase==='desm'?'📤 ':'🔨 '))+esc(nomeTV(o.ev.nome))+'</div>'+
     '<div class="tv-sub">'+esc(rotuloOp(o))+(local?' · '+esc(local):'')+((+o.ev.km)?' · '+o.ev.km+' km':'')+'</div>'+
     (false ? '<div class="tv-hor">'+(hs.parada>=2
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
@@ -16208,7 +16257,7 @@ function mudouTV(ev){
 /* linha curta para o que só continua do dia anterior */
 function contTV(o, D){
   const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+'↻ <b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+
+  return '<div class="tv-cont'+(o.fase==='desm'?' d':'')+'">'+(mudouTV(o.ev)?'<span class="tv-mud">MUDOU</span>':'')+(o.ev.manutPai?'🔧 ':'↻ ')+'<b>'+esc(nomeTV(o.ev.nome))+'</b> — '+esc(rotuloOp(o).toLowerCase())+
     equipesTV(o, true) + produtorTV(o, true) + climaTV(o, D, true) + '</div>';
 }
 /* produtor do evento — aparece em todos os dias, igual à equipe */
