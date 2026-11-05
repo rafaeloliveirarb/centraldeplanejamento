@@ -586,7 +586,7 @@ details.lgbox[open] summary h3::before{content:'▾ '}
   <!-- ============ QUADRO ============ -->
   <section id="v-quadro">
     <div class="bar">
-      <h1>Central de Planejamento Logístico</h1>
+      <h1>Central de Planejamento Logístico <small id="versao-topo" style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.3px"></small></h1>
       <div class="periods" id="periods"></div>
       <input class="search" id="busca" placeholder="Pesquisar evento...">
       <button class="pill" id="btn-pend" onclick="abrirPendencias()" title="Tudo o que precisa de ação, do mais urgente para o menos">🚨 Pendências</button>
@@ -2052,6 +2052,10 @@ function corEquipe(nome){
   const e = equipes.find(x=>x.nome===nome);
   return (e && e.cor) || CORES_EQUIPE[nome] || '#8b95a7';
 }
+/* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
+   aparelho já está com a última versão que você subiu */
+const VERSAO = '05/11 15:10';
+try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
 const membrosDe = nome => ((equipes.find(e=>e.nome===nome)||{}).membros) || [];
@@ -16322,7 +16326,7 @@ function renderTV(){
   const listas = dias.map(D=>({D, r: listaTV(D)}));
   document.getElementById('tv-logo').innerHTML = CONFIG.logo ? '<img src="'+CONFIG.logo+'">' : '';
   const dt = new Date(HOJE+'T12:00');
-  document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES EXTERNAS<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+'</small>';
+  document.getElementById('tv-tit').innerHTML = 'OPERAÇÕES EXTERNAS<small>'+dt.toLocaleDateString('pt-BR',{weekday:'long', day:'2-digit', month:'long'})+' · <span style="opacity:.7">versão '+VERSAO+'</span></small>';
   const nS = r => r.ops.reduce((s,o)=>s + o.viagens.filter(x=>!x.jaLocal).length, 0);
   const vazio = txt => '<div class="tv-vazio">'+txt+'</div>';
   const guarda = [...document.querySelectorAll('#tv .tv-lista')].map(e2=>e2.scrollTop);
