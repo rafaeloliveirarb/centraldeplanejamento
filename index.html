@@ -16486,7 +16486,25 @@ function contagemTV(r){
   const eqBase = new Set(baseDoDia(HOJE).map(s=>s.equipe).filter(q=>q && !eqs.has(q)));
   const pessBase = new Set(); baseDoDia(HOJE).forEach(s=>{ pessoasBase(s).forEach(p2=>pessBase.add(p2)); motoristasBase(s).forEach(m=>pessBase.add(m)); });
   const liv = Math.max(0, tot - eqs.size - eqBase.size);
-  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span><span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+(pessBase.size?'<span title="'+[...pessBase].join(', ').replace(/"/g,'&quot;')+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'')+'<span>🏠 <b>'+liv+'</b>livre'+(liv===1?'':'s')+'</span>';
+  /* pessoas: quem está trabalhando hoje e quem está livre no galpão */
+  const trab = new Set();
+  r.ops.forEach(o=>(o.pessoas||[]).filter(pp=>!pp.prod).forEach(pp=>trab.add(pp.nome)));
+  pessBase.forEach(n2=>trab.add(n2));
+  const todos = [...new Set(todosMontadores().map(t=>t.nome))];
+  const folga = new Set();
+  try{ Object.keys(FOLGAS_ESC||{}).forEach(n2=>{ if((FOLGAS_ESC[n2]||{})[HOJE]) folga.add(n2); }); }catch(e){}
+  try{ Object.keys(CONFIG.folgasPessoa||{}).forEach(n2=>{ if(((CONFIG.folgasPessoa||{})[n2]||[]).includes(HOJE)) folga.add(n2); }); }catch(e){}
+  const nTrab = todos.filter(n2=>trab.has(n2)).length;
+  const nFolga = todos.filter(n2=>folga.has(n2) && !trab.has(n2)).length;
+  const livres = todos.filter(n2=>!trab.has(n2) && !folga.has(n2));
+  const tt = l => l.join(', ').replace(/"/g,'&quot;');
+  box.innerHTML = '<span>🚚 <b>'+cam.size+'</b>na rua</span>'+
+    '<span>👷 <b>'+eqs.size+'</b>equipe'+(eqs.size===1?'':'s')+' em campo</span>'+
+    '<span title="'+tt(todos.filter(n2=>trab.has(n2)))+'">🧑‍🔧 <b>'+nTrab+'</b>trabalhando</span>'+
+    '<span title="'+tt(livres)+'">🏠 <b>'+livres.length+'</b>livre'+(livres.length===1?'':'s')+'</span>'+
+    (nFolga ? '<span title="'+tt(todos.filter(n2=>folga.has(n2) && !trab.has(n2)))+'">💤 <b>'+nFolga+'</b>de folga</span>' : '')+
+    (pessBase.size?'<span title="'+tt([...pessBase])+'">🔧 <b>'+pessBase.size+'</b>na base</span>':'')+
+    '<span>🏭 <b>'+liv+'</b>equipe'+(liv===1?'':'s')+' livre'+(liv===1?'':'s')+'</span>';
 }
 /* folgas e férias de hoje e amanhã, pela Escala de Montadores */
 let TV_FOLGAS = {t:0, html:''};
