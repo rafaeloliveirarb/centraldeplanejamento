@@ -1805,7 +1805,7 @@ async function nuvemCarregar(){
   if(!sb) return false;
   const [ev, cf] = await Promise.all([
     sb.from('plan_eventos').select('id,dados'),
-    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%').not('chave', 'like', 'anexo:%')
+    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%').not('chave', 'like', 'anexo:%').not('chave', 'like', 'check:%')
   ]);
   if(ev.error || cf.error) throw (ev.error || cf.error);
   if(ev.data) {
@@ -2026,6 +2026,7 @@ function nuvemEscutar(){
       if(p.new && String(p.new.chave||'').startsWith('msg:')){ try{ recadoChegou(p.new.dados); }catch(e){} return; }
       if(p.new && String(p.new.chave||'').startsWith('loc:')){ LOCS[p.new.chave.slice(4)] = p.new.dados; try{ renderTV(); }catch(e){} return; }
       if((p.new && String(p.new.chave||'').startsWith('anexo:')) || (p.old && String(p.old.chave||'').startsWith('anexo:'))) return;   /* anexos do cronograma: só quem abre o cronograma baixa */
+      if((p.new && String(p.new.chave||'').startsWith('check:')) || (p.old && String(p.old.chave||'').startsWith('check:'))) return;   /* checklists do caminhão: lidos só quando alguém abre */
       const d = p.new && p.new.dados; if(!d) return;
       if(cadSujo()) return;
       if(d.produtores) produtores = d.produtores;
@@ -2054,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '05/11 18:30';
+const VERSAO = '10/11 18:00';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -5344,6 +5345,16 @@ function situacaoCaminhao(o, D){
 }
 /* ---- página do celular do motorista ---- */
 let motWatch = null, motUltimoEnvio = 0, motWake = null;
+/* ===== CHECKLIST DO CAMINHÃO (antes de sair) =====
+   Fica guardado em plan_config na chave  check:<idDoCaminhão>:<quando>  —
+   um registro por viagem, para consultar depois caminhão por caminhão. */
+const ITENS_CHECK = [
+  'Pneus e estepe', 'Óleo e água', 'Freios', 'Luzes, setas e ré',
+  'Documento do caminhão (CRLV)', 'Extintor e triângulo', 'Cintas, catracas e cordas',
+  'Lona / baú em ordem', 'Combustível e Arla', 'Lataria (avarias)'
+];
+let CHK_RESUMO = null;   /* vai junto com a localização, para a logística ver na hora */
+const MOT_OBS = [];      /* recados que o motorista escreve durante a viagem */
 function paginaMotorista(){
   const [evId, fase, D, i] = decodeURIComponent(location.hash.replace(/^#motorista=/,'')).split('|');
   const ev = eventos.find(e=>e.id===evId);
@@ -5366,6 +5377,13 @@ function paginaMotorista(){
     '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
     '<a href="'+linkMapa(ev)+'" style="display:block;text-align:center;margin-top:12px;padding:14px;font-size:17px;border-radius:14px;background:#26356e;color:#fff;text-decoration:none">🗺 Abrir rota no Google Maps</a>'+
     '<button id="mot-voltei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#1c4fa0;color:#fff">🏠 VOLTEI PARA O GALPÃO</button>'+
+    '<div style="margin-top:18px;border-top:1px solid #243159;padding-top:14px">'+
+      '<label style="font-size:16px;color:#dfe6ff;font-weight:700">📝 Recado para a logística</label>'+
+      '<div style="font-size:13.5px;color:#aab4d4;margin:3px 0 7px">Qualquer coisa no caminho: trânsito, pneu, parada, problema no local…</div>'+
+      '<textarea id="mot-obs" rows="2" placeholder="escreva aqui" style="width:100%;padding:13px;font-size:17px;border-radius:12px;border:1px solid #2f3d6b;background:#182243;color:#fff"></textarea>'+
+      '<button id="mot-obs-env" style="display:block;width:100%;margin-top:8px;padding:14px;font-size:17px;font-weight:800;border:0;border-radius:12px;background:#6b4bb5;color:#fff">📨 ENVIAR RECADO</button>'+
+      '<div id="mot-obs-l" style="margin-top:8px;font-size:13.5px;color:#9fb0dd;line-height:1.5"></div>'+
+    '</div>'+
     '<div id="mot-st" style="margin-top:18px;font-size:15px;color:#aab4d4;line-height:1.5">Toque em INICIAR VIAGEM na hora de sair. A localização vai para a logística enquanto este link estiver aberto.</div>';
   document.body.appendChild(div);
   if(!ev) return;
@@ -5377,7 +5395,9 @@ function paginaMotorista(){
     motUltimoEnvio = agora;
     const hhmm = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const dados = {lat: pos ? pos.coords.latitude : null, lon: pos ? pos.coords.longitude : null, vel: pos && pos.coords.speed != null ? Math.round(pos.coords.speed*3.6) : null,
-      t: agora, ev: evId, fase, D, i:+i, mot: x.motorista || null, status: status || 'caminho', chegou: status === 'local' ? hhmm : ((LOCS[chave]||{}).chegou || null), voltou: status === 'galpao' ? hhmm : null};
+      t: agora, ev: evId, fase, D, i:+i, mot: x.motorista || null, status: status || 'caminho', chegou: status === 'local' ? hhmm : ((LOCS[chave]||{}).chegou || null), voltou: status === 'galpao' ? hhmm : null,
+      chk: CHK_RESUMO || (LOCS[chave]||{}).chk || null,
+      obs: MOT_OBS.length ? MOT_OBS : ((LOCS[chave]||{}).obs || null)};
     if(dados.lat == null && LOCS[chave]){ dados.lat = LOCS[chave].lat; dados.lon = LOCS[chave].lon; }
     LOCS[chave] = dados;
     try{ const r = await sb.from('plan_config').upsert({chave:'loc:' + chave, dados, atualizado_em: new Date().toISOString()}); if(r.error) throw r.error;
@@ -5387,15 +5407,88 @@ function paginaMotorista(){
     const dest = evGeo(ev);
     if((!status || status === 'caminho') && dest && dados.lat != null && distLinha(dados, dest) < 0.3 && !(LOCS[chave]||{}).chegou){ enviar(pos, 'local'); }
   };
-  document.getElementById('mot-ini').onclick = ()=>{
+  const iniciarViagem = ()=>{
     if(!navigator.geolocation) return st('⚠ Este celular não compartilha localização pelo navegador.');
     try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ motWake = w; }).catch(()=>{}); }catch(e){}
     st('Procurando o GPS...');
     if(motWatch != null) navigator.geolocation.clearWatch(motWatch);
     motWatch = navigator.geolocation.watchPosition(pos=>enviar(pos), err=>st('⚠ Libere a localização para este site nas configurações do celular (' + err.message + ').'), {enableHighAccuracy:true, maximumAge:15000, timeout:30000});
-    document.getElementById('mot-ini').textContent = '📡 VIAGEM EM ANDAMENTO';
-    document.getElementById('mot-ini').style.background = '#26356e';
+    const b = document.getElementById('mot-ini');
+    if(b){ b.textContent = '📡 VIAGEM EM ANDAMENTO'; b.style.background = '#26356e'; }
   };
+  /* ---- checklist do caminhão antes de sair ---- */
+  const chkFeito = ()=>{ try{ return localStorage.getItem('cpl:chk:' + chave); }catch(e){ return null; } };
+  const abrirChecklist = ()=>{
+    const esc2 = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const o = document.createElement('div');
+    o.id = 'mot-chk';
+    o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#0f1733;color:#fff;overflow:auto;padding:20px 16px 110px;font-family:Segoe UI,Arial,sans-serif';
+    o.innerHTML =
+      '<div style="font-size:14px;color:#aab4d4">ANTES DE SAIR</div>'+
+      '<h1 style="font-size:25px;margin:6px 0 2px">📋 Checklist do caminhão</h1>'+
+      '<div style="font-size:19px;font-weight:800;color:#ffd79a;margin-bottom:4px">🚚 '+esc2(v ? v.tipo+' '+v.placa : '')+'</div>'+
+      '<div style="font-size:14px;color:#aab4d4;margin-bottom:14px">Marque <b>PROBLEMA</b> no que não estiver certo. Tudo começa como OK.</div>'+
+      ITENS_CHECK.map((n2,k)=>
+        '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #243159">'+
+          '<span style="font-size:17px;flex:1">'+esc2(n2)+'</span>'+
+          '<span style="display:flex;gap:7px">'+
+            '<button type="button" data-k="'+k+'" data-v="ok" class="chk-b" style="padding:11px 15px;font-size:15px;font-weight:800;border:0;border-radius:11px;background:#17a05e;color:#fff">OK</button>'+
+            '<button type="button" data-k="'+k+'" data-v="nao" class="chk-b" style="padding:11px 15px;font-size:15px;font-weight:800;border:0;border-radius:11px;background:#2a3663;color:#8f9cc4">PROBLEMA</button>'+
+          '</span></div>').join('')+
+      '<div style="margin-top:16px"><label style="font-size:15px;color:#dfe6ff">🔢 KM do painel</label>'+
+        '<input id="chk-km" type="number" inputmode="numeric" placeholder="ex.: 184500" style="width:100%;margin-top:6px;padding:14px;font-size:18px;border-radius:12px;border:1px solid #2f3d6b;background:#182243;color:#fff"></div>'+
+      '<div style="margin-top:14px"><label style="font-size:15px;color:#dfe6ff">📝 Observações (o que achou de errado)</label>'+
+        '<textarea id="chk-obs" rows="3" placeholder="opcional" style="width:100%;margin-top:6px;padding:14px;font-size:17px;border-radius:12px;border:1px solid #2f3d6b;background:#182243;color:#fff"></textarea></div>'+
+      '<div id="chk-st" style="margin-top:12px;font-size:15px;color:#ffb25e"></div>'+
+      '<div style="position:fixed;left:0;right:0;bottom:0;padding:12px 16px;background:#0f1733;border-top:1px solid #243159">'+
+        '<button id="chk-ok" style="display:block;width:100%;padding:19px;font-size:20px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">✅ SALVAR E INICIAR VIAGEM</button>'+
+        '<button id="chk-x" style="display:block;width:100%;margin-top:8px;padding:12px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#2a3663;color:#c9d3f0">voltar</button>'+
+      '</div>';
+    document.body.appendChild(o);
+    const estado = ITENS_CHECK.map(()=>true);
+    const pinta = () => o.querySelectorAll('.chk-b').forEach(b=>{
+      const k = +b.dataset.k, ok = b.dataset.v === 'ok', ligado = estado[k] === ok;
+      b.style.background = ligado ? (ok ? '#17a05e' : '#c0392b') : '#2a3663';
+      b.style.color = ligado ? '#fff' : '#8f9cc4';
+    });
+    o.querySelectorAll('.chk-b').forEach(b=>b.onclick = ()=>{ estado[+b.dataset.k] = b.dataset.v === 'ok'; pinta();
+      const n = estado.filter(x=>!x).length;
+      document.getElementById('chk-st').textContent = n ? '⚠ ' + n + ' item(ns) com problema — a logística vai ver.' : '';
+    });
+    pinta();
+    document.getElementById('chk-x').onclick = ()=>o.remove();
+    document.getElementById('chk-ok').onclick = async ()=>{
+      const btn = document.getElementById('chk-ok');
+      btn.disabled = true; btn.textContent = 'salvando…';
+      const probs = ITENS_CHECK.filter((n2,k)=>!estado[k]);
+      const km = +(document.getElementById('chk-km').value || 0) || null;
+      const obs = String(document.getElementById('chk-obs').value || '').trim();
+      const quando = new Date().toISOString();
+      const dados = {v: x.v || null, placa: v ? v.placa : null, tipo: v ? v.tipo : null,
+        mot: x.motorista || null, ev: evId, evNome: ev.nome, fase, D, i: +i,
+        km, obs, probs, itens: ITENS_CHECK.map((n2,k)=>({n:n2, ok: estado[k]})), quando};
+      try{
+        const r = await sb.from('plan_config').upsert({chave: 'check:' + (x.v || 'sem-veiculo') + ':' + Date.now(), dados, atualizado_em: quando});
+        if(r.error) throw r.error;
+        try{ localStorage.setItem('cpl:chk:' + chave, quando); }catch(e){}
+        CHK_RESUMO = {quando, km, probs};
+        o.remove();
+        st(probs.length ? '📋 Checklist enviado com ' + probs.length + ' problema(s): ' + probs.join(', ') + '.' : '📋 Checklist enviado — tudo certo.');
+        iniciarViagem();
+      }catch(e){
+        btn.disabled = false; btn.textContent = '✅ SALVAR E INICIAR VIAGEM';
+        document.getElementById('chk-st').textContent = '⚠ Sem internet para salvar o checklist. Tente de novo; se não for, toque em voltar e inicie a viagem mesmo assim.';
+      }
+    };
+  };
+  document.getElementById('mot-ini').onclick = ()=>{
+    if(chkFeito()) return iniciarViagem();     /* já fez o checklist desta viagem */
+    abrirChecklist();
+  };
+  if(chkFeito()){
+    const b2 = document.getElementById('mot-ini');
+    if(b2) b2.insertAdjacentHTML('afterend', '<button onclick="(function(){try{localStorage.removeItem(\'cpl:chk:'+chave+'\')}catch(e){};location.reload();})()" style="display:block;width:100%;margin-top:8px;padding:11px;font-size:14px;font-weight:700;border:0;border-radius:12px;background:#2a3663;color:#c9d3f0">📋 Refazer o checklist do caminhão</button>');
+  }
   document.getElementById('mot-voltei').onclick = ()=>{
     if(motWatch != null){ try{ navigator.geolocation.clearWatch(motWatch); }catch(e){} motWatch = null; }
     enviar(null, 'galpao');
@@ -5405,8 +5498,28 @@ function paginaMotorista(){
     if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'local'), ()=>enviar(null, 'local'), {timeout:10000});
     else enviar(null, 'local');
   };
+  /* recados escritos pelo motorista */
+  const listaObs = ()=>{
+    const e2 = document.getElementById('mot-obs-l'); if(!e2) return;
+    e2.innerHTML = MOT_OBS.length ? MOT_OBS.slice().reverse().map(o=>'✔ <b>'+new Date(o.t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</b> — '+String(o.txt).replace(/&/g,'&amp;').replace(/</g,'&lt;')).join('<br>') : '';
+  };
+  document.getElementById('mot-obs-env').onclick = async ()=>{
+    const ta = document.getElementById('mot-obs'), txt = String(ta.value||'').trim();
+    if(!txt) return;
+    MOT_OBS.push({t: Date.now(), txt: txt.slice(0,400)});
+    if(MOT_OBS.length > 12) MOT_OBS.shift();
+    ta.value = '';
+    listaObs();
+    motUltimoEnvio = 0;                       /* recado passa na frente do intervalo do GPS */
+    await enviar(null, (LOCS[chave]||{}).status || 'abriu');
+    st('📝 Recado enviado para a logística.');
+  };
   /* a logística já vê que o motorista recebeu e abriu o link */
-  carregarLocs().then(()=>{ if(!(LOCS[chave]||{}).status) enviar(null, 'abriu'); }).catch(()=>{});
+  carregarLocs().then(()=>{
+    const L = LOCS[chave] || {};
+    if(Array.isArray(L.obs)){ MOT_OBS.length = 0; L.obs.forEach(o=>MOT_OBS.push(o)); listaObs(); }
+    if(!L.status) enviar(null, 'abriu');
+  }).catch(()=>{});
 }
 
 /* ================= ROTA BLOQUEADA NOS PRÓXIMOS DIAS =================
@@ -8805,10 +8918,23 @@ function htmlViagensVivas(){
         '<small style="color:var(--muted);display:block">'+(fz==='desm'?'📤 desmontagem':'🔨 montagem')+' '+quando+' · '+_lgEsc(z.x.v.tipo+' '+z.x.v.placa)+(hs?' · sai '+hs.saida:'')+'</small></span>'+
       '<b style="font-size:12.5px;color:'+z.st.cor+';min-width:230px">'+z.st.txt+'</b>'+
       '<span style="display:flex;gap:6px">'+
+        (function(){ const c = z.l && z.l.chk; if(!c) return '';
+          return (c.probs||[]).length
+            ? '<span class="tag" style="color:#b0483c;font-weight:800" title="'+_lgEsc((c.probs||[]).join(' · '))+(c.km?' · KM '+c.km:'')+'">📋 ⚠ '+(c.probs||[]).length+'</span>'
+            : '<span class="tag" style="color:#0f8a4d;font-weight:800" title="Checklist do caminhão: tudo certo'+(c.km?' · KM '+c.km:'')+'">📋 ✔</span>'; })()+
+        '<button class="mini" title="Ver os checklists deste caminhão" onclick="abrirChecklists(\''+z.x.v.id+'\')">📋</button>'+
         (z.l && z.l.lat != null ? '<a class="mini" style="text-decoration:none" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+z.l.lat+','+z.l.lon+'">🗺 onde está</a>' : '')+
         '<button class="mini" title="Mandar de novo o link do motorista" onclick="enviarLinkMotorista(\''+z.o.ev.id+'\',\''+fz+'\',\''+z.D+'\','+z.x.i+')">📲 link</button>'+
         '<button class="mini" title="Copiar a logística desta viagem" onclick="copiarViagem(\''+z.o.ev.id+'\',\''+fz+'\','+z.x.i+')">📋</button>'+
-      '</span></div>';
+      '</span>'+
+      (function(){   /* recados que o motorista mandou */
+        const L = (z.l && Array.isArray(z.l.obs)) ? z.l.obs : [];
+        if(!L.length) return '';
+        return '<div style="flex-basis:100%;font-size:12.5px;color:#5b3fa8;background:#f4f0fd;border-radius:8px;padding:6px 9px;margin-top:2px">'+
+          L.slice(-3).reverse().map(o=>'📝 <b>'+new Date(o.t||0).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'</b> '+_lgEsc(o.txt||'')).join('<br>')+
+          (L.length > 3 ? '<small style="color:var(--muted)"> · +'+(L.length-3)+' recado(s) antes</small>' : '')+'</div>';
+      })()+
+      '</div>';
   }).join('') : '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Nenhuma viagem hoje.</div>';
   return '<details class="lgbox" open><summary><h3 style="display:inline">📡 Viagens ao vivo</h3>'+
     (andando ? ' <b style="color:#b0483c">· '+andando+' na estrada</b>' : (linhas.length ? ' <b style="color:var(--muted)">· '+linhas.length+'</b>' : ' <small style="color:var(--muted)">· nada agora</small>'))+
@@ -13834,6 +13960,7 @@ function renderCadastros(){
       '<select class="cad" style="width:100px" onchange="setVeiculoCampo(\''+v.id+'\',\'status\',this.value)">'+
         ['Aferido','Estimado'].map(s2=>'<option '+(s2===v.status?'selected':'')+'>'+s2+'</option>').join('')+'</select></td>'+
     '<td style="text-align:right;white-space:nowrap">'+
+      '<button class="mini" title="Checklists que os motoristas preencheram antes de sair com este caminhão" onclick="abrirChecklists(\''+v.id+'\')">📋 Checklists</button> '+
       '<button class="mini" style="'+(v.manut?'border-color:var(--green);color:var(--green)':'border-color:#b47f08;color:#b47f08')+'" onclick="toggleManutencao(\''+v.id+'\')">'+(v.manut?'✔ Voltar à frota':'🔧 Manutenção')+'</button> '+
       '<button class="mini danger" onclick="removerVeiculoFrota(\''+v.id+'\')">Excluir</button></td></tr>';
   }).join('')+
@@ -15691,6 +15818,39 @@ function cronoEqTodas(){
 /* o que cada equipe monta no dia D (estruturas do cronograma ativas no dia) */
 function cronoDoDia(ev, D){
   try{ if(!(ev.estruturas||[]).length || !ev.crono) return []; return cronoDe(ev).filter(c=>c.ini <= D && D <= c.ent); }catch(e){ return []; }
+}
+/* ===== 📋 checklists do caminhão: guardados em plan_config (check:<veículo>:<quando>) ===== */
+async function abrirChecklists(vid){
+  const v = veiculos.find(x=>x.id===vid);
+  lgModal('📋 Checklists do caminhão', v ? _lgEsc(v.tipo + ' ' + v.placa) : '', '<div id="chk-lista"><div class="alert">Buscando na nuvem…</div></div>');
+  const box = document.getElementById('chk-lista');
+  if(!sb || !nuvemOk){ box.innerHTML = '<div class="alert">Os checklists ficam na nuvem — sem internet agora.</div>'; return; }
+  try{
+    const r = await sb.from('plan_config').select('chave,dados').like('chave', 'check:' + vid + ':%').order('chave', {ascending:false}).limit(60);
+    if(r.error) throw r.error;
+    const L = (r.data||[]).map(z=>Object.assign({chave:z.chave}, z.dados||{})).sort((a,b)=>String(b.quando||'').localeCompare(String(a.quando||'')));
+    if(!L.length){ box.innerHTML = '<div class="alert">Nenhum checklist ainda para este caminhão. Ele é preenchido pelo motorista no celular, quando ele toca em INICIAR VIAGEM.</div>'; return; }
+    const kms = L.filter(z=>+z.km).map(z=>+z.km);
+    box.innerHTML =
+      '<div class="alert" style="margin-top:0">'+L.length+' checklist(s) · '+L.filter(z=>(z.probs||[]).length).length+' com problema'+
+        (kms.length ? ' · último KM informado: <b>'+kms[0].toLocaleString('pt-BR')+'</b>' : '')+'</div>'+
+      L.map(z=>{
+        const probs = z.probs || [];
+        const q = String(z.quando||'').replace('T',' ').slice(0,16);
+        return '<div style="border:1px solid '+(probs.length?'#f0c49a':'var(--line)')+';background:'+(probs.length?'#fdf7ee':'#fff')+';border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+            '<b style="font-size:13.5px">'+_lgEsc(q)+'</b>'+
+            '<span style="flex:1;min-width:180px;font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(z.mot||'—')+' · '+(z.fase==='desm'?'📤 desmontagem':'🔨 montagem')+' de <b>'+_lgEsc(z.evNome||'—')+'</b></span>'+
+            (z.km ? '<span class="tag">🔢 '+(+z.km).toLocaleString('pt-BR')+' km</span>' : '')+
+            (probs.length ? '<span class="tag" style="color:#b0483c;font-weight:800">⚠ '+probs.length+' problema(s)</span>' : '<span class="tag" style="color:#0f8a4d;font-weight:800">✔ tudo certo</span>')+
+          '</div>'+
+          (probs.length ? '<div style="margin-top:6px;font-size:13px;color:#b0483c"><b>'+probs.map(p=>_lgEsc(p)).join(' · ')+'</b></div>' : '')+
+          (z.obs ? '<div style="margin-top:5px;font-size:12.5px;color:var(--ink2)">📝 '+_lgEsc(z.obs)+'</div>' : '')+
+          '<details style="margin-top:5px"><summary style="font-size:12px;color:var(--muted);cursor:pointer">ver os '+(z.itens||[]).length+' itens</summary>'+
+            '<div style="font-size:12.5px;margin-top:4px">'+(z.itens||[]).map(it=>(it.ok?'✔ ':'✖ ')+_lgEsc(it.n)).join(' · ')+'</div></details>'+
+        '</div>';
+      }).join('');
+  }catch(e){ box.innerHTML = '<div class="alert red">Não consegui buscar: '+_lgEsc(e.message||e)+'</div>'; }
 }
 /* ===== anexos do cronograma: ficam em plan_config (anexo:<evento>:<id>) ===== */
 async function renderAnexosCrono(){
