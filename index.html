@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 14:20';
+const VERSAO = '11/11 15:00';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -2088,7 +2088,7 @@ function blocoEquipeDesm(ev, eq){
       : '<button class="mini" onclick="separarTimeDesm(\''+ev.id+'\',true)">Usar equipe diferente</button>')+
     '</div>';
   if(!sep)
-    return cab + '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Desmonta quem montou: <b style="color:var(--ink2)">'+eq+' + '+montadoresOp(ev, eq).length+' montador(es)</b>. Se a desmontagem for com outra equipe, clique em "Usar equipe diferente".</div>';
+    return cab + '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Desmonta quem montou: <b style="color:var(--ink2)">'+(ev.semLider ? montadoresOp(ev, eq).length+' montador(es) (sem o líder)' : eq+' + '+montadoresOp(ev, eq).length+' montador(es)')+'</b>. Se a desmontagem for com outra equipe, clique em "Usar equipe diferente".</div>';
   const chips = ev.timeD.map((m,ix)=>{
     const tt = todosMontadores().find(t=>t.nome===m) || {};
     const rot = (tt.lider?'líder ':'') + (tt.equipe==='piloto'?'piloto':(tt.equipe||''));
@@ -2398,6 +2398,17 @@ function editorDiasPessoa(ev, eq){
 }
 /* o líder também pode folgar num evento */
 function liderFolga(ev, eq){ return ((ev.folgas || []).includes(eq || ev.equipe || plano(ev).equipe)); }
+/* tirar o líder do evento: ele sai da escala, das diárias, da TV e dos conflitos,
+   e fica livre para outro serviço nesses dias */
+function setSemLider(id, v){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const eq = ev.equipe || plano(ev).equipe;
+  if(v) ev.semLider = true; else delete ev.semLider;
+  ev.hist = [{q:new Date().toISOString(), quem:'Central', o:[v ? '👑 Líder tirado desta montagem (' + (eq||'') + ')' : '👑 Líder de volta nesta montagem (' + (eq||'') + ')']}, ...(ev.hist||[])];
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); verEvento(id);
+  setTimeout(()=>{ try{ irSecao('equipes'); }catch(e){} }, 50);
+  toast(v ? '👑 ' + (eq||'Líder') + ' não vai nesta montagem — segue livre para outro serviço nesses dias.' : '👑 ' + (eq||'Líder') + ' de volta nesta montagem.');
+}
 function toggleFolga(id, nome){
   const ev = eventos.find(e=>e.id===id); if(!ev) return;
   const f = new Set(ev.folgas || []);
@@ -7382,7 +7393,7 @@ function pastaEvento(id){
     '</div>'+
     '<div class="duas"><div><h2>Caminhões — montagem</h2><table><thead><tr><th>Veículo</th><th>Motorista</th><th>Sai</th></tr></thead><tbody>'+(camM||'<tr><td colspan="3">—</td></tr>')+'</tbody></table></div>'+
     '<div><h2>Caminhões — desmontagem</h2><table><thead><tr><th>Veículo</th><th>Motorista</th><th>Sai</th></tr></thead><tbody>'+(camD||'<tr><td colspan="3">—</td></tr>')+'</tbody></table></div></div>'+
-    '<h2>Equipe</h2><div>'+esc([eq && eq!==EQUIPE_TERC ? '👑 '+eq : '', ...pessoasNaEscala(ev).filter(p2=>!p2.prod && p2.nome!==eq).map(p2=>p2.nome)].filter(Boolean).join(' · '))+'</div>'+
+    '<h2>Equipe</h2><div>'+esc([eq && eq!==EQUIPE_TERC && !ev.semLider ? '👑 '+eq : '', ...pessoasNaEscala(ev).filter(p2=>!p2.prod && p2.nome!==eq).map(p2=>p2.nome)].filter(Boolean).join(' · '))+'</div>'+
     (tl ? '<h2>Cronograma</h2>'+tl : '')+
     ((ev.estruturas||[]).length ? '<h2>Estruturas (OS)</h2><div>'+(ev.estruturas||[]).map(esc).join('<br>')+'</div>' : '')+
     ((ev.itens||[]).filter(i=>+i.qtd).length ? '<h2>Material</h2><table><tbody>'+(ev.itens||[]).filter(i=>+i.qtd).map(i=>'<tr><td>'+esc(i.nome)+'</td><td style="text-align:right"><b>'+num(i.qtd)+'</b> '+esc(i.un||'')+'</td></tr>').join('')+'</tbody></table>' : '')+
@@ -9902,6 +9913,9 @@ function cardEvento(ev, soSetorJC, papel){
   const mot = esc.filter(x=>x.motorista).map(x=>x.motorista);
   const fr = frotaDo(ev);
   const v = veiculos.find(x=>x.id===fr[0]);
+  /* de hoje para frente, caminhão que ninguém escolheu fica "A definir" (a sugestão vira só uma dica) */
+  const aDefinir = !(ev.veiculos && ev.veiculos.length) && (!ev.mont || dia(ev.mont) >= HOJE);
+  const vEsc = aDefinir ? null : v;
   const cor = corEquipe(eq);
   const prodSug = ev.produtor ? null : (a.produtor || null);
   let botoes;
@@ -9945,9 +9959,11 @@ function cardEvento(ev, soSetorJC, papel){
         (seloConfianca(ev, s.a) ? '<div class="row" style="border:none;padding-top:0"><span></span><b style="font-weight:500">'+seloConfianca(ev, s.a)+'</b></div>' : '')+
         (soSetorJC ? '' : contatosCard(ev))+
         (ev.semCaminhao ? '<div class="row"><span>Caminhão</span><b style="color:var(--muted)">🚫 sem caminhão — só a equipe</b></div>' : '')+
-        (ev.semCaminhao ? '' : '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (v ? v.tipo+' '+v.placa : 'A definir') : selCaminhao(ev, 'prodsel') + (v ? ' <span style="color:var(--muted);font-weight:500">('+(v.agregado?'agregado':'próprio')+')</span>' : '')) + (fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
-          ((ev.fretes||[]).length ? (v?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
-          ((soSetorJC && v && mot.length) ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+
+        (ev.semCaminhao ? '' : '<div class="row"><span>Caminhão</span><b>'+(soSetorJC ? (vEsc ? vEsc.tipo+' '+vEsc.placa : 'A definir') : selCaminhao(ev, 'prodsel', '', aDefinir) + (vEsc ? ' <span style="color:var(--muted);font-weight:500">('+(vEsc.agregado?'agregado':'próprio')+')</span>' : '')) +
+          (aDefinir && v && !soSetorJC ? ' <span style="color:var(--muted);font-weight:500;font-size:11.5px" title="O que a Central escolheria para este dia">sug. '+v.tipo+' '+v.placa+'</span> <button class="mini" style="padding:2px 7px;font-size:11px" title="Usar o caminhão sugerido" onclick="event.stopPropagation();usarSugestaoCaminhao(\''+ev.id+'\')">usar</button>' : '')+
+          (!aDefinir && fr.length>1 ? ' <span style="color:var(--muted);font-weight:500">+'+(fr.length-1)+'</span>' : '')+
+          ((ev.fretes||[]).length ? (vEsc?'<br>':'')+'🚛 frete: '+String(ev.fretes[0].emp).replace(/</g,'&lt;')+(ev.fretes.length>1?' +'+(ev.fretes.length-1):'') : '')+
+          ((soSetorJC && vEsc && mot.length) ? ' <span style="color:var(--muted);font-weight:500;font-size:12px">· '+mot[0]+'</span>' : '')+
           (txtFica(ev) ? '<br><span style="color:#1c4fa0;font-weight:600;font-size:12px">'+txtFica(ev)+'</span>' : '')+'</b></div>')+
         (soSetorJC || ev.semCaminhao ? '' : logisticaCard(ev, mot))+
         '<div class="row"><span>Produtor</span><b>'+(produtorDo(ev)||'A definir')+(ev.produtor?'':' <span style="color:var(--amber);font-weight:500">sugerido</span>')+'</b></div>'+
@@ -10120,11 +10136,14 @@ function verEventoCompleto(id){
         (eq===EQUIPE_TERC && !montadoresOp(ev, eq).length ? '<div style="font-size:12.5px;color:var(--muted);margin-top:6px">Montagem por equipe terceirizada. Se algum montador da casa for acompanhar, adicione ao lado.</div>' : '')+
         '<div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:6px">'+
           (eq && eq!==EQUIPE_TERC ? (function(){
+            if(ev.semLider) return '<span class="mtag" style="opacity:.6;background:#f1f3f8;color:var(--muted)" title="O líder não vai nesta montagem — ele fica livre para outro serviço nesses dias">👑 '+eq+' <small>não vai</small>'+
+              ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px;color:#1c4fa0;font-weight:700" title="Trazer o líder de volta para esta montagem" onclick="setSemLider(\''+ev.id+'\',false)">↩ trazer de volta</button></span>';
             const fo = liderFolga(ev, eq);
             return '<span class="mtag" style="'+(fo?'opacity:.45;text-decoration:line-through':'background:#fdf1e2;color:#a86412')+'" title="Líder da equipe">'+
               (fo?'💤 ':'👑 ')+'<span style="cursor:pointer;text-decoration:underline dotted" title="Ver a agenda do mês" data-t="mont" data-n="'+eq.replace(/"/g,'&quot;')+'" onclick="abrirAgendaNome(this)">'+eq+'</span> <small style="opacity:.7">(líder)</small>'+
               ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="Dias de trabalho do líder neste evento" onclick="abreDiasPessoa(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">📅</button>'+
-              ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga ao líder neste evento')+'" onclick="toggleFolga(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button></span>';
+              ' <button style="border:0;background:transparent;cursor:pointer;padding:0 2px" title="'+(fo?'Voltar ao trabalho neste evento':'Dar folga ao líder neste evento')+'" onclick="toggleFolga(\''+ev.id+'\',\''+eq.replace(/'/g,"\\'")+'\')">'+(fo?'↩':'💤')+'</button>'+
+              ' <button style="border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px" title="Tirar o líder desta montagem — nem sempre o líder vai; ele fica livre para outro serviço" onclick="setSemLider(\''+ev.id+'\',true)">✕</button></span>';
           })() : '')+
           montadoresBase(ev, eq).map((m,ix)=>{
             const tt = todosMontadores().find(t=>t.nome===m) || {};
@@ -11326,11 +11345,18 @@ function quickEquipe(id, v){
   salvar(); renderQuadro();
   toast(v ? 'Equipe de ' + ev.nome + ': ' + (v===EQUIPE_TERC ? 'terceirizada' : v) + '.' : ev.nome + ' voltou para a sugestão da IA.');
 }
-function selCaminhao(ev, cls, estilo){
-  const fr = frotaDo(ev) || [], atual = fr[0] || '';
+function selCaminhao(ev, cls, estilo, soManual){
+  const fr = (soManual ? (ev.veiculos || []) : (frotaDo(ev) || [])), atual = fr[0] || '';
   return '<select class="'+(cls||'')+'" style="'+(estilo||'')+'" title="Trocar o caminhão da montagem" onclick="event.stopPropagation()" onchange="quickCaminhao(\''+ev.id+'\',this.value)">'+
     (atual ? '' : '<option value="" selected>A definir</option>')+
     veiculos.filter(v=>!v.manut || v.id===atual).map(v=>'<option value="'+v.id+'" '+(v.id===atual?'selected':'')+'>'+v.tipo+' '+v.placa+(v.agregado?' (agreg.)':'')+'</option>').join('')+'</select>';
+}
+/* aceitar o caminhão que a Central sugeriu (vira escolha de verdade) */
+function usarSugestaoCaminhao(id){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const sug = (plano(ev).frota || [])[0];
+  if(!sug) return toast('A Central ainda não achou um caminhão livre para este dia.');
+  quickCaminhao(id, sug);
 }
 function quickCaminhao(id, vid){
   const ev = eventos.find(e=>e.id===id); if(!ev || !vid) return;
@@ -16951,7 +16977,7 @@ if(typeof window !== 'undefined' && typeof location !== 'undefined' && location.
 function pessoasNaEscala(ev){
   const eq = ev.equipe || plano(ev).equipe;
   const out = [];
-  if(eq && eq !== EQUIPE_TERC && !liderFolga(ev, eq)) out.push({nome:eq, papel:'Líder ' + eq});
+  if(eq && eq !== EQUIPE_TERC && !liderFolga(ev, eq) && !ev.semLider) out.push({nome:eq, papel:'Líder ' + eq});
   pessoasOp(ev, eq).forEach(n => {
     if(out.some(x=>x.nome===n)) return;
     const t = todosMontadores().find(x=>x.nome===n) || {};
