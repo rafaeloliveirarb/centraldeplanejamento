@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 16:15';
+const VERSAO = '11/11 16:30';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -9170,11 +9170,11 @@ function abrirParadaAvulsa(vid, D, pid, evFixo){
       '<input id="pa-loc" value="'+_lgEsc(p ? p.local||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: Av. Brasil 1200, Penha" style="width:100%;'+inp+'"></div>'+
     '<div style="margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:9px 11px">'+
       '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;'+(p && p.fica?'color:#1c4fa0;font-weight:700':'')+'">'+
-        '<input type="checkbox" id="pa-fica" '+(p && p.fica?'checked':'')+' onchange="document.getElementById(\'pa-fica-d\').style.display=this.checked?\'\':\'none\'">📍 O caminhão fica no local depois desta parada</label>'+
+        '<input type="checkbox" id="pa-fica" '+(p && p.fica?'checked':'')+' onchange="paFicaMudou(this)">📍 O caminhão fica no local depois desta parada</label>'+
       '<div id="pa-fica-d" style="margin-top:7px;'+(p && p.fica?'':'display:none')+'">'+
         '<label style="font-size:12px;color:var(--muted)">até o dia </label>'+
         '<input type="date" id="pa-fica-ate" value="'+(p && p.fica ? p.fica : '')+'" style="'+inp+'">'+
-        '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">Nesses dias o caminhão aparece como parado no local — na TV e no Painel — e a Central não oferece ele para outro serviço.</div>'+
+        '<div id="pa-fica-dica" style="font-size:11.5px;color:var(--muted);margin-top:4px">Nesses dias o caminhão aparece como parado no local — na TV e no Painel — e a Central não oferece ele para outro serviço.</div>'+
       '</div></div>'+
     '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Observação (opcional)</label>'+
       '<input id="pa-obs" value="'+_lgEsc(p ? p.obs||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: falar com o Sérgio, peça já está paga" style="width:100%;'+inp+'"></div>'+
@@ -9198,6 +9198,28 @@ function abrirParadaAvulsa(vid, D, pid, evFixo){
     else if(s2 && s2.value && p){ const dk = document.getElementById('pa-ev-dica');
       if(dk) dk.textContent = 'Trocando o evento aqui, o dia da parada acompanha o dia dele.'; }
   }catch(e){} }, 30);
+}
+/* marcou que fica: a data "até" já vem preenchida com o fim do evento vinculado
+   (ou com o próprio dia da parada, quando não tem evento) */
+function paFicaMudou(chk){
+  const cx = document.getElementById('pa-fica-d'), campo = document.getElementById('pa-fica-ate'), dica = document.getElementById('pa-fica-dica');
+  if(cx) cx.style.display = chk.checked ? '' : 'none';
+  if(!chk.checked || !campo) return;
+  const diaP = (document.getElementById('pa-d')||{}).value || HOJE;
+  if(!campo.value){
+    let ate = diaP, de = '';
+    const sel = String((document.getElementById('pa-ev')||{}).value || '').split('|');
+    const ev = sel[0] ? eventos.find(z=>z.id===sel[0]) : null;
+    if(ev){
+      try{ ate = sel[1]==='desm' ? (dia(fimDesm(ev)) || dia(ev.desm)) : (dia(fimMont(ev)) || dia(ev.mont)); }catch(e){}
+      de = sel[1]==='desm' ? 'o fim da desmontagem' : 'o fim da montagem';
+    }
+    if(!ate || ate < diaP) ate = diaP;
+    campo.value = ate;
+    campo.style.borderColor = '#1c4fa0';
+    if(dica) dica.innerHTML = '📅 Até <b>' + fmtD(ate).slice(0,5) + '</b>' + (de ? ' (' + de + ' do evento vinculado)' : '') + ' — troque se ele voltar em outro dia. Nesses dias o caminhão fica preso para outros serviços.';
+  }
+  campo.focus();
 }
 /* escolheu o evento: o dia da parada já vai para o dia daquela montagem/desmontagem */
 function paVincMudou(sel){
