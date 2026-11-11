@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '10/11 18:00';
+const VERSAO = '11/11 13:50';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -5372,6 +5372,17 @@ function paginaMotorista(){
     (x.motorista ? '<div style="font-size:30px;font-weight:800;color:#ffd79a;margin:2px 0 8px;line-height:1.1">🧑‍✈️ '+esc(x.motorista)+'</div>' : '')+
     '<div style="font-size:16px;color:#dfe6ff">📍 '+esc(destinoTexto(ev) || '—')+'</div>'+
     '<div style="font-size:16px;margin-top:8px">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+'</div>'+
+    (function(){
+      try{
+        const r = v ? roteirosDoDia(D).find(z=>z.v.id === v.id) : null;
+        if(!r || r.paradas.length < 2) return '';
+        return '<div style="margin-top:10px;background:#1b2750;border-radius:12px;padding:10px 13px;font-size:15.5px;line-height:1.7"><b style="color:#ffd79a">🧭 Roteiro de hoje — '+r.paradas.length+' paradas</b><br>'+
+          r.paradas.map((p,k)=>(k+1)+'º '+(p.manut?'🔧':p.fase==='desm'?'📤':'🔨')+' '+esc(p.ev.nome)+
+            (p.jaLocal ? ' <small style="color:#9fb0dd">(volta do local)</small>' : (p.sai ? ' — sai '+p.sai : ''))+
+            ((p.ev.id===evId && p.fase===fase) ? ' <b style="color:#f0a93c">⬅ você está nesta</b>' : '')).join('<br>')+
+          '</div>';
+      }catch(e){ return ''; }
+    })()+
     (hs ? '<div style="font-size:18px;margin-top:10px;color:#ffb25e;font-weight:700">Sair '+hs.saida+(hs.ponte?' · ponte até '+hs.ponte:'')+' · chegar '+hs.chegada+'</div>' : '')+
     '<button id="mot-ini" style="display:block;width:100%;margin-top:22px;padding:20px;font-size:21px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">▶ INICIAR VIAGEM</button>'+
     '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
@@ -8864,7 +8875,7 @@ function renderLogistica(){
     '</tbody></table></div>'+
     (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc([x.placa, x.emp].filter(Boolean).join(' · ')||'frete')).join(' | ')+'</div>').join('')+'</details>' : '')+
     '<div style="margin-top:12px">'+htmlFrota()+htmlCusto()+'</div>';
-  box.innerHTML = topo + cockpit + htmlViagensVivas() + corpo;
+  box.innerHTML = topo + cockpit + htmlViagensVivas() + htmlRoteiros() + corpo;
   /* posições novas de 45 em 45 segundos enquanto o painel estiver aberto */
   if(Date.now() - LG_LOCS_T > 45000){
     LG_LOCS_T = Date.now();
@@ -9074,6 +9085,94 @@ function excluirManut(id){
   marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro();
   if(pai) verEvento(pai);
   toast('🔧 Card de manutenção excluído.', 'Desfazer', ()=>{ eventos.splice(Math.min(i, eventos.length), 0, copia); marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); if(pai) verEvento(pai); });
+}
+/* ---------- 🧭 ROTEIRO DOS CAMINHÕES ----------
+   Um caminhão pode ter mais de uma parada no dia: duas montagens, ou uma montagem
+   e depois uma desmontagem. Aqui as paradas aparecem em sequência, com a hora de
+   saída de cada uma (editável) — a ordem é a ordem das horas. */
+let LG_ROT_D = 0;   /* 0 = hoje, 1 = amanhã… */
+function roteirosDoDia(D){
+  const porV = {};
+  (opsDoDia(D).ops || []).forEach(o=>o.viagens.forEach(x=>{
+    const fz = x.fase || o.fase;
+    let hs = null; try{ hs = horariosSaida(o.ev, fz, D); }catch(e){}
+    const sai = x.hSai || (hs && hs.saida) || '';
+    let fica = null;
+    try{
+      fica = fz === 'desm' ? ficaAteD(o.ev, x.v.id) : ficaAte(o.ev, x.v.id);
+      if(o.ev.permanece && fz !== 'desm') fica = fica || dia(o.ev.desm) || D;
+    }catch(e){}
+    (porV[x.v.id] = porV[x.v.id] || {v: x.v, paradas: []}).paradas.push({
+      ev: o.ev, fase: fz, i: x.i, hora: x.hSai || null, sai, sug: hs && hs.saida || '',
+      chega: (hs && hs.chegada) || '', jaLocal: !!x.jaLocal, motorista: x.motorista || null,
+      fica: fica && fica >= D ? fica : null, manut: !!o.ev.manutPai,
+      editavel: fz === 'mont' || temFrotaDesm(o.ev)});
+  }));
+  const L = Object.values(porV);
+  L.forEach(r=>r.paradas.sort((a,b)=>String(a.sai||'99').localeCompare(String(b.sai||'99'))));
+  L.sort((a,b)=>(b.paradas.length - a.paradas.length) || String((a.paradas[0]||{}).sai||'99').localeCompare(String((b.paradas[0]||{}).sai||'99')));
+  return L;
+}
+function rotCamNav(d){ LG_ROT_D = Math.max(0, Math.min(14, LG_ROT_D + d)); renderLogistica(); }
+function rotCamHora(evId, i, val, fase){
+  const ev = eventos.find(e=>e.id===evId); if(!ev) return;
+  if(val && !/^\d{1,2}:\d{2}/.test(val)) return;
+  const dz = fase === 'desm' && temFrotaDesm(ev);
+  const nova = escalaDo(ev, dz ? 'desm' : 'mont')
+    .map(x=>({i:x.i, v:x.v, motorista:x.motorista, dia:x.dia||null, junto:x.junto||null, hora: x.i===+i ? (val||null) : (x.hora||null)}));
+  if(dz){ ev.veiculosD = [...frotaDo(ev,'desm')]; ev.escalaD = nova; }
+  else  { ev.veiculos  = [...frotaDo(ev)];        ev.escala  = nova; }
+  marcarPlanoSujo(); limparSecCache(); salvar(); renderQuadro(); renderLogistica();
+  toast(val ? '🧭 Saída desta parada marcada para ' + val + ' — a ordem do roteiro segue as horas.' : '🧭 Hora apagada — volta para a sugestão da Central.');
+}
+function htmlRoteiros(){
+  const D = somaDiaISO(HOJE, LG_ROT_D);
+  const L = roteirosDoDia(D);
+  const multi = L.filter(r=>r.paradas.length > 1);
+  const rotD = LG_ROT_D === 0 ? 'hoje' : (LG_ROT_D === 1 ? 'amanhã' : rotDia(D));
+  const nav = '<div style="display:flex;gap:6px;align-items:center;margin:4px 0 8px">'+
+    '<button class="mini" onclick="rotCamNav(-1)" '+(LG_ROT_D===0?'disabled':'')+'>◀</button>'+
+    '<b style="font-size:12.5px;min-width:120px;text-align:center">'+_lgEsc(rotD.toUpperCase())+' · '+fmtD(D).slice(0,5)+'</b>'+
+    '<button class="mini" onclick="rotCamNav(1)">▶</button>'+
+    (LG_ROT_D ? '<button class="mini" onclick="LG_ROT_D=0;renderLogistica()">hoje</button>' : '')+
+    '<small style="color:var(--muted)">a ordem das paradas é a ordem das horas de saída — troque a hora para trocar a ordem</small></div>';
+  const linha = r => {
+    const varias = r.paradas.length > 1;
+    const mots = [...new Set(r.paradas.map(p=>p.motorista).filter(Boolean))];
+    const paradas = r.paradas.map((p,k)=>{
+      const ic = p.manut ? '🔧' : (p.fase==='desm' ? '📤' : '🔨');
+      return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:9px;padding:5px 9px">'+
+        (varias ? '<b style="color:#a86412">'+(k+1)+'º</b>' : '')+
+        '<a href="#" onclick="event.preventDefault();verEvento(\''+p.ev.id+'\')" style="font-weight:700;color:var(--ink2)">'+ic+' '+_lgEsc(p.ev.nome.length>34 ? p.ev.nome.slice(0,33)+'…' : p.ev.nome)+'</a>'+
+        (p.jaLocal
+          ? '<small style="color:var(--muted)">já no local · volta</small>'
+          : (p.editavel
+              ? '<label style="display:inline-flex;gap:4px;align-items:center;font-size:11.5px;color:var(--muted)">sai <input type="time" value="'+(p.hora||'')+'" style="border:1px solid '+(p.hora?'#1c4fa0':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11.5px'+(p.hora?';color:#1c4fa0;font-weight:700':'')+'" title="'+(p.hora?'Hora marcada por você — apague para voltar à sugestão ('+p.sug+')':'Sugestão da Central: '+(p.sug||'—')+' — digite para fixar')+'" onchange="rotCamHora(\''+p.ev.id+'\','+p.i+',this.value,\''+p.fase+'\')">'+(p.hora?'':'<small>sug. '+(p.sug||'—')+'</small>')+'</label>'
+              : '<small style="color:var(--muted)">sai '+(p.sai||'—')+'</small>'))+
+        (p.chega && !p.jaLocal ? '<small style="color:var(--muted)">chega '+p.chega+'</small>' : '')+
+        (p.fica ? '<small style="color:#1c4fa0;font-weight:700">🅿 fica até '+fmtD(p.fica).slice(0,5)+'</small>' : '')+
+        '<button class="mini" style="padding:3px 7px" title="Mandar o link/logística desta parada no WhatsApp do motorista" onclick="zapViagem(\''+p.ev.id+'\',\''+p.fase+'\','+p.i+')">📲</button>'+
+      '</span>';
+    }).join('<span style="color:var(--muted);font-weight:800">→</span>');
+    const fimNoLocal = r.paradas[r.paradas.length-1] && r.paradas[r.paradas.length-1].fica;
+    return '<div style="border:1px solid '+(varias?'#e8c08a':'var(--line)')+';background:'+(varias?'#fffaf2':'#fff')+';border-radius:10px;padding:8px 11px;margin-bottom:8px">'+
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">'+
+        '<b style="font-size:13.5px">🚚 '+_lgEsc(r.v.tipo+' '+r.v.placa)+'</b>'+
+        (mots.length ? '<span style="font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(mots.join(' / '))+'</span>' : '<span class="tag" style="color:#b0483c">sem motorista</span>')+
+        (varias ? '<span class="tag" style="color:#a86412;font-weight:800">'+r.paradas.length+' paradas no dia</span>' : '')+
+      '</div>'+
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px">'+
+        '<span style="color:var(--muted)">🏭 Galpão</span><span style="color:var(--muted);font-weight:800">→</span>'+paradas+
+        (fimNoLocal ? '<small style="color:var(--muted)">· segue no local</small>' : '<span style="color:var(--muted);font-weight:800">→</span><span style="color:var(--muted)">🏭</span>')+
+      '</div></div>';
+  };
+  return '<details class="lgbox" '+(multi.length ? 'open' : '')+'><summary><h3 style="display:inline">🧭 Roteiro dos caminhões</h3>'+
+    (L.length ? ' <b style="color:var(--muted)">· '+L.length+' caminhão(ões) '+_lgEsc(rotD)+'</b>' : ' <small style="color:var(--muted)">· nada '+_lgEsc(rotD)+'</small>')+
+    (multi.length ? ' <b style="color:#a86412">· '+multi.length+' com mais de uma parada</b>' : '')+
+    ' <small style="color:var(--muted)">— a sequência de montagens e desmontagens de cada caminhão</small></summary>'+
+    nav+
+    (L.length ? L.map(linha).join('') : '<div style="font-size:12.5px;color:var(--muted)">Nenhum caminhão sai neste dia.</div>')+
+  '</details>';
 }
 /* ---------- janela genérica do painel de logística ---------- */
 function lgModal(titulo, sub, corpo){
@@ -14571,6 +14670,18 @@ function msgViagemMotorista(ev, fase, x){
   const pn = produtorDo(ev), pTel = pn ? (produtores.find(z=>z.nome===pn)||{}).tel : null;
   if(pn) L.push('🎬 *Produtor:* ' + pn + (pTel ? ' — ' + pTel : ''));
   const vP = avisoVoltaPonte(ev, fase); if(vP) L.push(vP);
+  /* caminhão com mais de uma parada no dia: a sequência completa vai na mensagem */
+  try{
+    const dR = dia(fase==='desm' ? ev.desm : ev.mont) || saiDia;
+    const r = x.v ? roteirosDoDia(dR).find(z=>z.v.id === x.v) : null;
+    if(r && r.paradas.length > 1){
+      L.push('');
+      L.push('🧭 *Roteiro do dia:*');
+      r.paradas.forEach((p,k)=>L.push((k+1)+'º ' + (p.manut ? '🔧' : p.fase==='desm' ? '📤' : '🔨') + ' ' + p.ev.nome +
+        (p.jaLocal ? ' (volta do local)' : (p.sai ? ' — sai ' + p.sai : '')) +
+        (p.ev.id === ev.id && p.fase === fase ? '  ⬅ esta mensagem' : '')));
+    }
+  }catch(e){}
   try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
   return L.join('\n');
 }
