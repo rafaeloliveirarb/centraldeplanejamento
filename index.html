@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 15:55';
+const VERSAO = '11/11 16:15';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -8623,6 +8623,14 @@ function logItensDia(D){
       });
     });
   });
+  /* paradas avulsas: o dia da parada e, se ficou no local, os dias parados */
+  (CONFIG.paradas || []).forEach(p=>{
+    if(!p || !p.v || !p.dia) return;
+    const dentro = p.dia === D || (p.fica && D > p.dia && D <= p.fica);
+    if(!dentro) return;
+    const evV = p.ev ? eventos.find(z=>z.id===p.ev) : null;
+    (vs[p.v] = vs[p.v] || []).push({parada:p, ev: evV || {id:'pa:'+p.id, nome:p.titulo}, f: p.evFase || 'mont', x:{v:p.v}, tipo: p.dia === D ? 'viagem' : 'fica', D});
+  });
   motoristas.forEach(m=>{ const s = motoristaNaBase(m.nome, D); if(s) (ms[m.nome] = ms[m.nome] || []).push({tipo:'base', s, D}); });
   return {vs, ms, cs};
 }
@@ -9160,6 +9168,14 @@ function abrirParadaAvulsa(vid, D, pid, evFixo){
     '</div>'+
     '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Local / endereço (opcional)</label>'+
       '<input id="pa-loc" value="'+_lgEsc(p ? p.local||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: Av. Brasil 1200, Penha" style="width:100%;'+inp+'"></div>'+
+    '<div style="margin-top:12px;border:1px dashed var(--line);border-radius:8px;padding:9px 11px">'+
+      '<label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;'+(p && p.fica?'color:#1c4fa0;font-weight:700':'')+'">'+
+        '<input type="checkbox" id="pa-fica" '+(p && p.fica?'checked':'')+' onchange="document.getElementById(\'pa-fica-d\').style.display=this.checked?\'\':\'none\'">📍 O caminhão fica no local depois desta parada</label>'+
+      '<div id="pa-fica-d" style="margin-top:7px;'+(p && p.fica?'':'display:none')+'">'+
+        '<label style="font-size:12px;color:var(--muted)">até o dia </label>'+
+        '<input type="date" id="pa-fica-ate" value="'+(p && p.fica ? p.fica : '')+'" style="'+inp+'">'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-top:4px">Nesses dias o caminhão aparece como parado no local — na TV e no Painel — e a Central não oferece ele para outro serviço.</div>'+
+      '</div></div>'+
     '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Observação (opcional)</label>'+
       '<input id="pa-obs" value="'+_lgEsc(p ? p.obs||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: falar com o Sérgio, peça já está paga" style="width:100%;'+inp+'"></div>'+
     (function(){   /* vincular a um evento (montagem ou desmontagem) */
@@ -9198,7 +9214,9 @@ function salvarParadaAvulsa(pid){
   const tit = g('pa-tit'); if(!tit) return toast('Escreva o que o caminhão vai fazer.');
   const vinc = String((document.getElementById('pa-ev')||{}).value || '').split('|');
   const dados = {v: g('pa-v'), dia: g('pa-d') || HOJE, hora: g('pa-h') || null, titulo: tit.slice(0,90), local: g('pa-loc').slice(0,140) || null, obs: g('pa-obs').slice(0,140) || null,
-    ev: vinc[0] || null, evFase: vinc[0] ? (vinc[1] || 'mont') : null};
+    ev: vinc[0] || null, evFase: vinc[0] ? (vinc[1] || 'mont') : null,
+    fica: (document.getElementById('pa-fica')||{}).checked ? (g('pa-fica-ate') || g('pa-d') || HOJE) : null};
+  if(dados.fica && dados.fica < dados.dia) dados.fica = dados.dia;
   CONFIG.paradas = (CONFIG.paradas || []).filter(p=>p && p.dia >= somaDiaISO(HOJE, -30));   /* limpa as muito antigas */
   if(pid){ const p = CONFIG.paradas.find(z=>z.id===pid); if(p) Object.assign(p, dados); }
   else CONFIG.paradas.push(Object.assign({id:'pa'+Date.now()}, dados));
@@ -9241,7 +9259,7 @@ function roteirosDoDia(D){
     const evV = p.ev ? eventos.find(z=>z.id===p.ev) : null;
     (porV[v.id] = porV[v.id] || {v, paradas: []}).paradas.push({
       extra: true, id: p.id, titulo: p.titulo, local: p.local || '', obs: p.obs || '',
-      ev: evV || null, evFase: p.evFase || null,
+      ev: evV || null, evFase: p.evFase || null, ficaAte: (p.fica && p.fica >= D) ? p.fica : null,
       fase: 'extra', hora: p.hora || null, sai: p.hora || '', sug: '', chega: '',
       jaLocal: false, motorista: null, fica: null, manut: false, editavel: false});
   });
@@ -9284,6 +9302,7 @@ function htmlRoteiros(){
           '<b style="color:#5b3fa8">📦 '+_lgEsc(p.titulo)+'</b>'+
           (p.ev ? '<a href="#" onclick="event.preventDefault();verEvento(\''+p.ev.id+'\')" style="font-size:11.5px;font-weight:700;color:#1c4fa0" title="Parada ligada a este evento">🔗 '+(p.evFase==='desm'?'📤':'🔨')+' '+_lgEsc(p.ev.nome.length>26 ? p.ev.nome.slice(0,25)+'…' : p.ev.nome)+'</a>' : '')+
           (p.local ? '<small style="color:var(--muted)">📍 '+_lgEsc(p.local)+'</small>' : '')+
+          (p.ficaAte ? '<small style="color:#1c4fa0;font-weight:700">🅿️ fica até '+fmtD(p.ficaAte).slice(0,5)+'</small>' : '')+
           '<label style="display:inline-flex;gap:4px;align-items:center;font-size:11.5px;color:var(--muted)">às <input type="time" value="'+(p.hora||'')+'" style="border:1px solid '+(p.hora?'#6b4bb5':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11.5px'+(p.hora?';color:#6b4bb5;font-weight:700':'')+'" onchange="rotCamHoraExtra(\''+p.id+'\',this.value)"></label>'+
           (p.obs ? '<small style="color:var(--muted)" title="'+_lgEsc(p.obs).replace(/"/g,'&quot;')+'">📝</small>' : '')+
           '<button class="mini" style="padding:3px 7px" title="Mudar esta parada" onclick="abrirParadaAvulsa(null,null,\''+p.id+'\')">✏</button>'+
@@ -9304,7 +9323,8 @@ function htmlRoteiros(){
         '<button class="mini" style="padding:3px 7px" title="Mandar o link/logística desta parada no WhatsApp do motorista" onclick="zapViagem(\''+p.ev.id+'\',\''+p.fase+'\','+p.i+')">📲</button>'+
       '</span>';
     }).join('<span style="color:var(--muted);font-weight:800">→</span>');
-    const fimNoLocal = r.paradas[r.paradas.length-1] && r.paradas[r.paradas.length-1].fica;
+    const ult = r.paradas[r.paradas.length-1];
+    const fimNoLocal = ult && (ult.fica || ult.ficaAte);
     return '<div style="border:1px solid '+(varias?'#e8c08a':'var(--line)')+';background:'+(varias?'#fffaf2':'#fff')+';border-radius:10px;padding:8px 11px;margin-bottom:8px">'+
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">'+
         '<b style="font-size:13.5px">🚚 '+_lgEsc(r.v.tipo+' '+r.v.placa)+'</b>'+
@@ -9916,6 +9936,10 @@ function tvLogHtml(){
     (r.fica ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local'+(r.fica !== true ? ' até '+fmtD(r.fica).slice(0,5) : '')+'</span>' : (r.permanece ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local</span>' : ''))+
     (stViagem(r) ? '<span style="font-size:17px">'+stViagem(r)+'</span>' : ''))).join('');
   const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid);
+    if(p.it && p.it.parada){ const pa = p.it.parada, evL = pa.ev ? eventos.find(z=>z.id===pa.ev) : null;
+      return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
+        '<span style="flex:1;font-size:18px">📦 '+esc(pa.titulo)+(evL ? ' <span style="color:#9fb0dd">· '+esc(nomeTV(evL.nome))+'</span>' : '')+(pa.local ? ' <span style="color:#9fb0dd">· 📍 '+esc(pa.local)+'</span>' : '')+'</span>'+
+        '<span style="font-size:17px;color:#ffb25e">'+(pa.fica ? 'fica até '+fmtD(pa.fica).slice(0,5) : 'parado no local')+'</span>'); }
     let ate = p.it.f==='desm' ? ficaAteD(p.it.ev, p.vid) : ficaAte(p.it.ev, p.vid);
     /* o fica pode ser de UMA viagem (ficaV): mostra a data da que está valendo hoje, não a da viagem antiga */
     try{ if(p.it.f !== 'desm') ficaVLista(p.it.ev, p.vid).forEach(x=>{ if(x.de <= HOJE && HOJE <= x.ate && (!ate || ate < HOJE || x.ate > ate)) ate = x.ate; }); }catch(e){}
@@ -16767,6 +16791,7 @@ function paradasTV(D){
       return '<div class="tv-lin"><b>'+(v ? esc(v.tipo+' '+v.placa) : '🚚')+'</b> → 📦 <b style="color:#d9c8ff">'+esc(p.titulo)+'</b>'+
         (evV ? ' <span style="opacity:.85">🔗 '+(p.evFase==='desm'?'📤':'🔨')+' '+esc(nomeTV(evV.nome))+'</span>' : '')+
         (p.hora ? ' — <b style="color:#ffb25e">'+p.hora+'</b>' : '')+
+        (p.fica ? ' <b style="color:#ffb25e">🅿 fica no local até '+fmtD(p.fica).slice(0,5)+'</b>' : '')+
         (p.local ? '<div class="tv-lin" style="margin-top:1px;opacity:.8">📍 '+esc(p.local)+'</div>' : '')+
         (p.obs ? '<div class="tv-lin" style="margin-top:1px;opacity:.8">📝 '+esc(p.obs)+'</div>' : '')+
       '</div>';
