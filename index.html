@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 15:40';
+const VERSAO = '11/11 15:55';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -9166,16 +9166,32 @@ function abrirParadaAvulsa(vid, D, pid, evFixo){
       const sel = p ? (p.ev || '') + '|' + (p.evFase || 'mont') : (evFixo ? evFixo.id + '|' + (evFixo.fase||'mont') : '');
       const L = eventosParaVincular(p ? p.dia : (D || HOJE));
       return '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">🔗 Vincular a um evento (opcional) — serve para parada ligada a uma montagem ou desmontagem</label>'+
-        '<select id="pa-ev" style="width:100%;'+inp+'">'+
-          '<option value="">— nenhum, é só uma parada do caminhão —</option>'+
-          L.map(z=>'<option value="'+z.id+'|'+z.fase+'" '+((z.id+'|'+z.fase)===sel?'selected':'')+'>'+_lgEsc(z.rot)+'</option>').join('')+
-        '</select></div>';
+        '<select id="pa-ev" style="width:100%;'+inp+'" onchange="paVincMudou(this)">'+
+          '<option value="" data-dia="">— nenhum, é só uma parada do caminhão —</option>'+
+          L.map(z=>'<option value="'+z.id+'|'+z.fase+'" data-dia="'+z.dia+'" '+((z.id+'|'+z.fase)===sel?'selected':'')+'>'+_lgEsc(z.rot)+'</option>').join('')+
+        '</select>'+
+        '<small id="pa-ev-dica" style="display:block;font-size:11.5px;color:var(--muted);margin-top:4px"></small></div>';
     })()+
     '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
       '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="salvarParadaAvulsa('+(pid ? '\''+pid+'\'' : 'null')+')">'+(p ? '💾 Salvar' : '➕ Criar parada')+'</button>'+
       '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
     '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">A parada entra no roteiro do caminhão, na TV e no roteiro que vai pro WhatsApp do motorista — sem precisar criar card.</div>';
   lgModal(p ? '✏ Parada avulsa' : '➕ Parada avulsa', 'um destino sem card — fornecedor, retirada, entrega…', corpo);
+  setTimeout(()=>{ try{ const s2 = document.getElementById('pa-ev');
+    if(s2 && s2.value && !p) paVincMudou(s2);                      /* veio do botão dentro do evento */
+    else if(s2 && s2.value && p){ const dk = document.getElementById('pa-ev-dica');
+      if(dk) dk.textContent = 'Trocando o evento aqui, o dia da parada acompanha o dia dele.'; }
+  }catch(e){} }, 30);
+}
+/* escolheu o evento: o dia da parada já vai para o dia daquela montagem/desmontagem */
+function paVincMudou(sel){
+  const o = sel.selectedOptions[0], d = o ? (o.dataset.dia || '') : '';
+  const cd = document.getElementById('pa-d'), dica = document.getElementById('pa-ev-dica');
+  if(d && cd){
+    cd.value = d;
+    cd.style.borderColor = '#1c4fa0';
+    if(dica) dica.innerHTML = '📅 Dia preenchido com o dia d' + (/desmontagem/.test(o.text) ? 'a desmontagem' : 'a montagem') + ' (<b>' + fmtD(d).slice(0,5) + '</b>) — se o caminhão vai em outro dia, é só trocar ali em cima.';
+  } else if(dica) dica.textContent = '';
 }
 function salvarParadaAvulsa(pid){
   const g = i => String((document.getElementById(i)||{}).value || '').trim();
