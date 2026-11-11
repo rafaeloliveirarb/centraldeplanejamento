@@ -2055,7 +2055,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 13:50';
+const VERSAO = '11/11 14:20';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -5377,9 +5377,11 @@ function paginaMotorista(){
         const r = v ? roteirosDoDia(D).find(z=>z.v.id === v.id) : null;
         if(!r || r.paradas.length < 2) return '';
         return '<div style="margin-top:10px;background:#1b2750;border-radius:12px;padding:10px 13px;font-size:15.5px;line-height:1.7"><b style="color:#ffd79a">🧭 Roteiro de hoje — '+r.paradas.length+' paradas</b><br>'+
-          r.paradas.map((p,k)=>(k+1)+'º '+(p.manut?'🔧':p.fase==='desm'?'📤':'🔨')+' '+esc(p.ev.nome)+
-            (p.jaLocal ? ' <small style="color:#9fb0dd">(volta do local)</small>' : (p.sai ? ' — sai '+p.sai : ''))+
-            ((p.ev.id===evId && p.fase===fase) ? ' <b style="color:#f0a93c">⬅ você está nesta</b>' : '')).join('<br>')+
+          r.paradas.map((p,k)=>(k+1)+'º '+(p.extra
+            ? '📦 '+esc(p.titulo)+(p.local ? ' <small style="color:#9fb0dd">📍 '+esc(p.local)+'</small>' : '')+(p.sai ? ' — às '+p.sai : '')
+            : (p.manut?'🔧':p.fase==='desm'?'📤':'🔨')+' '+esc(p.ev.nome)+
+              (p.jaLocal ? ' <small style="color:#9fb0dd">(volta do local)</small>' : (p.sai ? ' — sai '+p.sai : ''))+
+              ((p.ev.id===evId && p.fase===fase) ? ' <b style="color:#f0a93c">⬅ você está nesta</b>' : ''))).join('<br>')+
           '</div>';
       }catch(e){ return ''; }
     })()+
@@ -9091,6 +9093,55 @@ function excluirManut(id){
    e depois uma desmontagem. Aqui as paradas aparecem em sequência, com a hora de
    saída de cada uma (editável) — a ordem é a ordem das horas. */
 let LG_ROT_D = 0;   /* 0 = hoje, 1 = amanhã… */
+/* parada avulsa: o caminhão vai a um lugar que não tem card — pegar peça num fornecedor,
+   buscar material, levar algo na gráfica… Fica em CONFIG.paradas e sincroniza com tudo. */
+function paradasAvulsas(D, vid){
+  return (CONFIG.paradas || []).filter(p=>p && p.dia === D && (!vid || p.v === vid));
+}
+function abrirParadaAvulsa(vid, D, pid){
+  const p = pid ? (CONFIG.paradas||[]).find(z=>z.id===pid) : null;
+  const inp = 'border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;font-size:13px';
+  const corpo =
+    '<label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">O que o caminhão vai fazer</label>'+
+    '<input id="pa-tit" value="'+_lgEsc(p ? p.titulo : '').replace(/"/g,'&quot;')+'" placeholder="ex.: Pegar peça na Casa das Lonas" style="width:100%;'+inp+'">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Caminhão</label>'+
+        '<select id="pa-v" style="'+inp+';min-width:190px">'+veiculos.filter(v=>!v.manut).map(v=>'<option value="'+v.id+'" '+((p ? p.v : vid)===v.id?'selected':'')+'>'+_lgEsc(v.tipo+' '+v.placa)+(v.agregado?' · agregado':'')+'</option>').join('')+'</select></div>'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Dia</label><input type="date" id="pa-d" value="'+(p ? p.dia : (D || HOJE))+'" style="'+inp+'"></div>'+
+      '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Hora</label><input type="time" id="pa-h" value="'+(p && p.hora ? p.hora : '')+'" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Local / endereço (opcional)</label>'+
+      '<input id="pa-loc" value="'+_lgEsc(p ? p.local||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: Av. Brasil 1200, Penha" style="width:100%;'+inp+'"></div>'+
+    '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Observação (opcional)</label>'+
+      '<input id="pa-obs" value="'+_lgEsc(p ? p.obs||'' : '').replace(/"/g,'&quot;')+'" placeholder="ex.: falar com o Sérgio, peça já está paga" style="width:100%;'+inp+'"></div>'+
+    '<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button class="mini" style="font-weight:800;background:#1c4fa0;border-color:#1c4fa0;color:#fff;padding:10px 18px" onclick="salvarParadaAvulsa('+(pid ? '\''+pid+'\'' : 'null')+')">'+(p ? '💾 Salvar' : '➕ Criar parada')+'</button>'+
+      '<button class="mini" onclick="fechar(\'ov-lg\')">Cancelar</button></div>'+
+    '<div style="font-size:11.5px;color:var(--muted);margin-top:8px">A parada entra no roteiro do caminhão, na TV e no roteiro que vai pro WhatsApp do motorista — sem precisar criar card.</div>';
+  lgModal(p ? '✏ Parada avulsa' : '➕ Parada avulsa', 'um destino sem card — fornecedor, retirada, entrega…', corpo);
+}
+function salvarParadaAvulsa(pid){
+  const g = i => String((document.getElementById(i)||{}).value || '').trim();
+  const tit = g('pa-tit'); if(!tit) return toast('Escreva o que o caminhão vai fazer.');
+  const dados = {v: g('pa-v'), dia: g('pa-d') || HOJE, hora: g('pa-h') || null, titulo: tit.slice(0,90), local: g('pa-loc').slice(0,140) || null, obs: g('pa-obs').slice(0,140) || null};
+  CONFIG.paradas = (CONFIG.paradas || []).filter(p=>p && p.dia >= somaDiaISO(HOJE, -30));   /* limpa as muito antigas */
+  if(pid){ const p = CONFIG.paradas.find(z=>z.id===pid); if(p) Object.assign(p, dados); }
+  else CONFIG.paradas.push(Object.assign({id:'pa'+Date.now()}, dados));
+  salvar(); fechar('ov-lg'); renderLogistica();
+  try{ const t2 = document.getElementById('tv'); if(t2 && t2.classList.contains('on')) renderTV(); }catch(e){}
+  const v = veiculos.find(x=>x.id===dados.v);
+  toast('🧭 ' + (v ? v.tipo+' '+v.placa : 'Caminhão') + ': ' + dados.titulo + ' — ' + fmtD(dados.dia).slice(0,5) + (dados.hora ? ' às ' + dados.hora : '') + '.');
+}
+function rmParadaAvulsa(pid){
+  const p = (CONFIG.paradas||[]).find(z=>z.id===pid); if(!p) return;
+  CONFIG.paradas = CONFIG.paradas.filter(z=>z.id!==pid);
+  salvar(); renderLogistica();
+  toast('🧭 Parada "' + p.titulo + '" excluída.', 'Desfazer', ()=>{ (CONFIG.paradas = CONFIG.paradas || []).push(p); salvar(); renderLogistica(); });
+}
+function rotCamHoraExtra(pid, val){
+  const p = (CONFIG.paradas||[]).find(z=>z.id===pid); if(!p) return;
+  p.hora = val || null; salvar(); renderLogistica();
+}
 function roteirosDoDia(D){
   const porV = {};
   (opsDoDia(D).ops || []).forEach(o=>o.viagens.forEach(x=>{
@@ -9108,6 +9159,13 @@ function roteirosDoDia(D){
       fica: fica && fica >= D ? fica : null, manut: !!o.ev.manutPai,
       editavel: fz === 'mont' || temFrotaDesm(o.ev)});
   }));
+  paradasAvulsas(D).forEach(p=>{
+    const v = veiculos.find(y=>y.id===p.v); if(!v) return;
+    (porV[v.id] = porV[v.id] || {v, paradas: []}).paradas.push({
+      extra: true, id: p.id, titulo: p.titulo, local: p.local || '', obs: p.obs || '',
+      fase: 'extra', hora: p.hora || null, sai: p.hora || '', sug: '', chega: '',
+      jaLocal: false, motorista: null, fica: null, manut: false, editavel: false});
+  });
   const L = Object.values(porV);
   L.forEach(r=>r.paradas.sort((a,b)=>String(a.sai||'99').localeCompare(String(b.sai||'99'))));
   L.sort((a,b)=>(b.paradas.length - a.paradas.length) || String((a.paradas[0]||{}).sai||'99').localeCompare(String((b.paradas[0]||{}).sai||'99')));
@@ -9135,11 +9193,23 @@ function htmlRoteiros(){
     '<b style="font-size:12.5px;min-width:120px;text-align:center">'+_lgEsc(rotD.toUpperCase())+' · '+fmtD(D).slice(0,5)+'</b>'+
     '<button class="mini" onclick="rotCamNav(1)">▶</button>'+
     (LG_ROT_D ? '<button class="mini" onclick="LG_ROT_D=0;renderLogistica()">hoje</button>' : '')+
+    '<button class="mini" style="font-weight:800;color:#5b3fa8;border-color:#cdbcf2" title="Mandar um caminhão a um lugar que não tem card — pegar peça, retirada, entrega" onclick="abrirParadaAvulsa(null,\''+D+'\')">➕ Parada avulsa</button>'+
     '<small style="color:var(--muted)">a ordem das paradas é a ordem das horas de saída — troque a hora para trocar a ordem</small></div>';
   const linha = r => {
     const varias = r.paradas.length > 1;
     const mots = [...new Set(r.paradas.map(p=>p.motorista).filter(Boolean))];
     const paradas = r.paradas.map((p,k)=>{
+      if(p.extra){
+        return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:#f6f1ff;border:1px solid #cdbcf2;border-radius:9px;padding:5px 9px">'+
+          (varias ? '<b style="color:#6b4bb5">'+(k+1)+'º</b>' : '')+
+          '<b style="color:#5b3fa8">📦 '+_lgEsc(p.titulo)+'</b>'+
+          (p.local ? '<small style="color:var(--muted)">📍 '+_lgEsc(p.local)+'</small>' : '')+
+          '<label style="display:inline-flex;gap:4px;align-items:center;font-size:11.5px;color:var(--muted)">às <input type="time" value="'+(p.hora||'')+'" style="border:1px solid '+(p.hora?'#6b4bb5':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11.5px'+(p.hora?';color:#6b4bb5;font-weight:700':'')+'" onchange="rotCamHoraExtra(\''+p.id+'\',this.value)"></label>'+
+          (p.obs ? '<small style="color:var(--muted)" title="'+_lgEsc(p.obs).replace(/"/g,'&quot;')+'">📝</small>' : '')+
+          '<button class="mini" style="padding:3px 7px" title="Mudar esta parada" onclick="abrirParadaAvulsa(null,null,\''+p.id+'\')">✏</button>'+
+          '<button class="mini danger" style="padding:3px 7px" title="Excluir esta parada" onclick="rmParadaAvulsa(\''+p.id+'\')">✕</button>'+
+        '</span>';
+      }
       const ic = p.manut ? '🔧' : (p.fase==='desm' ? '📤' : '🔨');
       return '<span style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:9px;padding:5px 9px">'+
         (varias ? '<b style="color:#a86412">'+(k+1)+'º</b>' : '')+
@@ -9160,6 +9230,7 @@ function htmlRoteiros(){
         '<b style="font-size:13.5px">🚚 '+_lgEsc(r.v.tipo+' '+r.v.placa)+'</b>'+
         (mots.length ? '<span style="font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(mots.join(' / '))+'</span>' : '<span class="tag" style="color:#b0483c">sem motorista</span>')+
         (varias ? '<span class="tag" style="color:#a86412;font-weight:800">'+r.paradas.length+' paradas no dia</span>' : '')+
+        '<button class="mini" style="margin-left:auto;color:#5b3fa8;border-color:#cdbcf2" title="Acrescentar um destino sem card neste caminhão (fornecedor, retirada, entrega…)" onclick="abrirParadaAvulsa(\''+r.v.id+'\',\''+D+'\')">➕ parada</button>'+
       '</div>'+
       '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px">'+
         '<span style="color:var(--muted)">🏭 Galpão</span><span style="color:var(--muted);font-weight:800">→</span>'+paradas+
@@ -9742,7 +9813,7 @@ function tvLogDados(){
   let carregar = []; try{ carregar = carregarNoDia(HOJE).filter(c=>c.hs.diaSaida !== HOJE); }catch(e){}
   return {saem, parados, carregar, cavs};
 }
-function temLogTV(){ const d = tvLogDados(); return !!(d.saem.length || d.parados.length || d.carregar.length || (d.cavs||[]).length); }
+function temLogTV(){ const d = tvLogDados(); return !!(d.saem.length || d.parados.length || d.carregar.length || (d.cavs||[]).length || paradasAvulsas(HOJE).length); }
 function tvLogHtml(){
   const esc = _lgEsc;
   const {saem, parados, carregar, cavs} = tvLogDados();
@@ -9791,6 +9862,11 @@ function tvLogHtml(){
     '<span style="font-size:17px;color:#cdd8f5">carregar hoje · sai '+rotDia(c.hs.diaSaida).toLowerCase()+' às '+esc(c.hs.saida)+'</span>')).join('');
   return '<div style="font-size:26px;font-weight:800;margin-bottom:14px">🚚 LOGÍSTICA DE HOJE <span style="font-weight:500;color:#9fb0dd;font-size:19px">· '+fmtD(HOJE)+'</span></div>'+
     sec('SAEM HOJE — ' + saem.length, bSaem)+
+    (function(){ const L = paradasAvulsas(HOJE).slice().sort((a,b)=>String(a.hora||'99').localeCompare(String(b.hora||'99')));
+      return sec('🧭 PARADAS AVULSAS — ' + L.length, L.map(p=>{ const v = veiculos.find(y=>y.id===p.v);
+        return cartao('<b style="font-size:20px;min-width:210px">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+'</b>'+
+          '<span style="flex:1;font-size:18px">📦 '+esc(p.titulo)+(p.local ? ' <span style="color:#9fb0dd">· 📍 '+esc(p.local)+'</span>' : '')+(p.obs ? ' <span style="color:#9fb0dd">· 📝 '+esc(p.obs)+'</span>' : '')+'</span>'+
+          (p.hora ? '<span style="font-size:17px;color:#cdd8f5">às '+p.hora+'</span>' : '')); }).join('')); })()+
     sec('🚛 CAVALOS NO LOCAL — ' + (cavs||[]).length, bCav)+
     sec('FICARAM NO LOCAL — ' + parados.length, bPar)+
     sec('CARREGAR HOJE PARA SAIR DEPOIS — ' + carregar.length, bCar)+
@@ -14677,9 +14753,11 @@ function msgViagemMotorista(ev, fase, x){
     if(r && r.paradas.length > 1){
       L.push('');
       L.push('🧭 *Roteiro do dia:*');
-      r.paradas.forEach((p,k)=>L.push((k+1)+'º ' + (p.manut ? '🔧' : p.fase==='desm' ? '📤' : '🔨') + ' ' + p.ev.nome +
-        (p.jaLocal ? ' (volta do local)' : (p.sai ? ' — sai ' + p.sai : '')) +
-        (p.ev.id === ev.id && p.fase === fase ? '  ⬅ esta mensagem' : '')));
+      r.paradas.forEach((p,k)=>L.push((k+1)+'º ' + (p.extra
+        ? '📦 ' + p.titulo + (p.local ? ' (' + p.local + ')' : '') + (p.sai ? ' — às ' + p.sai : '')
+        : (p.manut ? '🔧' : p.fase==='desm' ? '📤' : '🔨') + ' ' + p.ev.nome +
+          (p.jaLocal ? ' (volta do local)' : (p.sai ? ' — sai ' + p.sai : '')) +
+          (p.ev.id === ev.id && p.fase === fase ? '  ⬅ esta mensagem' : ''))));
     }
   }catch(e){}
   try{ const u = linkMotorista(ev, fase, saiDia, x.i); if(u){ L.push(''); L.push('📡 Antes de sair, abra e toque em INICIAR VIAGEM: ' + u); } }catch(e){}
@@ -16580,6 +16658,21 @@ function manutTV(D){
       '</div>';
     }).join('')+'</div>';
 }
+/* 🧭 paradas avulsas do dia na TV: todo mundo vê o que cada caminhão foi fazer */
+function paradasTV(D){
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const L = paradasAvulsas(D).slice().sort((a,b)=>String(a.hora||'99').localeCompare(String(b.hora||'99')));
+  if(!L.length) return '';
+  return '<div class="tv-op" style="border-left-color:#8a63d2;background:#2d2350"><div class="tv-nome">🧭 OUTRAS OPERAÇÕES '+(D===HOJE?'HOJE':rotDia(D).toUpperCase())+'</div>'+
+    L.map(p=>{
+      const v = veiculos.find(y=>y.id===p.v);
+      return '<div class="tv-lin"><b>'+(v ? esc(v.tipo+' '+v.placa) : '🚚')+'</b> → 📦 <b style="color:#d9c8ff">'+esc(p.titulo)+'</b>'+
+        (p.hora ? ' — <b style="color:#ffb25e">'+p.hora+'</b>' : '')+
+        (p.local ? '<div class="tv-lin" style="margin-top:1px;opacity:.8">📍 '+esc(p.local)+'</div>' : '')+
+        (p.obs ? '<div class="tv-lin" style="margin-top:1px;opacity:.8">📝 '+esc(p.obs)+'</div>' : '')+
+      '</div>';
+    }).join('')+'</div>';
+}
 function listaTV(D){
   const r = opsDoDia(D);
   /* em ordem de saída do caminhão; sem caminhão, pela hora de início */
@@ -16620,7 +16713,7 @@ function renderTV(){
     corpo = (corpo || '') + baseTV(D, i > 0);
     return '<div class="tv-col'+(i?' tvmini':'')+'"><h2>'+(i===0?'HOJE':i===1?'AMANHÃ':rotDia(D).split(' ')[0])+
       ' <span>'+(i<2?rotDia(D):fmtD(D).slice(0,5))+' · '+r.ops.length+' operação(ões) · '+nS(r)+' caminhão(ões)</span></h2>'+
-      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+manutTV(D)+(r.ops.length || baseDoDia(D).length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
+      '<div class="tv-lista">'+(i===0 ? carregarTV() : '')+manutTV(D)+paradasTV(D)+(r.ops.length || baseDoDia(D).length ? corpo : vazio(i===0?'Nada na rua hoje.':'Nada programado.'))+'</div></div>';
   };
   document.getElementById('tv-cols').innerHTML = listas.map(colHtml).join('');
   contagemTV(listas[0].r);
