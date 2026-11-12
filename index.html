@@ -2087,7 +2087,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '12/11 16:10';
+const VERSAO = '12/11 16:45';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -5478,12 +5478,13 @@ function paginaMotorista(){
     const dados = {lat: pos ? pos.coords.latitude : null, lon: pos ? pos.coords.longitude : null, vel: pos && pos.coords.speed != null ? Math.round(pos.coords.speed*3.6) : null,
       t: agora, ev: evId, fase, D, i:+i, mot: x.motorista || null, status: status || 'caminho', chegou: status === 'local' ? hhmm : ((LOCS[chave]||{}).chegou || null), voltou: status === 'galpao' ? hhmm : null,
       saiu: status === 'saindo' ? hhmm : (status === 'local' ? null : ((LOCS[chave]||{}).saiu || null)),
+      partiu: status === 'inicio' ? hhmm : ((LOCS[chave]||{}).partiu || null),
       chk: CHK_RESUMO || (LOCS[chave]||{}).chk || null,
       obs: MOT_OBS.length ? MOT_OBS : ((LOCS[chave]||{}).obs || null)};
     if(dados.lat == null && LOCS[chave]){ dados.lat = LOCS[chave].lat; dados.lon = LOCS[chave].lon; }
     LOCS[chave] = dados;
     try{ const r = await sb.from('plan_config').upsert({chave:'loc:' + chave, dados, atualizado_em: new Date().toISOString()}); if(r.error) throw r.error;
-      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='saindo' ? '🔙 Saída do local avisada às ' : status==='local' ? '✅ Chegada avisada às ' : status==='abriu' ? '👋 A logística já sabe que você abriu, às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + (motWatch != null ? '. Pode bloquear a tela — a viagem continua ligada.' : '. Toque em INICIAR VIAGEM na hora de sair.')); }
+      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='inicio' ? '▶ Saída do galpão registrada às ' : status==='saindo' ? '🔙 Saída do local avisada às ' : status==='local' ? '✅ Chegada avisada às ' : status==='abriu' ? '👋 A logística já sabe que você abriu, às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + (motWatch != null ? '. Pode bloquear a tela — a viagem continua ligada.' : '. Toque em INICIAR VIAGEM na hora de sair.')); }
     catch(e){ st('⚠ Sem internet agora — tento de novo sozinho.'); }
     /* chegou perto do local: avisa sozinho */
     const dest = evGeo(ev);
@@ -5510,6 +5511,11 @@ function paginaMotorista(){
     const b = document.getElementById('mot-ini');
     if(b){ b.textContent = '📡 VIAGEM EM ANDAMENTO'; b.style.background = '#26356e'; }
     const av = document.getElementById('mot-aviso'); if(av) av.style.display = 'block';
+    if(!((LOCS[chave]||{}).partiu)){            /* hora real da saída do galpão */
+      motUltimoEnvio = 0;
+      try{ navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'inicio'), ()=>enviar(null, 'inicio'), {timeout:12000}); }
+      catch(e){ enviar(null, 'inicio'); }
+    }
   };
   /* ---- fotos da carga: antes de sair e na hora de voltar ---- */
   const telaFotos = (momento, depois)=>{
@@ -9131,6 +9137,26 @@ function statusVivo(ev, x, D, l){
   const e = ETA[[ev.id, x.fase||'mont', D, x.i].join('|')] || ETA[[ev.id, 'desm', D, x.i].join('|')];
   return {cor:'#b0483c', txt:'🚚 em viagem · posição ' + hamin(l.t) + (l.vel != null ? ' · ' + l.vel + ' km/h' : '') + (e ? ' · chega ≈ ' + e.hora : '')};
 }
+function _minHM(s){ const m = /^(\d{1,2}):(\d{2})/.exec(String(s||'')); return m ? (+m[1])*60 + (+m[2]) : null; }
+function tempoPills(hs, l, ev, fase){
+  const pill = (rot, val, cor, extra) => '<span style="display:inline-flex;gap:5px;align-items:center;border:1px solid '+(val?cor:'var(--line)')+';background:'+(val?cor+'14':'transparent')+';border-radius:9px;padding:3px 9px;font-size:12.5px;color:'+(val?cor:'#9aa3b8')+';font-weight:700">'+rot+' <b style="font-size:14px">'+(val||'—')+'</b>'+(extra||'')+'</span>';
+  const prev = (hs && hs.saida) || '';
+  const noLocal = (hs && hs.inicio) || String((fase==='desm' ? ev.desm : ev.mont) || '').slice(11,16) || '';
+  let atraso = '';
+  if(prev && l && l.partiu){
+    const d = _minHM(l.partiu) - _minHM(prev);
+    if(d != null && d >= 10) atraso = ' <small style="color:#c0392b;font-weight:800">+'+(d>=60 ? Math.floor(d/60)+'h'+String(d%60).padStart(2,'0') : d+' min')+'</small>';
+    else if(d != null && d <= -10) atraso = ' <small style="color:#0f8a4d;font-weight:800">adiantado</small>';
+  }
+  return '<div style="flex-basis:100%;display:flex;gap:7px;flex-wrap:wrap;margin-top:4px">'+
+    pill('⏰ tem que sair', prev, '#a86412') +
+    pill('▶ saiu', l && l.partiu, '#b0483c', atraso) +
+    pill('🏁 no local às', noLocal, '#5b6b96') +
+    pill('✅ chegou', l && l.chegou, '#0f8a4d') +
+    ((l && l.saiu) ? pill('🔙 saiu do local', l.saiu, '#c47a1e') : '') +
+    ((l && l.voltou) ? pill('🏠 voltou', l.voltou, '#1c4fa0') : '') +
+  '</div>';
+}
 function htmlViagensVivas(){
   const linhas = [];
   [somaDiaISO(HOJE,-1), HOJE, somaDiaISO(HOJE,1)].forEach(D=>{
@@ -9167,6 +9193,7 @@ function htmlViagensVivas(){
         '<button class="mini" title="Mandar de novo o link do motorista" onclick="enviarLinkMotorista(\''+z.o.ev.id+'\',\''+fz+'\',\''+z.D+'\','+z.x.i+')">📲 link</button>'+
         '<button class="mini" title="Copiar a logística desta viagem" onclick="copiarViagem(\''+z.o.ev.id+'\',\''+fz+'\','+z.x.i+')">📋</button>'+
       '</span>'+
+      tempoPills(hs, z.l, z.o.ev, fz)+
       (function(){   /* recados que o motorista mandou */
         const L = (z.l && Array.isArray(z.l.obs)) ? z.l.obs : [];
         if(!L.length) return '';
