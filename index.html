@@ -1835,7 +1835,7 @@ async function nuvemCarregar(){
   if(!sb) return false;
   const [ev, cf] = await Promise.all([
     sb.from('plan_eventos').select('id,dados'),
-    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%').not('chave', 'like', 'anexo:%').not('chave', 'like', 'check:%')
+    sb.from('plan_config').select('chave,dados').not('chave', 'like', 'loc:%').not('chave', 'like', 'msg:%').not('chave', 'like', 'anexo:%').not('chave', 'like', 'check:%').not('chave', 'like', 'foto:%')
   ]);
   if(ev.error || cf.error) throw (ev.error || cf.error);
   if(ev.data) {
@@ -2057,6 +2057,7 @@ function nuvemEscutar(){
       if(p.new && String(p.new.chave||'').startsWith('msg:')){ try{ recadoChegou(p.new.dados); }catch(e){} return; }
       if(p.new && String(p.new.chave||'').startsWith('loc:')){ LOCS[p.new.chave.slice(4)] = p.new.dados; try{ renderTV(); }catch(e){} return; }
       if((p.new && String(p.new.chave||'').startsWith('anexo:')) || (p.old && String(p.old.chave||'').startsWith('anexo:'))) return;   /* anexos do cronograma: só quem abre o cronograma baixa */
+      if((p.new && String(p.new.chave||'').startsWith('foto:')) || (p.old && String(p.old.chave||'').startsWith('foto:'))) return;     /* fotos da carga: só quem abre a galeria baixa */
       if((p.new && String(p.new.chave||'').startsWith('check:')) || (p.old && String(p.old.chave||'').startsWith('check:'))) return;   /* checklists do caminhão: lidos só quando alguém abre */
       const d = p.new && p.new.dados; if(!d) return;
       if(cadSujo()) return;
@@ -2086,7 +2087,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '12/11 12:00';
+const VERSAO = '12/11 16:10';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -5376,7 +5377,7 @@ function situacaoCaminhao(o, D){
     const chave = [o.ev.id, o.fase, D, x.i].join('|');
     const dest = evGeo(o.ev);
     const perto = dest && distLinha(l, dest) < 0.4;
-    if(l.status === 'local' || perto) out.push({x, l, txt:'✅ NO LOCAL' + (l.chegou ? ' desde ' + l.chegou : ''), local:true});
+    if((l.status === 'local' || perto) && !l.saiu) out.push({x, l, txt:'✅ NO LOCAL' + (l.chegou ? ' desde ' + l.chegou : ''), local:true});
     else {
       const e = ETA[chave];
       if(dest) atualizarETA(chave, l, dest).then(()=>{}).catch(()=>{});
@@ -5386,7 +5387,7 @@ function situacaoCaminhao(o, D){
   return out;
 }
 /* ---- página do celular do motorista ---- */
-let motWatch = null, motUltimoEnvio = 0, motWake = null;
+let motWatch = null, motUltimoEnvio = 0, motWake = null, motHB = null;
 /* ===== CHECKLIST DO CAMINHÃO (antes de sair) =====
    Fica guardado em plan_config na chave  check:<idDoCaminhão>:<quando>  —
    um registro por viagem, para consultar depois caminhão por caminhão. */
@@ -5396,6 +5397,29 @@ const ITENS_CHECK = [
   'Lona / baú em ordem', 'Combustível e Arla', 'Lataria (avarias)'
 ];
 let CHK_RESUMO = null;   /* vai junto com a localização, para a logística ver na hora */
+/* ===== fotos: o celular já reduz antes de mandar (fica leve até com internet ruim) ===== */
+function fotoComprimir(file, cb){
+  try{
+    const rd = new FileReader();
+    rd.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        try{
+          const max = 1280, f = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * f)); c.height = Math.max(1, Math.round(img.height * f));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          cb(c.toDataURL('image/jpeg', 0.6));
+        }catch(e){ cb(String(rd.result)); }
+      };
+      img.onerror = ()=>cb(null);
+      img.src = String(rd.result);
+    };
+    rd.onerror = ()=>cb(null);
+    rd.readAsDataURL(file);
+  }catch(e){ cb(null); }
+}
+function fotoSoB64(dataUrl){ return String(dataUrl||'').split(',')[1] || ''; }
 const MOT_OBS = [];      /* recados que o motorista escreve durante a viagem */
 function paginaMotorista(){
   const [evId, fase, D, i] = decodeURIComponent(location.hash.replace(/^#motorista=/,'')).split('|');
@@ -5429,8 +5453,10 @@ function paginaMotorista(){
     })()+
     (hs ? '<div style="font-size:18px;margin-top:10px;color:#ffb25e;font-weight:700">Sair '+hs.saida+(hs.ponte?' · ponte até '+hs.ponte:'')+' · chegar '+hs.chegada+'</div>' : '')+
     '<button id="mot-ini" style="display:block;width:100%;margin-top:22px;padding:20px;font-size:21px;font-weight:800;border:0;border-radius:14px;background:#f0851e;color:#fff">▶ INICIAR VIAGEM</button>'+
+    '<div id="mot-aviso" style="display:none;margin-top:12px;background:#15381f;border:1px solid #1e6b3c;border-radius:12px;padding:12px 14px;font-size:15.5px;color:#bff0d0;line-height:1.5">📡 <b>Viagem ligada.</b> Pode bloquear a tela ou abrir o Google Maps — a localização continua indo sozinha. Se o celular desligar ou o navegador fechar, é só abrir este link de novo: ela volta sozinha, sem apertar nada.</div>'+
     '<button id="mot-cheguei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ CHEGUEI NO LOCAL</button>'+
     '<a href="'+linkMapa(ev)+'" style="display:block;text-align:center;margin-top:12px;padding:14px;font-size:17px;border-radius:14px;background:#26356e;color:#fff;text-decoration:none">🗺 Abrir rota no Google Maps</a>'+
+    '<button id="mot-saindo" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#c47a1e;color:#fff">🔙 SAINDO DO LOCAL</button>'+
     '<button id="mot-voltei" style="display:block;width:100%;margin-top:12px;padding:16px;font-size:18px;font-weight:700;border:0;border-radius:14px;background:#1c4fa0;color:#fff">🏠 VOLTEI PARA O GALPÃO</button>'+
     '<div style="margin-top:18px;border-top:1px solid #243159;padding-top:14px">'+
       '<label style="font-size:16px;color:#dfe6ff;font-weight:700">📝 Recado para a logística</label>'+
@@ -5439,7 +5465,7 @@ function paginaMotorista(){
       '<button id="mot-obs-env" style="display:block;width:100%;margin-top:8px;padding:14px;font-size:17px;font-weight:800;border:0;border-radius:12px;background:#6b4bb5;color:#fff">📨 ENVIAR RECADO</button>'+
       '<div id="mot-obs-l" style="margin-top:8px;font-size:13.5px;color:#9fb0dd;line-height:1.5"></div>'+
     '</div>'+
-    '<div id="mot-st" style="margin-top:18px;font-size:15px;color:#aab4d4;line-height:1.5">Toque em INICIAR VIAGEM na hora de sair. A localização vai para a logística enquanto este link estiver aberto.</div>';
+    '<div id="mot-st" style="margin-top:18px;font-size:15px;color:#aab4d4;line-height:1.5">Toque em INICIAR VIAGEM na hora de sair. Depois disso pode bloquear a tela ou trocar de aplicativo — a localização continua indo sozinha até você avisar que voltou.</div>';
   document.body.appendChild(div);
   if(!ev) return;
   const chave = [evId, fase, D, i].join('|');
@@ -5451,26 +5477,113 @@ function paginaMotorista(){
     const hhmm = new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     const dados = {lat: pos ? pos.coords.latitude : null, lon: pos ? pos.coords.longitude : null, vel: pos && pos.coords.speed != null ? Math.round(pos.coords.speed*3.6) : null,
       t: agora, ev: evId, fase, D, i:+i, mot: x.motorista || null, status: status || 'caminho', chegou: status === 'local' ? hhmm : ((LOCS[chave]||{}).chegou || null), voltou: status === 'galpao' ? hhmm : null,
+      saiu: status === 'saindo' ? hhmm : (status === 'local' ? null : ((LOCS[chave]||{}).saiu || null)),
       chk: CHK_RESUMO || (LOCS[chave]||{}).chk || null,
       obs: MOT_OBS.length ? MOT_OBS : ((LOCS[chave]||{}).obs || null)};
     if(dados.lat == null && LOCS[chave]){ dados.lat = LOCS[chave].lat; dados.lon = LOCS[chave].lon; }
     LOCS[chave] = dados;
     try{ const r = await sb.from('plan_config').upsert({chave:'loc:' + chave, dados, atualizado_em: new Date().toISOString()}); if(r.error) throw r.error;
-      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='local' ? '✅ Chegada avisada às ' : status==='abriu' ? '👋 A logística já sabe que você abriu, às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + '. Mantenha este link aberto.'); }
+      st((status==='galpao' ? '🏠 Volta ao galpão avisada às ' : status==='saindo' ? '🔙 Saída do local avisada às ' : status==='local' ? '✅ Chegada avisada às ' : status==='abriu' ? '👋 A logística já sabe que você abriu, às ' : '📡 Localização enviada às ') + hhmm + (dados.vel != null ? ' · ' + dados.vel + ' km/h' : '') + (motWatch != null ? '. Pode bloquear a tela — a viagem continua ligada.' : '. Toque em INICIAR VIAGEM na hora de sair.')); }
     catch(e){ st('⚠ Sem internet agora — tento de novo sozinho.'); }
     /* chegou perto do local: avisa sozinho */
     const dest = evGeo(ev);
     if((!status || status === 'caminho') && dest && dados.lat != null && distLinha(dados, dest) < 0.3 && !(LOCS[chave]||{}).chegou){ enviar(pos, 'local'); }
   };
-  const iniciarViagem = ()=>{
+  const VIAG_K = 'cpl:viagem:' + chave;
+  const segurarTela = ()=>{ try{ if(navigator.wakeLock && !document.hidden && !motWake)
+    navigator.wakeLock.request('screen').then(w=>{ motWake = w; w.addEventListener('release', ()=>{ motWake = null; }); }).catch(()=>{}); }catch(e){} };
+  const iniciarViagem = (retomada)=>{
     if(!navigator.geolocation) return st('⚠ Este celular não compartilha localização pelo navegador.');
-    try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ motWake = w; }).catch(()=>{}); }catch(e){}
-    st('Procurando o GPS...');
+    try{ localStorage.setItem(VIAG_K, String(Date.now())); }catch(e){}
+    segurarTela();
+    st(retomada ? '📡 Viagem religada sozinha — procurando o GPS...' : 'Procurando o GPS...');
     if(motWatch != null) navigator.geolocation.clearWatch(motWatch);
     motWatch = navigator.geolocation.watchPosition(pos=>enviar(pos), err=>st('⚠ Libere a localização para este site nas configurações do celular (' + err.message + ').'), {enableHighAccuracy:true, maximumAge:15000, timeout:30000});
+    /* batimento: mesmo se o GPS parar de avisar (tela bloqueada, celular em segundo plano),
+       a cada minuto a Central pede a posição de novo e mostra que a viagem continua viva */
+    if(motHB) clearInterval(motHB);
+    motHB = setInterval(()=>{
+      if(motWatch == null) return;
+      if(Date.now() - motUltimoEnvio < 55000) return;
+      try{ navigator.geolocation.getCurrentPosition(pos=>enviar(pos), ()=>enviar(null), {enableHighAccuracy:true, maximumAge:30000, timeout:25000}); }catch(e){}
+    }, 30000);
     const b = document.getElementById('mot-ini');
     if(b){ b.textContent = '📡 VIAGEM EM ANDAMENTO'; b.style.background = '#26356e'; }
+    const av = document.getElementById('mot-aviso'); if(av) av.style.display = 'block';
   };
+  /* ---- fotos da carga: antes de sair e na hora de voltar ---- */
+  const telaFotos = (momento, depois)=>{
+    const fots = [];
+    const o = document.createElement('div');
+    o.id = 'mot-fotos';
+    o.style.cssText = 'position:fixed;inset:0;z-index:100001;background:#0f1733;color:#fff;overflow:auto;padding:20px 16px 160px;font-family:Segoe UI,Arial,sans-serif;box-sizing:border-box';
+    o.innerHTML =
+      '<div style="font-size:14px;color:#aab4d4">'+(momento==='volta' ? 'SAINDO DO LOCAL' : 'ANTES DE SAIR')+'</div>'+
+      '<h1 style="font-size:24px;margin:6px 0 4px;line-height:1.2">📸 Foto da carga</h1>'+
+      '<div style="font-size:19px;font-weight:800;color:#ffd79a;word-break:break-word">🚚 '+esc(v ? v.tipo+' '+v.placa : '')+'</div>'+
+      '<div style="font-size:15.5px;color:#aab4d4;margin:9px 0 15px;line-height:1.5">'+
+        (momento==='volta'
+          ? 'Tire foto do que está voltando no caminhão — material em cima, amarração e lona.'
+          : 'Tire foto do caminhão carregado — material em cima, amarração e lona.')+
+        ' Vale como prova para todo mundo. Pode tirar mais de uma.</div>'+
+      '<label for="fot-in" style="display:block;box-sizing:border-box;width:100%;text-align:center;padding:22px 14px;font-size:20px;font-weight:800;border-radius:14px;background:#f0851e;color:#fff">📷 TIRAR FOTO</label>'+
+      '<input id="fot-in" type="file" accept="image/*" capture="environment" multiple style="position:absolute;left:-9999px;opacity:0">'+
+      '<div id="fot-grade" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:9px;margin-top:14px"></div>'+
+      '<div id="fot-st" style="margin-top:12px;font-size:15px;color:#ffb25e;line-height:1.5"></div>'+
+      '<div style="position:fixed;left:0;right:0;bottom:0;box-sizing:border-box;padding:12px 16px;background:#0f1733;border-top:1px solid #243159">'+
+        '<button id="fot-ok" style="display:block;width:100%;box-sizing:border-box;padding:19px;font-size:19px;font-weight:800;border:0;border-radius:14px;background:#17a05e;color:#fff">✅ ENVIAR E CONTINUAR</button>'+
+        '<button id="fot-pular" style="display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:12px;font-size:15px;font-weight:700;border:0;border-radius:12px;background:#2a3663;color:#c9d3f0">continuar sem foto</button>'+
+      '</div>';
+    document.body.appendChild(o);
+    const grade = ()=>{
+      document.getElementById('fot-grade').innerHTML = fots.map((f,k)=>
+        '<div style="position:relative"><img src="'+f+'" style="width:100%;height:110px;object-fit:cover;border-radius:10px;border:1px solid #2f3d6b">'+
+        '<button data-k="'+k+'" class="fot-x" style="position:absolute;top:4px;right:4px;width:30px;height:30px;border:0;border-radius:50%;background:#c0392b;color:#fff;font-size:15px;font-weight:800">✕</button></div>').join('');
+      o.querySelectorAll('.fot-x').forEach(b=>b.onclick = ()=>{ fots.splice(+b.dataset.k, 1); grade(); });
+      document.getElementById('fot-st').textContent = fots.length ? '📸 ' + fots.length + ' foto(s) prontas para enviar.' : '';
+    };
+    document.getElementById('fot-in').onchange = (e2)=>{
+      const arqs = [...(e2.target.files||[])].slice(0, 6);
+      if(!arqs.length) return;
+      document.getElementById('fot-st').textContent = 'preparando a(s) foto(s)…';
+      let falta = arqs.length;
+      arqs.forEach(f=>fotoComprimir(f, d=>{ if(d && fots.length < 8) fots.push(d); if(!--falta) grade(); }));
+      e2.target.value = '';
+    };
+    const fechar = (ok)=>{ o.remove(); if(depois) depois(ok); };
+    document.getElementById('fot-pular').onclick = ()=>fechar(false);
+    document.getElementById('fot-ok').onclick = async ()=>{
+      const b2 = document.getElementById('fot-ok');
+      if(!fots.length) return fechar(false);
+      b2.disabled = true; b2.textContent = 'enviando…';
+      const quando = new Date().toISOString();
+      let n = 0;
+      for(const f of fots){
+        try{
+          const r = await sb.from('plan_config').upsert({chave:'foto:' + chave + ':' + Date.now() + '_' + (n++),
+            dados:{b64: fotoSoB64(f), momento, quando, mot: x.motorista || null, ev: evId, evNome: ev.nome, fase, D, i:+i,
+                   v: x.v || null, placa: v ? v.placa : null, tipo: v ? v.tipo : null}, atualizado_em: quando});
+          if(r.error) throw r.error;
+        }catch(e){
+          b2.disabled = false; b2.textContent = '✅ ENVIAR E CONTINUAR';
+          document.getElementById('fot-st').textContent = '⚠ Faltou internet para mandar a(s) foto(s). Tente de novo ou toque em continuar sem foto.';
+          return;
+        }
+      }
+      st('📸 ' + fots.length + ' foto(s) da carga enviadas.');
+      fechar(true);
+    };
+  };
+  /* voltou para a tela / voltou a internet: reaproveita e manda posição na hora */
+  const religar = ()=>{
+    if(motWatch == null) return;
+    segurarTela();
+    motUltimoEnvio = 0;
+    try{ navigator.geolocation.getCurrentPosition(pos=>enviar(pos), ()=>{}, {enableHighAccuracy:true, maximumAge:10000, timeout:20000}); }catch(e){}
+  };
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) religar(); });
+  window.addEventListener('online', religar);
+  window.addEventListener('focus', ()=>{ if(motWatch != null) segurarTela(); });
   /* ---- checklist do caminhão antes de sair ---- */
   const chkFeito = ()=>{ try{ return localStorage.getItem('cpl:chk:' + chave); }catch(e){ return null; } };
   const abrirChecklist = ()=>{
@@ -5484,12 +5597,16 @@ function paginaMotorista(){
       '<div style="font-size:19px;font-weight:800;color:#ffd79a;margin-bottom:4px">🚚 '+esc2(v ? v.tipo+' '+v.placa : '')+'</div>'+
       '<div style="font-size:14px;color:#aab4d4;margin-bottom:14px">Marque <b>PROBLEMA</b> no que não estiver certo. Tudo começa como OK.</div>'+
       ITENS_CHECK.map((n2,k)=>
-        '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #243159">'+
-          '<span style="font-size:17px;flex:1">'+esc2(n2)+'</span>'+
-          '<span style="display:flex;gap:7px">'+
+        '<div style="display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid #243159">'+
+          '<span style="font-size:17px;flex:1 1 130px;min-width:120px">'+esc2(n2)+'</span>'+
+          '<span style="display:flex;gap:7px;flex-wrap:wrap">'+
             '<button type="button" data-k="'+k+'" data-v="ok" class="chk-b" style="padding:11px 15px;font-size:15px;font-weight:800;border:0;border-radius:11px;background:#17a05e;color:#fff">OK</button>'+
             '<button type="button" data-k="'+k+'" data-v="nao" class="chk-b" style="padding:11px 15px;font-size:15px;font-weight:800;border:0;border-radius:11px;background:#2a3663;color:#8f9cc4">PROBLEMA</button>'+
-          '</span></div>').join('')+
+            '<button type="button" data-f="'+k+'" class="chk-f" title="Foto do problema" style="display:none;padding:11px 13px;font-size:15px;font-weight:800;border:0;border-radius:11px;background:#6b4bb5;color:#fff">📷</button>'+
+          '</span>'+
+          '<div id="chk-fv-'+k+'" style="flex-basis:100%;display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px"></div>'+
+        '</div>').join('')+
+      '<input id="chk-fin" type="file" accept="image/*" capture="environment" style="position:absolute;left:-9999px;opacity:0">'+
       '<div style="margin-top:16px"><label style="font-size:15px;color:#dfe6ff">🔢 KM do painel</label>'+
         '<input id="chk-km" type="number" inputmode="numeric" placeholder="ex.: 184500" style="width:100%;margin-top:6px;padding:14px;font-size:18px;border-radius:12px;border:1px solid #2f3d6b;background:#182243;color:#fff"></div>'+
       '<div style="margin-top:14px"><label style="font-size:15px;color:#dfe6ff">📝 Observações (o que achou de errado)</label>'+
@@ -5501,35 +5618,72 @@ function paginaMotorista(){
       '</div>';
     document.body.appendChild(o);
     const estado = ITENS_CHECK.map(()=>true);
-    const pinta = () => o.querySelectorAll('.chk-b').forEach(b=>{
+    const fotosChk = ITENS_CHECK.map(()=>[]);
+    let chkFotoK = -1;
+    const vistaFotos = k => {
+      const e3 = document.getElementById('chk-fv-' + k); if(!e3) return;
+      e3.innerHTML = fotosChk[k].map((f,j)=>'<div style="position:relative;margin-top:8px"><img src="'+f+'" style="width:100%;height:100px;object-fit:cover;border-radius:10px;border:1px solid #2f3d6b">'+
+        '<button type="button" data-k="'+k+'" data-j="'+j+'" class="chk-fx" style="position:absolute;top:4px;right:4px;width:28px;height:28px;border:0;border-radius:50%;background:#c0392b;color:#fff;font-weight:800">✕</button></div>').join('');
+      o.querySelectorAll('.chk-fx').forEach(b=>b.onclick = ()=>{ fotosChk[+b.dataset.k].splice(+b.dataset.j, 1); vistaFotos(+b.dataset.k); });
+    };
+    o.querySelectorAll('.chk-f').forEach(b=>b.onclick = ()=>{ chkFotoK = +b.dataset.f; document.getElementById('chk-fin').click(); });
+    document.getElementById('chk-fin').onchange = (e3)=>{
+      const f = (e3.target.files||[])[0]; const k = chkFotoK;
+      if(!f || k < 0) return;
+      document.getElementById('chk-st').textContent = 'preparando a foto…';
+      fotoComprimir(f, d=>{ if(d && fotosChk[k].length < 3) fotosChk[k].push(d); vistaFotos(k); document.getElementById('chk-st').textContent = '📸 foto anexada ao item.'; });
+      e3.target.value = '';
+    };
+    const pinta = () => { o.querySelectorAll('.chk-b').forEach(b=>{
       const k = +b.dataset.k, ok = b.dataset.v === 'ok', ligado = estado[k] === ok;
       b.style.background = ligado ? (ok ? '#17a05e' : '#c0392b') : '#2a3663';
       b.style.color = ligado ? '#fff' : '#8f9cc4';
     });
+    o.querySelectorAll('.chk-f').forEach(b=>{ b.style.display = estado[+b.dataset.f] ? 'none' : 'inline-block'; }); };
     o.querySelectorAll('.chk-b').forEach(b=>b.onclick = ()=>{ estado[+b.dataset.k] = b.dataset.v === 'ok'; pinta();
       const n = estado.filter(x=>!x).length;
-      document.getElementById('chk-st').textContent = n ? '⚠ ' + n + ' item(ns) com problema — a logística vai ver.' : '';
+      document.getElementById('chk-st').textContent = n ? '⚠ ' + n + ' item(ns) com problema — toque em 📷 e tire foto do que está quebrado.' : '';
     });
     pinta();
     document.getElementById('chk-x').onclick = ()=>o.remove();
+    let insistiu = false;
     document.getElementById('chk-ok').onclick = async ()=>{
       const btn = document.getElementById('chk-ok');
-      btn.disabled = true; btn.textContent = 'salvando…';
       const probs = ITENS_CHECK.filter((n2,k)=>!estado[k]);
+      const nFotos = fotosChk.reduce((s,f)=>s+f.length, 0);
+      if(probs.length && !nFotos && !insistiu){
+        insistiu = true;
+        document.getElementById('chk-st').textContent = '📷 Tire foto do que está quebrado — toque no 📷 do item. Se não der mesmo, toque em salvar de novo.';
+        btn.textContent = '✅ SALVAR SEM FOTO E INICIAR';
+        return;
+      }
+      btn.disabled = true; btn.textContent = 'salvando…';
       const km = +(document.getElementById('chk-km').value || 0) || null;
       const obs = String(document.getElementById('chk-obs').value || '').trim();
       const quando = new Date().toISOString();
       const dados = {v: x.v || null, placa: v ? v.placa : null, tipo: v ? v.tipo : null,
         mot: x.motorista || null, ev: evId, evNome: ev.nome, fase, D, i: +i,
-        km, obs, probs, itens: ITENS_CHECK.map((n2,k)=>({n:n2, ok: estado[k]})), quando};
+        km, obs, probs, itens: ITENS_CHECK.map((n2,k)=>({n:n2, ok: estado[k]})), quando, fotos: nFotos};
       try{
         const r = await sb.from('plan_config').upsert({chave: 'check:' + (x.v || 'sem-veiculo') + ':' + Date.now(), dados, atualizado_em: quando});
         if(r.error) throw r.error;
         try{ localStorage.setItem('cpl:chk:' + chave, quando); }catch(e){}
-        CHK_RESUMO = {quando, km, probs};
+        /* fotos dos itens com problema */
+        let np = 0;
+        for(let k=0;k<fotosChk.length;k++){
+          for(const f of fotosChk[k]){
+            try{
+              await sb.from('plan_config').upsert({chave:'foto:' + chave + ':' + Date.now() + '_c' + (np++),
+                dados:{b64: fotoSoB64(f), momento:'checklist', item: ITENS_CHECK[k], quando, mot: x.motorista || null,
+                       ev: evId, evNome: ev.nome, fase, D, i:+i, v: x.v || null, placa: v ? v.placa : null, tipo: v ? v.tipo : null},
+                atualizado_em: quando});
+            }catch(e){}
+          }
+        }
+        CHK_RESUMO = {quando, km, probs, fotos: nFotos};
         o.remove();
         st(probs.length ? '📋 Checklist enviado com ' + probs.length + ' problema(s): ' + probs.join(', ') + '.' : '📋 Checklist enviado — tudo certo.');
-        iniciarViagem();
+        telaFotos('saida', ()=>iniciarViagem());
       }catch(e){
         btn.disabled = false; btn.textContent = '✅ SALVAR E INICIAR VIAGEM';
         document.getElementById('chk-st').textContent = '⚠ Sem internet para salvar o checklist. Tente de novo; se não for, toque em voltar e inicie a viagem mesmo assim.';
@@ -5537,21 +5691,41 @@ function paginaMotorista(){
     };
   };
   document.getElementById('mot-ini').onclick = ()=>{
-    if(chkFeito()) return iniciarViagem();     /* já fez o checklist desta viagem */
+    if(chkFeito()) return telaFotos('saida', ()=>iniciarViagem());   /* já fez o checklist desta viagem */
     abrirChecklist();
   };
+  /* viagem iniciada e o link fechou (celular desligou, navegador fechou, acabou a bateria):
+     ao abrir de novo ela volta sozinha, sem o motorista apertar nada */
+  try{
+    const t0 = +(localStorage.getItem(VIAG_K) || 0);
+    if(t0 && Date.now() - t0 < 36*3600*1000) setTimeout(()=>iniciarViagem(true), 400);
+    else if(t0) localStorage.removeItem(VIAG_K);
+  }catch(e){}
   if(chkFeito()){
     const b2 = document.getElementById('mot-ini');
     if(b2) b2.insertAdjacentHTML('afterend', '<button onclick="(function(){try{localStorage.removeItem(\'cpl:chk:'+chave+'\')}catch(e){};location.reload();})()" style="display:block;width:100%;margin-top:8px;padding:11px;font-size:14px;font-weight:700;border:0;border-radius:12px;background:#2a3663;color:#c9d3f0">📋 Refazer o checklist do caminhão</button>');
   }
   document.getElementById('mot-voltei').onclick = ()=>{
     if(motWatch != null){ try{ navigator.geolocation.clearWatch(motWatch); }catch(e){} motWatch = null; }
+    if(motHB){ clearInterval(motHB); motHB = null; }
+    try{ localStorage.removeItem(VIAG_K); }catch(e){}
+    try{ if(motWake && motWake.release) motWake.release(); }catch(e){} motWake = null;
+    const av = document.getElementById('mot-aviso'); if(av) av.style.display = 'none';
     enviar(null, 'galpao');
     document.getElementById('mot-voltei').textContent = '✅ VOLTA AVISADA';
   };
   document.getElementById('mot-cheguei').onclick = ()=>{
     if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'local'), ()=>enviar(null, 'local'), {timeout:10000});
     else enviar(null, 'local');
+  };
+  document.getElementById('mot-saindo').onclick = ()=>{ telaFotos('volta', ()=>avisarSaida()); };
+  const avisarSaida = ()=>{
+    motUltimoEnvio = 0;
+    if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>enviar(pos, 'saindo'), ()=>enviar(null, 'saindo'), {timeout:10000});
+    else enviar(null, 'saindo');
+    const b3 = document.getElementById('mot-saindo');
+    if(b3){ b3.textContent = '🔙 SAÍDA AVISADA'; b3.style.background = '#8a5a16'; }
+    if(motWatch == null) iniciarViagem(true);     /* voltando: a logística acompanha a volta */
   };
   /* recados escritos pelo motorista */
   const listaObs = ()=>{
@@ -6349,7 +6523,7 @@ if(typeof window !== 'undefined' && !window.__semClimaAuto && !window.__modoMoto
   setInterval(()=>{ try{ renderAlertaHoje(); }catch(e){} }, 5*60*1000);
   /* viagens ao vivo: o painel de logística se atualiza sozinho de minuto em minuto */
   setInterval(()=>{ try{ const s2 = document.getElementById('v-logistica'); if(s2 && !s2.classList.contains('hide') && !LG_DRAG) renderLogistica(); }catch(e){} }, 60000);
-  setTimeout(()=>{ try{ avisoPrevisao(); }catch(e){} }, 25000);
+  /* aviso do planejador removido junto com o painel */
   setTimeout(()=>{ try{ checarRetornos(); }catch(e){}
     try{ const A = alertasFrota().filter(a=>a.sev===3); if(A.length && localStorage.getItem('cpl:avisoFrota') !== HOJE){ localStorage.setItem('cpl:avisoFrota', HOJE); toast('🔧 Frota: ' + A.slice(0,2).map(a=>a.txt).join(' · ') + (A.length>2 ? ' e mais ' + (A.length-2) : '') + '.', 'Ver', ()=>irPara('logistica')); } }catch(e){} }, 20000);
   setTimeout(()=>{ try{ if(CONFIG.pipefyPipe) consertarPeloCardPipefy(); }catch(e){} }, 15000);
@@ -8391,7 +8565,7 @@ function lgCockpitHtml(dias, dados, confTot){
     tile(confTot, '⚠ conflitos na semana', confTot ? '#c0392b' : '#0f8a4d') +
     tile(h0.livresV + '<small style="font-size:13px;color:var(--muted)">/' + h0.totV + '</small>', '🚚 caminhões livres hoje') +
     tile(Math.max(0, h0.totM - h0.ocupM) + '<small style="font-size:13px;color:var(--muted)">/' + h0.totM + '</small>', '🧑‍✈️ motoristas livres') +
-    tile(apert, '📉 dias apertados (14d)', apert ? '#a86412' : '#0f8a4d').replace('<div style="', '<div onclick="abrirPlanejador()" title="Abrir o planejador de capacidade" style="cursor:pointer;') +
+    tile(apert, '📉 dias apertados (14d)', apert ? '#a86412' : '#0f8a4d') +
   '</div>' +
   (itens.length ? '<div class="lgbox" style="border-left:4px solid ' + (itens.some(i=>i.sev===3) ? '#c0392b' : '#e08a1e') + '"><h3>🎯 Pra resolver agora <small>' + itens.length + ' item(ns), do mais urgente</small></h3>' +
       itens.slice(0,8).map(i=>'<div style="display:flex;gap:10px;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px dashed var(--line)"><span style="min-width:9px;height:9px;border-radius:50%;background:' + (i.sev===3 ? '#c0392b' : i.sev===2 ? '#e08a1e' : '#1c5fb8') + '"></span><span style="flex:1;min-width:200px">' + i.txt + '</span>' + (i.ac ? '<button class="mini" style="white-space:nowrap" onclick="' + i.ac.replace(/"/g,'&quot;') + '">' + i.rot + '</button>' : '') + '</div>').join('') +
@@ -8919,7 +9093,7 @@ function renderLogistica(){
   if(vista === 'horas') corpo = htmlHoras();
   else if(vista === 'lista') corpo = htmlLista();
   else corpo =
-    blocoRet + htmlPrevisao() + blocoJun + htmlDoca(dias) +
+    blocoRet + blocoJun + htmlDoca(dias) +
     '<div class="lgleg" style="margin-top:2px"><span class="lgchip m">🔨 montagem</span><span class="lgchip d">📤 desmontagem</span><span class="lgchip p">🅿 parado</span><span class="lgchip base">🏠 base</span><span>🔗 junto</span><span style="color:#c0392b;font-weight:700">⚠ 2 lugares</span></div>'+
     '<div class="lgwrap"><table class="lgtab"><thead><tr><th></th>'+dias.map(D=>{ const dt = new Date(D+'T12:00'); const n = new Set(Object.values(dados[dias.indexOf(D)].vs).flat().filter(it=>it.tipo==='viagem').map(it=>it.ev.id)).size;
         return '<th class="'+(D===HOJE?'hoje':'')+'">'+SEM[dt.getDay()]+' <b>'+D.slice(8)+'/'+D.slice(5,7)+'</b><small>'+(n ? n+' saída(s)' : 'sem saída')+'</small></th>'; }).join('')+'</tr></thead><tbody>'+
@@ -8927,8 +9101,7 @@ function renderLogistica(){
       (corpoC ? '<tr class="lgsec"><td colspan="8">🚛 CAVALOS (puxam as carretas)</td></tr>'+corpoC : '')+
       '<tr class="lgsec"><td colspan="8">🧑‍✈️ MOTORISTAS</td></tr>'+corpoM+
     '</tbody></table></div>'+
-    (fretes.length ? '<details class="lgbox" style="margin-top:12px"><summary><h3 style="display:inline">🚛 Fretes contratados na semana</h3> <b>· '+fretes.length+'</b></summary>'+fretes.map(f=>'<div style="font-size:12.5px;padding:4px 0">'+rotDia(f.D)+' · <b>'+_lgEsc(f.e.nome)+'</b> — '+f.e.fretes.map(x=>_lgEsc([x.placa, x.emp].filter(Boolean).join(' · ')||'frete')).join(' | ')+'</div>').join('')+'</details>' : '')+
-    '<div style="margin-top:12px">'+htmlFrota()+htmlCusto()+'</div>';
+    '';
   box.innerHTML = topo + cockpit + htmlViagensVivas() + htmlRoteiros() + corpo;
   /* posições novas de 45 em 45 segundos enquanto o painel estiver aberto */
   if(Date.now() - LG_LOCS_T > 45000){
@@ -8952,6 +9125,7 @@ function statusVivo(ev, x, D, l){
   if(!l) return {cor:'#7a839e', txt:'⚪ ainda não abriu o link'};
   const hh = new Date(l.t||0).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   if(l.status === 'galpao') return {cor:'#1c4fa0', txt:'🏠 voltou para o galpão' + (l.voltou ? ' às ' + l.voltou : '')};
+  if(l.status === 'saindo' || l.saiu) return {cor:'#c47a1e', txt:'🔙 saiu do local' + (l.saiu ? ' às ' + l.saiu : '') + ' · voltando'};
   if(l.status === 'local' || l.chegou) return {cor:'#0f8a4d', txt:'✅ no local' + (l.chegou ? ' desde ' + l.chegou : '')};
   if(l.status === 'abriu') return {cor:'#a86412', txt:'👀 abriu o link ' + hh + ' — ainda não tocou em INICIAR VIAGEM'};
   const e = ETA[[ev.id, x.fase||'mont', D, x.i].join('|')] || ETA[[ev.id, 'desm', D, x.i].join('|')];
@@ -8988,6 +9162,7 @@ function htmlViagensVivas(){
             ? '<span class="tag" style="color:#b0483c;font-weight:800" title="'+_lgEsc((c.probs||[]).join(' · '))+(c.km?' · KM '+c.km:'')+'">📋 ⚠ '+(c.probs||[]).length+'</span>'
             : '<span class="tag" style="color:#0f8a4d;font-weight:800" title="Checklist do caminhão: tudo certo'+(c.km?' · KM '+c.km:'')+'">📋 ✔</span>'; })()+
         '<button class="mini" title="Ver os checklists deste caminhão" onclick="abrirChecklists(\''+z.x.v.id+'\')">📋</button>'+
+        '<button class="mini" title="Fotos da carga tiradas pelo motorista" onclick="abrirFotosViagem(\''+[z.o.ev.id, fz, z.D, z.x.i].join('|')+'\',\''+_lgEsc(z.o.ev.nome).replace(/'/g,'')+'\')">📸</button>'+
         (z.l && z.l.lat != null ? '<a class="mini" style="text-decoration:none" target="_blank" href="https://www.google.com/maps/search/?api=1&query='+z.l.lat+','+z.l.lon+'">🗺 onde está</a>' : '')+
         '<button class="mini" title="Mandar de novo o link do motorista" onclick="enviarLinkMotorista(\''+z.o.ev.id+'\',\''+fz+'\',\''+z.D+'\','+z.x.i+')">📲 link</button>'+
         '<button class="mini" title="Copiar a logística desta viagem" onclick="copiarViagem(\''+z.o.ev.id+'\',\''+fz+'\','+z.x.i+')">📋</button>'+
@@ -9165,6 +9340,30 @@ function blocoParadasEv(ev){
       '</div>'; }).join('')+'</div>' : '')+
   '</div>';
 }
+/* ===== 📦 MATERIAL DA VIAGEM =====
+   O que cada caminhão leva (montagem) ou traz (desmontagem). Fica em
+   ev.cargaViagem = { 'mont|0': 'texto' } e aparece na TV e no WhatsApp. */
+function cargaViagem(ev, fase, i){ return ((ev && ev.cargaViagem) || {})[(fase||'mont') + '|' + i] || ''; }
+function setCargaViagem(id, fase, i, txt){
+  const ev = eventos.find(e=>e.id===id); if(!ev) return;
+  const k = (fase||'mont') + '|' + i, t = String(txt||'').trim().slice(0,160);
+  const m = Object.assign({}, ev.cargaViagem || {});
+  if(t) m[k] = t; else delete m[k];
+  if(Object.keys(m).length) ev.cargaViagem = m; else delete ev.cargaViagem;
+  salvar(); renderQuadro();
+  try{ const t2 = document.getElementById('tv'); if(t2 && t2.classList.contains('on')) renderTV(); }catch(e){}
+  try{ const s2 = document.getElementById('v-logistica'); if(s2 && !s2.classList.contains('hide') && !LG_DRAG) renderLogistica(); }catch(e){}
+}
+function linhaCargaViagem(ev, fase, i){
+  const t = cargaViagem(ev, fase, i);
+  const rot = fase === 'desm' ? '📦 O que traz de volta' : '📦 O que leva';
+  return '<div class="row" style="border:none;padding-top:0;margin-top:-4px">'+
+    '<span style="font-size:12px;color:var(--muted);white-space:nowrap">'+rot+'</span>'+
+    '<input value="'+String(t).replace(/"/g,'&quot;')+'" placeholder="ex.: 10 tendas 10x10, piso da cozinha, 40 cadeiras" '+
+      'style="flex:1;min-width:220px;border:1px solid '+(t?'#5b3fa8':'var(--line)')+';border-radius:7px;padding:6px 9px;font-size:12.5px'+(t?';color:#5b3fa8;font-weight:600':'')+'" '+
+      'title="Aparece na TV, no roteiro e na mensagem do motorista" '+
+      'onchange="setCargaViagem(\''+ev.id+'\',\''+fase+'\','+i+',this.value)"></div>';
+}
 /* ---------- 🧭 ROTEIRO DOS CAMINHÕES ----------
    Um caminhão pode ter mais de uma parada no dia: duas montagens, ou uma montagem
    e depois uma desmontagem. Aqui as paradas aparecem em sequência, com a hora de
@@ -9314,7 +9513,7 @@ function roteirosDoDia(D){
       if(o.ev.permanece && fz !== 'desm') fica = fica || dia(o.ev.desm) || D;
     }catch(e){}
     (porV[x.v.id] = porV[x.v.id] || {v: x.v, paradas: []}).paradas.push({
-      ev: o.ev, fase: fz, i: x.i, hora: x.hSai || null, sai, sug: hs && hs.saida || '',
+      ev: o.ev, fase: fz, i: x.i, hora: x.hSai || null, sai, sug: hs && hs.saida || '', carga: cargaViagem(o.ev, fz, x.i),
       chega: (hs && hs.chegada) || '', jaLocal: !!x.jaLocal, motorista: x.motorista || null,
       fica: fica && fica >= D ? fica : null, manut: !!o.ev.manutPai,
       editavel: fz === 'mont' || temFrotaDesm(o.ev)});
@@ -9383,6 +9582,7 @@ function htmlRoteiros(){
           : (p.editavel
               ? '<label style="display:inline-flex;gap:4px;align-items:center;font-size:11.5px;color:var(--muted)">sai <input type="time" value="'+(p.hora||'')+'" style="border:1px solid '+(p.hora?'#1c4fa0':'var(--line)')+';border-radius:6px;padding:3px 6px;font-size:11.5px'+(p.hora?';color:#1c4fa0;font-weight:700':'')+'" title="'+(p.hora?'Hora marcada por você — apague para voltar à sugestão ('+p.sug+')':'Sugestão da Central: '+(p.sug||'—')+' — digite para fixar')+'" onchange="rotCamHora(\''+p.ev.id+'\','+p.i+',this.value,\''+p.fase+'\')">'+(p.hora?'':'<small>sug. '+(p.sug||'—')+'</small>')+'</label>'
               : '<small style="color:var(--muted)">sai '+(p.sai||'—')+'</small>'))+
+        (p.carga ? '<small style="color:#5b3fa8;font-weight:600" title="Material desta viagem">📦 '+_lgEsc(p.carga)+'</small>' : '')+
         (p.chega && !p.jaLocal ? '<small style="color:var(--muted)">chega '+p.chega+'</small>' : '')+
         (p.fica ? '<small style="color:#1c4fa0;font-weight:700">🅿 fica até '+fmtD(p.fica).slice(0,5)+'</small>' : '')+
         '<button class="mini" style="padding:3px 7px" title="Mandar o link/logística desta parada no WhatsApp do motorista" onclick="zapViagem(\''+p.ev.id+'\',\''+p.fase+'\','+p.i+')">📲</button>'+
@@ -9987,6 +10187,7 @@ function tvLogHtml(){
   const stViagem = r => {
     const l = LOCS[r.key];
     if(l && Date.now() - (l.t||0) < 8*3600*1000){
+      if(l.saiu) return '<b style="color:#ffc46b">🔙 SAIU DO LOCAL '+l.saiu+' · voltando</b>';
       if(l.chegou) return '<b style="color:#4cd98a">✅ NO LOCAL desde '+l.chegou+'</b>';
       return '<b style="color:#6fb3ff">📡 EM VIAGEM'+(l.vel!=null?' · '+l.vel+' km/h':'')+'</b>';
     }
@@ -9997,6 +10198,7 @@ function tvLogHtml(){
   const bSaem = saem.map(r=>cartao(
     '<b style="font-size:21px;min-width:210px">🚚 '+esc(r.x.v.tipo+' '+r.x.v.placa)+
       (function(){ try{ if(!ehCarreta(r.x.v)) return ''; const c = cavaloObj(cavaloDe(r.o.ev, r.o.fase, r.x.v.id)); return c ? ' <span style="font-size:16px;color:#9fb0dd">🚛 '+esc(c.placa)+'</span>' : ''; }catch(e){ return ''; } })()+'</b>'+
+    (function(){ const cg = cargaViagem(r.o.ev, r.x.fase || r.o.fase, r.x.i); return cg ? '<span style="font-size:17px;color:#d9c8ff">📦 '+esc(cg)+'</span>' : ''; })()+
     '<span style="flex:1;min-width:220px;font-size:18px">'+(r.x.motorista?'🧑‍✈️ '+esc(r.x.motorista)+' · ':'')+(r.o.fase==='desm'?'📤 ':'🔨 ')+esc(nomeTV(r.o.ev.nome))+(r.o.ev.cidade&&r.o.ev.cidade!=='—'?' <span style="color:#9fb0dd">· '+esc(r.o.ev.cidade)+'</span>':'')+(r.x.junto?' 🔗':'')+'</span>'+
     '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+'</span>'+
     (r.fica ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local'+(r.fica !== true ? ' até '+fmtD(r.fica).slice(0,5) : '')+'</span>' : (r.permanece ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local</span>' : ''))+
@@ -12527,6 +12729,7 @@ function blocoFrota(ev, modo){
              '<button class="mini" title="Copiar o texto da logística para colar onde quiser" onclick="copiarViagem(\''+ev.id+'\',\''+fase+'\','+x.i+')">📋</button>'+
              '<button class="mini" title="Registrar ocorrência: quebrou, voltou no meio do caminho, trocou motorista" onclick="abrirOcorrencia(\''+ev.id+'\',\''+fase+'\',\''+x.v+'\')">⚠</button>'+
              '<button class="mini danger" onclick="removerVeiculo(\''+ev.id+'\','+x.i+',\''+fase+'\')">Tirar</button></span></div>'+
+             linhaCargaViagem(ev, fase, x.i)+
              (fase==='mont' ? (function(){
                const f = (ev.fica||{})[x.v], ate = ficaAte(ev, x.v);
                const saidaDesta = x.dia || dia(ev.mont) || '';
@@ -14915,14 +15118,19 @@ function msgViagemMotorista(ev, fase, x){
   x = x || {};
   const L = [];
   L.push('*' + ev.nome + '*');
-  if(x.motorista) L.push('🧑‍✈️ *' + String(x.motorista).toUpperCase() + '*');
+  { const vv = x.v ? (veiculos.find(z=>z.id===x.v) || veicParada(x.v)) : null;
+    const cab = [vv ? vv.tipo + ' ' + vv.placa : '', x.motorista ? String(x.motorista).toUpperCase() : ''].filter(Boolean).join(' · ');
+    if(cab) L.push('🚚 *' + cab + '*'); }
   L.push('');
   let hs = null; try{ hs = horariosSaida(ev, fase); }catch(e){}
   const saiDia = x.dia || (hs && hs.diaSaida) || dia(fase==='desm' ? ev.desm : ev.mont);
   const saiHora = x.hora || (hs && hs.saida) || '';
-  L.push('⏰ *Saída:* ' + (saiDia ? rotDia(saiDia) : '') + (saiHora ? ' às ' + saiHora : '') + (hs && hs.vespera && !x.dia ? ' (véspera)' : ''));
-  if(fase === 'desm') L.push('📤 *Desmontagem:* ' + fmtDH(ev.desm) + (dia(fimDesm(ev)) !== dia(ev.desm) ? ' a ' + fmtD(fimDesm(ev)) : ''));
-  else L.push('🔨 *Montagem:* ' + fmtDH(ev.mont));
+  { const fixo = !!(x.hora || (hs && hs.manual));   /* hora digitada pela logística não é sugestão */
+    L.push('⏰ *Saída:* ' + (saiDia ? rotDia(saiDia) : '') + (hs && hs.vespera && !x.dia ? ' (véspera)' : ''));
+    if(saiHora) L.push((fixo ? '🕐 *Horário:* ' : '🕐 *Horário sugerido:* ') + saiHora); }
+  { const noLocal = (hs && hs.inicio) || String(fase==='desm' ? ev.desm : ev.mont || '').slice(11,16);
+    if(noLocal) L.push('🏁 *Horário no local:* ' + noLocal); }
+  { const cg = cargaViagem(ev, fase, x.i); if(cg) L.push((fase==='desm' ? '📦 *Traz de volta:* ' : '📦 *Leva:* ') + cg); }
   L.push('');
   const dest = destinoTexto(ev); if(dest) L.push('📍 ' + dest);
   if(+ev.km) L.push('🛣️ ' + ev.km + ' km');
@@ -16197,6 +16405,34 @@ function cronoDoDia(ev, D){
   try{ if(!(ev.estruturas||[]).length || !ev.crono) return []; return cronoDe(ev).filter(c=>c.ini <= D && D <= c.ent); }catch(e){ return []; }
 }
 /* ===== 📋 checklists do caminhão: guardados em plan_config (check:<veículo>:<quando>) ===== */
+function _fotoQuando(q){ try{ return new Date(q).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',',''); }catch(e){ return String(q||'').slice(5,16); } }
+function abrirFotoGrande(src){
+  const o = document.createElement('div');
+  o.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(8,12,28,.96);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box';
+  o.innerHTML = '<img src="'+src+'" style="max-width:100%;max-height:100%;border-radius:10px">';
+  o.onclick = ()=>o.remove();
+  document.body.appendChild(o);
+}
+async function abrirFotosViagem(chave, titulo){
+  lgModal('📸 Fotos da carga', _lgEsc(titulo||''), '<div id="fot-lista"><div class="alert">Buscando na nuvem…</div></div>');
+  const box = document.getElementById('fot-lista'); if(!box) return;
+  if(!sb || !nuvemOk){ box.innerHTML = '<div class="alert">As fotos ficam na nuvem — sem internet agora.</div>'; return; }
+  try{
+    const r = await sb.from('plan_config').select('chave,dados').like('chave', 'foto:' + chave + ':%').limit(80);
+    if(r.error) throw r.error;
+    const L = (r.data||[]).map(z=>Object.assign({chave:z.chave}, z.dados||{})).sort((a,b)=>String(a.quando||'').localeCompare(String(b.quando||'')));
+    if(!L.length){ box.innerHTML = '<div class="alert">Nenhuma foto nesta viagem ainda. O motorista tira as fotos no celular ao iniciar a viagem e ao sair do local.</div>'; return; }
+    const bloco = (tit, M) => !M.length ? '' :
+      '<div style="margin-bottom:14px"><div style="font-weight:800;font-size:13px;color:var(--ink2);margin-bottom:6px">'+tit+' · '+M.length+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px">'+
+      M.map(z=>'<div><img class="fot-z" src="data:image/jpeg;base64,'+z.b64+'" style="width:100%;height:140px;object-fit:cover;border-radius:10px;border:1px solid var(--line);cursor:zoom-in">'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-top:3px">'+(z.item ? '⚠ '+_lgEsc(z.item)+' · ' : '')+_fotoQuando(z.quando)+'</div></div>').join('')+'</div></div>';
+    box.innerHTML = bloco('📦 Carga na saída', L.filter(z=>z.momento==='saida')) +
+                    bloco('🔙 Carga na volta', L.filter(z=>z.momento==='volta')) +
+                    bloco('⚠ Problemas do checklist', L.filter(z=>z.momento==='checklist'));
+    box.querySelectorAll('.fot-z').forEach(im=>im.onclick = ()=>abrirFotoGrande(im.src));
+  }catch(e){ box.innerHTML = '<div class="alert red">Não consegui buscar as fotos: '+_lgEsc(e.message||e)+'</div>'; }
+}
 async function abrirChecklists(vid){
   const v = veiculos.find(x=>x.id===vid);
   lgModal('📋 Checklists do caminhão', v ? _lgEsc(v.tipo + ' ' + v.placa) : '', '<div id="chk-lista"><div class="alert">Buscando na nuvem…</div></div>');
@@ -16213,13 +16449,14 @@ async function abrirChecklists(vid){
         (kms.length ? ' · último KM informado: <b>'+kms[0].toLocaleString('pt-BR')+'</b>' : '')+'</div>'+
       L.map(z=>{
         const probs = z.probs || [];
-        const q = String(z.quando||'').replace('T',' ').slice(0,16);
+        const q = _fotoQuando(z.quando);
         return '<div style="border:1px solid '+(probs.length?'#f0c49a':'var(--line)')+';background:'+(probs.length?'#fdf7ee':'#fff')+';border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
           '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
             '<b style="font-size:13.5px">'+_lgEsc(q)+'</b>'+
             '<span style="flex:1;min-width:180px;font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(z.mot||'—')+' · '+(z.fase==='desm'?'📤 desmontagem':'🔨 montagem')+' de <b>'+_lgEsc(z.evNome||'—')+'</b></span>'+
             (z.km ? '<span class="tag">🔢 '+(+z.km).toLocaleString('pt-BR')+' km</span>' : '')+
             (probs.length ? '<span class="tag" style="color:#b0483c;font-weight:800">⚠ '+probs.length+' problema(s)</span>' : '<span class="tag" style="color:#0f8a4d;font-weight:800">✔ tudo certo</span>')+
+            '<button class="mini" title="Fotos desta viagem" onclick="abrirFotosViagem(\''+[z.ev, z.fase, z.D, z.i].join('|')+'\',\''+_lgEsc(z.evNome||'').replace(/'/g,'')+'\')">📸'+(z.fotos ? ' '+z.fotos : '')+'</button>'+
           '</div>'+
           (probs.length ? '<div style="margin-top:6px;font-size:13px;color:#b0483c"><b>'+probs.map(p=>_lgEsc(p)).join(' · ')+'</b></div>' : '')+
           (z.obs ? '<div style="margin-top:5px;font-size:12.5px;color:var(--ink2)">📝 '+_lgEsc(z.obs)+'</div>' : '')+
@@ -16787,7 +17024,7 @@ function cardTV(o, D){
         ? '<span>🚚 junto com '+esc(hs.primeira)+'</span><span>sai <b>'+hs.saida+'</b></span><span>chega ≈'+hs.chegada+'</span>'
         : '<span>sai <b>'+hs.saida+'</b>'+(hs.vespera?' <small>(véspera)</small>':'')+'</span>'+(hs.ponte?'<span>🌉 ponte '+hs.ponte+'</span>':'')+'<span>chega '+hs.chegada+'</span>'+((D!==HOJE && hs.fase!=='desm')?'<span>📦 carrega '+fmtD(hs.carregarDia).slice(0,5)+'</span>':''))+'</div>'
        : ((o.hora && !o.fora) ? '<div class="tv-hor"><span>'+(o.fase==='desm'?'desmontagem':'montagem')+' às <b>'+o.hora+'</b></span></div>' : ''))+
-    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+(function(){ try{ if(!ehCarreta(x.v)) return ''; const c = cavaloObj(cavaloDe(o.ev, x.fase||o.fase, x.v.id)); return c ? ' 🚛 '+esc(c.placa) : ''; }catch(e){ return ''; } })()+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
+    (o.viagens.length ? '<div class="tv-lin">'+o.viagens.map(x=>'<span class="tv-cam'+((x.manut||(!x.motorista&&!x.jaLocal))?' ruim':'')+'">'+esc(x.v.tipo+' '+x.v.placa)+(function(){ try{ if(!ehCarreta(x.v)) return ''; const c = cavaloObj(cavaloDe(o.ev, x.fase||o.fase, x.v.id)); return c ? ' 🚛 '+esc(c.placa) : ''; }catch(e){ return ''; } })()+(function(){ const cg = cargaViagem(o.ev, x.fase||o.fase, x.i); return cg ? ' · 📦 '+esc(cg) : ''; })()+' · '+(x.jaLocal?'já no local':esc(x.motorista||'SEM MOTORISTA'))+(x.motorista && !x.jaLocal && motoristaNaBase(x.motorista, D) ? ' ⚠ está na BASE' : '')+(x.hSai?' · sai '+x.hSai:'')+(x.junto?' 🔗':'')+'</span>').join('')+'</div>' : '')+
     (semLider.length ? equipesTV(o) : '')+
     produtorTV(o)+
     etapasNoDia(o.ev, D).map(x=>'<div class="tv-lin">🧩 <b>'+esc(x.nome)+'</b>'+((x.pessoas||[]).length ? ': '+esc(x.pessoas.join(', ')) : '')+'</div>').join('')+
