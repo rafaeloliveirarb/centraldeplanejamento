@@ -1684,6 +1684,36 @@ function limparObjNuvem(o, prof){
   return n;
 }
 /* o mesmo evento duas vezes na lista trava a gravação inteira ("cannot affect row a second time") */
+/* junta cards repetidos (mesmo nome, mesma OS). Roda ao abrir a Central, depois de
+   importar e quando chega card novo de outro aparelho — antes só rodava na abertura,
+   e o repetido ficava na tela até alguém recarregar. */
+function unirRepetidos(inicial){
+    if(inicial){ dedupeEventos(); if(!nuvemOk && ERRO_NUVEM) marcarSync(false, textoOff()); }
+    const porBase = {};
+    eventos.forEach(e=>{ if(e.manutPai) return; const nb = nomeBase(e.nome); if(nb) (porBase[nb]=porBase[nb]||[]).push(e); });
+    const remover = new Set();
+    Object.values(porBase).forEach(g=>{
+      if(g.length < 2) return;
+      g.sort((a,b)=> (osDigitos(b)?1:0) - (osDigitos(a)?1:0) || ((b.itens||[]).length - (a.itens||[]).length));
+      const fica = g[0];
+      g.slice(1).forEach(dup=>{
+        const dd = osDigitos(dup), fd = osDigitos(fica);
+        /* dois números diferentes = eventos diferentes de verdade: não mexe */
+        if(dd && fd && dd !== fd) return;
+        ['equipe','produtor','respNome','respTel','fase','km'].forEach(c=>{ if(!fica[c] && dup[c]) fica[c] = dup[c]; });
+        if((!fica.itens || !fica.itens.length) && dup.itens && dup.itens.length) fica.itens = dup.itens;
+        if(!fica.mont && dup.mont){ fica.mont = dup.mont; fica.montFim = dup.montFim; fica.evt = dup.evt; fica.evtFim = dup.evtFim; fica.desm = dup.desm; fica.desmFim = dup.desmFim; }
+        if(dup.id !== fica.id) remover.add(dup.id);
+      });
+    });
+    if(remover.size){
+      eventos = eventos.filter(e=>!remover.has(e.id));
+      salvar();
+      try{ marcarPlanoSujo(); limparSecCache(); }catch(e){}
+      setTimeout(()=>toast(remover.size + ' evento(s) repetido(s) foram unidos — ficou sempre a versão com o número da OS.'), 600);
+    }
+    return remover.size;
+}
 function dedupeEventos(){
   const por = new Map(); let dup = 0;
   eventos.forEach(e=>{
@@ -2018,6 +2048,7 @@ function nuvemEscutar(){
         idsConhecidos.add(d.id);
         fotografar(d); /* mudança de outro aparelho: já vem com o histórico de lá */
       }
+      try{ unirRepetidos(false); }catch(e){}   /* card repetido não fica na tela até recarregar */
       marcarPlanoSujo(); limparSecCache();
       atualizarTelas();
     })
@@ -2055,7 +2086,7 @@ function corEquipe(nome){
 }
 /* versão do arquivo: aparece no topo da Central e da TV — serve para conferir se o
    aparelho já está com a última versão que você subiu */
-const VERSAO = '11/11 16:30';
+const VERSAO = '12/11 12:00';
 try{ if(typeof document !== 'undefined'){ const vt = document.getElementById('versao-topo'); if(vt) vt.textContent = 'v' + VERSAO; } }catch(e){}
 const EQUIPE_TERC = 'Equipe terceirizada';
 const SEM_PRODUTOR = 'Sem produtor';
@@ -8629,7 +8660,9 @@ function logItensDia(D){
     const dentro = p.dia === D || (p.fica && D > p.dia && D <= p.fica);
     if(!dentro) return;
     const evV = p.ev ? eventos.find(z=>z.id===p.ev) : null;
-    (vs[p.v] = vs[p.v] || []).push({parada:p, ev: evV || {id:'pa:'+p.id, nome:p.titulo}, f: p.evFase || 'mont', x:{v:p.v}, tipo: p.dia === D ? 'viagem' : 'fica', D});
+    const it = {parada:p, ev: evV || {id:'pa:'+p.id, nome:p.titulo}, f: p.evFase || 'mont', x:{v:p.v}, tipo: p.dia === D ? 'viagem' : 'fica', D};
+    if(String(p.v).startsWith('cav:')){ const cid = String(p.v).slice(4); (cs[cid] = cs[cid] || []).push(it); }
+    else (vs[p.v] = vs[p.v] || []).push(it);
   });
   motoristas.forEach(m=>{ const s = motoristaNaBase(m.nome, D); if(s) (ms[m.nome] = ms[m.nome] || []).push({tipo:'base', s, D}); });
   return {vs, ms, cs};
@@ -9121,7 +9154,7 @@ function blocoParadasEv(ev){
       '<button class="mini" style="color:#5b3fa8;border-color:#cdbcf2;font-weight:700" onclick="abrirParadaAvulsa(null,\''+(dia(ev.mont)||HOJE)+'\',null,{id:\''+ev.id+'\',fase:\'mont\'})">➕ parada na montagem</button>'+
       (ev.desm ? '<button class="mini" style="color:#5b3fa8;border-color:#cdbcf2;font-weight:700" onclick="abrirParadaAvulsa(null,\''+(dia(ev.desm)||HOJE)+'\',null,{id:\''+ev.id+'\',fase:\'desm\'})">➕ parada na desmontagem</button>' : '')+
     '</div>'+
-    (L.length ? '<div style="margin-top:6px">'+L.map(p=>{ const v = veiculos.find(z=>z.id===p.v);
+    (L.length ? '<div style="margin-top:6px">'+L.map(p=>{ const v = veicParada(p.v);
       return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;padding:5px 0;border-top:1px solid #e8e2f8">'+
         '<b style="color:#5b3fa8;flex:1;min-width:150px">📦 '+_lgEsc(p.titulo)+'</b>'+
         '<span class="tag" style="color:'+(p.evFase==='desm'?'#a86412':'#1c4fa0')+'">'+(p.evFase==='desm'?'📤 desmontagem':'🔨 montagem')+'</span>'+
@@ -9139,6 +9172,13 @@ function blocoParadasEv(ev){
 let LG_ROT_D = 0;   /* 0 = hoje, 1 = amanhã… */
 /* parada avulsa: o caminhão vai a um lugar que não tem card — pegar peça num fornecedor,
    buscar material, levar algo na gráfica… Fica em CONFIG.paradas e sincroniza com tudo. */
+/* na parada, o veículo pode ser um caminhão da frota OU um cavalo viajando sozinho
+   (buscar uma carreta que ficou no local, levar outra, ir à oficina…) */
+function veicParada(id){
+  if(!id) return null;
+  if(String(id).startsWith('cav:')){ const c = cavaloObj(String(id).slice(4)); return c ? {id:'cav:'+c.id, tipo:'CAVALO', placa:c.placa, cavalo:true, cid:c.id} : null; }
+  return veiculos.find(x=>x.id===id) || null;
+}
 function paradasAvulsas(D, vid){
   return (CONFIG.paradas || []).filter(p=>p && p.dia === D && (!vid || p.v === vid));
 }
@@ -9162,7 +9202,10 @@ function abrirParadaAvulsa(vid, D, pid, evFixo){
     '<input id="pa-tit" value="'+_lgEsc(p ? p.titulo : '').replace(/"/g,'&quot;')+'" placeholder="ex.: Pegar peça na Casa das Lonas" style="width:100%;'+inp+'">'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'+
       '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Caminhão</label>'+
-        '<select id="pa-v" style="'+inp+';min-width:190px">'+veiculos.filter(v=>!v.manut).map(v=>'<option value="'+v.id+'" '+((p ? p.v : vid)===v.id?'selected':'')+'>'+_lgEsc(v.tipo+' '+v.placa)+(v.agregado?' · agregado':'')+'</option>').join('')+'</select></div>'+
+        '<select id="pa-v" style="'+inp+';min-width:190px">'+
+          '<optgroup label="Caminhões">'+veiculos.filter(v=>!v.manut).map(v=>'<option value="'+v.id+'" '+((p ? p.v : vid)===v.id?'selected':'')+'>'+_lgEsc(v.tipo+' '+v.placa)+(v.agregado?' · agregado':'')+'</option>').join('')+'</optgroup>'+
+          (listaCavalos().length ? '<optgroup label="Cavalos (viajando sozinhos)">'+listaCavalos().map(c=>'<option value="cav:'+c.id+'" '+((p ? p.v : vid)==='cav:'+c.id?'selected':'')+'>🚛 '+_lgEsc(c.placa)+' · cavalo sozinho</option>').join('')+'</optgroup>' : '')+
+        '</select></div>'+
       '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Dia</label><input type="date" id="pa-d" value="'+(p ? p.dia : (D || HOJE))+'" style="'+inp+'"></div>'+
       '<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:3px">Hora</label><input type="time" id="pa-h" value="'+(p && p.hora ? p.hora : '')+'" style="'+inp+'"></div>'+
     '</div>'+
@@ -9245,8 +9288,8 @@ function salvarParadaAvulsa(pid){
   salvar(); fechar('ov-lg'); renderLogistica();
   try{ const t2 = document.getElementById('tv'); if(t2 && t2.classList.contains('on')) renderTV(); }catch(e){}
   try{ if(evAberto && document.getElementById('ov-ev').classList.contains('on')) verEvento(evAberto); }catch(e){}
-  const v = veiculos.find(x=>x.id===dados.v);
-  toast('🧭 ' + (v ? v.tipo+' '+v.placa : 'Caminhão') + ': ' + dados.titulo + ' — ' + fmtD(dados.dia).slice(0,5) + (dados.hora ? ' às ' + dados.hora : '') + '.');
+  const v = veicParada(dados.v);
+  toast('🧭 ' + (v ? (v.cavalo?'🚛 ':'')+v.tipo+' '+v.placa : 'Caminhão') + ': ' + dados.titulo + ' — ' + fmtD(dados.dia).slice(0,5) + (dados.hora ? ' às ' + dados.hora : '') + '.');
 }
 function rmParadaAvulsa(pid){
   const p = (CONFIG.paradas||[]).find(z=>z.id===pid); if(!p) return;
@@ -9277,7 +9320,7 @@ function roteirosDoDia(D){
       editavel: fz === 'mont' || temFrotaDesm(o.ev)});
   }));
   paradasAvulsas(D).forEach(p=>{
-    const v = veiculos.find(y=>y.id===p.v); if(!v) return;
+    const v = veicParada(p.v); if(!v) return;
     const evV = p.ev ? eventos.find(z=>z.id===p.ev) : null;
     (porV[v.id] = porV[v.id] || {v, paradas: []}).paradas.push({
       extra: true, id: p.id, titulo: p.titulo, local: p.local || '', obs: p.obs || '',
@@ -9349,8 +9392,9 @@ function htmlRoteiros(){
     const fimNoLocal = ult && (ult.fica || ult.ficaAte);
     return '<div style="border:1px solid '+(varias?'#e8c08a':'var(--line)')+';background:'+(varias?'#fffaf2':'#fff')+';border-radius:10px;padding:8px 11px;margin-bottom:8px">'+
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">'+
-        '<b style="font-size:13.5px">🚚 '+_lgEsc(r.v.tipo+' '+r.v.placa)+'</b>'+
-        (mots.length ? '<span style="font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(mots.join(' / '))+'</span>' : '<span class="tag" style="color:#b0483c">sem motorista</span>')+
+        '<b style="font-size:13.5px">'+(r.v.cavalo?'🚛':'🚚')+' '+_lgEsc(r.v.tipo+' '+r.v.placa)+'</b>'+
+        (mots.length ? '<span style="font-size:12.5px;color:var(--muted)">🧑‍✈️ '+_lgEsc(mots.join(' / '))+'</span>'
+          : (r.paradas.some(p=>!p.extra) ? '<span class="tag" style="color:#b0483c">sem motorista</span>' : ''))+
         (varias ? '<span class="tag" style="color:#a86412;font-weight:800">'+r.paradas.length+' paradas no dia</span>' : '')+
         '<button class="mini" style="margin-left:auto;color:#5b3fa8;border-color:#cdbcf2" title="Acrescentar um destino sem card neste caminhão (fornecedor, retirada, entrega…)" onclick="abrirParadaAvulsa(\''+r.v.id+'\',\''+D+'\')">➕ parada</button>'+
       '</div>'+
@@ -9957,7 +10001,7 @@ function tvLogHtml(){
     '<span style="font-size:17px;color:#cdd8f5">sai '+esc(r.saida||'—')+'</span>'+
     (r.fica ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local'+(r.fica !== true ? ' até '+fmtD(r.fica).slice(0,5) : '')+'</span>' : (r.permanece ? '<span style="font-size:16px;color:#ffb25e">🅿 fica no local</span>' : ''))+
     (stViagem(r) ? '<span style="font-size:17px">'+stViagem(r)+'</span>' : ''))).join('');
-  const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid);
+  const bPar = parados.map(p=>{ const v = veiculos.find(x=>x.id===p.vid) || veicParada(p.vid);
     if(p.it && p.it.parada){ const pa = p.it.parada, evL = pa.ev ? eventos.find(z=>z.id===pa.ev) : null;
       return cartao('<b style="font-size:20px;min-width:210px">🅿 '+esc(v?v.tipo+' '+v.placa:'')+'</b>'+
         '<span style="flex:1;font-size:18px">📦 '+esc(pa.titulo)+(evL ? ' <span style="color:#9fb0dd">· '+esc(nomeTV(evL.nome))+'</span>' : '')+(pa.local ? ' <span style="color:#9fb0dd">· 📍 '+esc(pa.local)+'</span>' : '')+'</span>'+
@@ -14036,6 +14080,7 @@ function gravarLote(auto){
       estado: faseParaEstado(e.fase) || 'backlog', aprovado:false, itens:e.itens
     });
   });
+  try{ unirRepetidos(false); }catch(e){}   /* importou um card que já estava lá: une na hora */
   salvar(); renderQuadro(); renderCadastros(); fechar('ov-lote');
   const semData = eventos.filter(e=>!e.mont || !e.desm).length;
   const partes = [];
@@ -16510,6 +16555,7 @@ async function buscarNuvemLeve(forcar){
     if(fora.length){ eventos = eventos.filter(e=>ids.has(e.id) || SYNC_BASE.ev[e.id] === undefined); mudou += fora.length; }
     if(mudou){
       idsConhecidos = new Set(eventos.map(e=>e.id));
+      try{ unirRepetidos(false); }catch(e){}
       marcarPlanoSujo(); limparSecCache();
       try{ fotografarTudo(); }catch(e){}
       atualizarTelas();
@@ -16808,9 +16854,9 @@ function paradasTV(D){
   if(!L.length) return '';
   return '<div class="tv-op" style="border-left-color:#8a63d2;background:#2d2350"><div class="tv-nome">🧭 OUTRAS OPERAÇÕES '+(D===HOJE?'HOJE':rotDia(D).toUpperCase())+'</div>'+
     L.map(p=>{
-      const v = veiculos.find(y=>y.id===p.v);
+      const v = veicParada(p.v);
       const evV = p.ev ? eventos.find(z=>z.id===p.ev) : null;
-      return '<div class="tv-lin"><b>'+(v ? esc(v.tipo+' '+v.placa) : '🚚')+'</b> → 📦 <b style="color:#d9c8ff">'+esc(p.titulo)+'</b>'+
+      return '<div class="tv-lin"><b>'+(v ? (v.cavalo?'🚛 ':'')+esc(v.tipo+' '+v.placa) : '🚚')+'</b> → 📦 <b style="color:#d9c8ff">'+esc(p.titulo)+'</b>'+
         (evV ? ' <span style="opacity:.85">🔗 '+(p.evFase==='desm'?'📤':'🔨')+' '+esc(nomeTV(evV.nome))+'</span>' : '')+
         (p.hora ? ' — <b style="color:#ffb25e">'+p.hora+'</b>' : '')+
         (p.fica ? ' <b style="color:#ffb25e">🅿 fica no local até '+fmtD(p.fica).slice(0,5)+'</b>' : '')+
@@ -17424,32 +17470,7 @@ async function salvar(){
   /* projeto único: nenhum apontamento externo fica guardado */
   if(CONFIG.escalaUrl || CONFIG.escalaKey){ CONFIG.escalaUrl = ''; CONFIG.escalaKey = ''; }
   /* repetidos que já entraram (mesmo evento com e sem número): fica o que tem número */
-  (function(){
-    dedupeEventos();   /* mesmo id duas vezes: fica uma cópia (antes as duas sumiam) */
-    if(!nuvemOk && ERRO_NUVEM) marcarSync(false, textoOff());
-    const porBase = {};
-    eventos.forEach(e=>{ if(e.manutPai) return; const nb = nomeBase(e.nome); if(nb) (porBase[nb]=porBase[nb]||[]).push(e); });
-    const remover = new Set();
-    Object.values(porBase).forEach(g=>{
-      if(g.length < 2) return;
-      g.sort((a,b)=> (osDigitos(b)?1:0) - (osDigitos(a)?1:0) || ((b.itens||[]).length - (a.itens||[]).length));
-      const fica = g[0];
-      g.slice(1).forEach(dup=>{
-        const dd = osDigitos(dup), fd = osDigitos(fica);
-        /* dois números diferentes = eventos diferentes de verdade: não mexe */
-        if(dd && fd && dd !== fd) return;
-        ['equipe','produtor','respNome','respTel','fase','km'].forEach(c=>{ if(!fica[c] && dup[c]) fica[c] = dup[c]; });
-        if((!fica.itens || !fica.itens.length) && dup.itens && dup.itens.length) fica.itens = dup.itens;
-        if(!fica.mont && dup.mont){ fica.mont = dup.mont; fica.montFim = dup.montFim; fica.evt = dup.evt; fica.evtFim = dup.evtFim; fica.desm = dup.desm; fica.desmFim = dup.desmFim; }
-        if(dup.id !== fica.id) remover.add(dup.id);
-      });
-    });
-    if(remover.size){
-      eventos = eventos.filter(e=>!remover.has(e.id));
-      salvar();
-      setTimeout(()=>toast(remover.size + ' evento(s) repetido(s) foram unidos — ficou sempre a versão com o número da OS.'), 600);
-    }
-  })();
+  unirRepetidos(true);
   if(CONFIG.piloto === undefined) CONFIG.piloto = 'Pedro Henrique';
   /* Importações antigas gravavam o primeiro produtor da lista em todos os eventos.
      Se o quadro inteiro está com o mesmo nome, isso é o padrão antigo e não uma
